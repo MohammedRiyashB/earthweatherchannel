@@ -4,31 +4,44 @@ type BrandItem = {
   name: string;
   role: string;
   href: string;
-  kind: "weather" | "imagery" | "events" | "radar" | "alerts" | "news" | "maps" | "development";
+  kind: "weather" | "imagery" | "events" | "radar" | "alerts" | "news" | "maps" | "platform" | "development";
   monogram: string;
   iconUrl?: string;
+  iconFit?: "contain" | "cover" | "wide";
 };
 
 const ROW_ONE: BrandItem[] = [
-  { name: "Open-Meteo", role: "Primary weather data", href: "https://open-meteo.com/", kind: "weather", monogram: "OM" },
-  { name: "MET Norway", role: "Forecast fallback", href: "https://api.met.no/", kind: "weather", monogram: "MET" },
-  { name: "NASA GIBS", role: "Satellite imagery layers", href: "https://www.earthdata.nasa.gov/eosdis/science-system-description/eosdis-components/gibs", kind: "imagery", monogram: "GIBS" },
-  { name: "NASA EONET", role: "Curated event catalogue", href: "https://eonet.gsfc.nasa.gov/", kind: "events", monogram: "EONET" },
-  { name: "RainViewer", role: "Historical radar frames", href: "https://www.rainviewer.com/", kind: "radar", monogram: "RV" },
+  { name: "Open-Meteo", role: "Primary weather-model data", href: "https://open-meteo.com/", kind: "weather", monogram: "OM", iconUrl: "https://pbs.twimg.com/profile_images/1695024885070737408/-M-HSH5P.jpg", iconFit: "cover" },
+  { name: "MET Norway", role: "Fallback forecast provider", href: "https://api.met.no/", kind: "weather", monogram: "MET", iconUrl: "https://weamyl.met.no/assets/images/Met_RGB_Horisontal_ENG.jpg", iconFit: "wide" },
+  { name: "NASA GIBS", role: "Satellite imagery layers", href: "https://www.earthdata.nasa.gov/eosdis/science-system-description/eosdis-components/gibs", kind: "imagery", monogram: "NASA" },
+  { name: "NASA EONET", role: "Curated storm-event metadata", href: "https://eonet.gsfc.nasa.gov/", kind: "events", monogram: "EONET" },
+  { name: "RainViewer", role: "Historical radar frames", href: "https://www.rainviewer.com/", kind: "radar", monogram: "RV", iconUrl: "https://www.rainviewer.com/logo-v1.png", iconFit: "cover" },
+  { name: "OpenStreetMap", role: "Map data & place search", href: "https://www.openstreetmap.org/", kind: "maps", monogram: "OSM", iconUrl: "https://cdn.simpleicons.org/openstreetmap/5B8061" },
 ];
 
 const ROW_TWO: BrandItem[] = [
   { name: "NDMA SACHET", role: "India public alert feeds", href: "https://sachet.ndma.gov.in/", kind: "alerts", monogram: "NDMA" },
   { name: "NASA Earth Science", role: "Global science news feed", href: "https://science.nasa.gov/", kind: "news", monogram: "NASA" },
   { name: "NOAA", role: "Weather news · U.S. alerts", href: "https://www.noaa.gov/", kind: "news", monogram: "NOAA" },
-  { name: "OpenStreetMap", role: "Maps & place search", href: "https://www.openstreetmap.org/", kind: "maps", monogram: "OSM" },
-  { name: "OpenAI · ChatGPT", role: "AI-assisted development", href: "https://openai.com/brand/", kind: "development", monogram: "AI", iconUrl: "https://openai.com/favicon.svg" },
+  { name: "Firebase Hosting", role: "Website hosting & sign-in", href: "https://firebase.google.com/", kind: "platform", monogram: "FB" },
+  { name: "Render", role: "Weather API hosting", href: "https://render.com/", kind: "platform", monogram: "R" },
+  { name: "GitHub Actions", role: "Build & deployment workflow", href: "https://github.com/MohammedRiyashB/earthweatherchannel/actions", kind: "platform", monogram: "GH" },
+  { name: "ChatGPT · OpenAI", role: "AI-assisted development", href: "https://openai.com/brand/", kind: "development", monogram: "AI", iconUrl: "https://openai.com/favicon.svg", iconFit: "contain" },
 ];
 
 function BrandTile({ item, decorative = false }: { item: BrandItem; decorative?: boolean }) {
   return (
-    <a className={`source-brand-tile source-brand-${item.kind}`} href={item.href} target="_blank" rel="noreferrer" tabIndex={decorative ? -1 : undefined}>
-      <span className="source-brand-monogram" aria-hidden="true">{item.iconUrl ? <img src={item.iconUrl} alt="" /> : item.monogram}</span>
+    <a
+      className={`source-brand-tile source-brand-${item.kind}`}
+      href={item.href}
+      target="_blank"
+      rel="noreferrer"
+      tabIndex={decorative ? -1 : undefined}
+      aria-label={decorative ? undefined : `${item.name}: ${item.role}`}
+    >
+      <span className={`source-brand-monogram ${item.iconFit === "wide" ? "is-wide" : ""}`} aria-hidden="true">
+        {item.iconUrl ? <img className={`source-brand-icon-fit-${item.iconFit || "contain"}`} src={item.iconUrl} alt="" loading="lazy" decoding="async" onError={event => { event.currentTarget.style.display = "none"; }} /> : item.monogram}
+      </span>
       <span className="source-brand-copy">
         <strong>{item.name}</strong>
         <small>{item.role}</small>
@@ -58,15 +71,14 @@ export default function BrandMarquee() {
 
   useEffect(() => {
     const section = document.querySelector<HTMLElement>(".source-brand-showcase");
-    if (!section) return;
-    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
+    if (!section || window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
     if (!("IntersectionObserver" in window)) {
       setActive(true);
       return;
     }
     const observer = new IntersectionObserver(entries => {
       setActive(Boolean(entries[0]?.isIntersecting));
-    }, { rootMargin: "100px 0px", threshold: 0.01 });
+    }, { rootMargin: "140px 0px", threshold: 0.01 });
     observer.observe(section);
     return () => observer.disconnect();
   }, []);
@@ -76,14 +88,14 @@ export default function BrandMarquee() {
       <div className="source-brand-heading">
         <span className="eyebrow">DATA SOURCES & DEVELOPMENT CREDITS</span>
         <h2 id="source-brand-title">The technology behind the forecast</h2>
-        <p>Weather data, imagery, public information and development tools used in this project.</p>
+        <p>Weather data, satellite imagery, public information and tools used to build and operate EARTH WEATHER.</p>
       </div>
       <div className="source-brand-motion">
         <BrandRail items={ROW_ONE} direction="left" active={active} />
         <BrandRail items={ROW_TWO} direction="right" active={active} />
       </div>
       <p className="source-brand-note">
-        Provider names identify data sources or tools referenced by this project. Their appearance does not imply sponsorship, endorsement or a formal partnership. OpenAI / ChatGPT is credited for AI-assisted development, not as a weather-data provider.
+        Names and marks identify services and sources used by this independent project; they do not imply sponsorship, endorsement or a formal partnership. Government agencies are identified by name rather than official emblems. ChatGPT is credited for AI-assisted development only, not as a weather-data provider.
       </p>
     </section>
   );
