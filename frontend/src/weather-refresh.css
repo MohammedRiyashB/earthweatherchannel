@@ -15,3 +15,25 @@ button,input,a{-webkit-tap-highlight-color:transparent}button:focus-visible,inpu
 @media(max-width:900px){.masthead{height:76px}.brand-wordmark{width:255px}.news-main{padding:27px 18px 52px}.city-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.section-block>.section-heading h2{font-size:21px}}
 @media(max-width:620px){.breaking-strip{height:29px;padding:0 9px;gap:7px}.breaking-label{font-size:7px;padding:9px 7px}.ticker{font-size:7px;gap:8px}.utc-clock{font-size:7px}.masthead{height:69px;padding:0 12px}.brand-wordmark{width:clamp(145px,48vw,190px)}.masthead-actions button{border-radius:8px;padding:8px 10px}.news-nav{height:45px;padding:0 7px}.news-nav button{font-size:10px;padding:0 13px}.news-main{padding:23px 12px 43px}.news-toolbar{margin-bottom:18px}.news-toolbar h1{font-size:26px;line-height:1.15}.news-toolbar p{font-size:11px;line-height:1.6}.search-weather{height:44px;margin-top:13px;border-radius:9px}.search-weather input{font-size:12px}.search-weather button{padding:0 15px}.local-weather-card{padding:16px 14px;border-radius:13px}.local-weather-heading{align-items:flex-start}.local-weather-heading h2{font-size:18px}.local-weather-heading p{font-size:10px;line-height:1.5}.location-refresh{font-size:9px;padding:9px 10px}.local-weather-place{min-height:142px;padding:17px 15px;border-radius:10px}.local-weather-place h3{font-size:21px}.local-temperature strong{font-size:39px}.local-temperature>span{font-size:27px}.local-temperature small{font-size:10px}.local-weather-stats{gap:7px}.local-weather-stats>div{padding:11px 9px;border-radius:8px}.local-weather-stats span{font-size:9px}.local-weather-stats strong{font-size:17px}.section-block{margin-top:30px}.section-block>.section-heading h2{font-size:19px}.section-heading{align-items:flex-start}.news-tabs button{padding:8px 12px;font-size:10px}.headline-grid{grid-template-columns:1fr;gap:8px}.headline-card{min-height:unset;padding:13px;border-radius:9px}.headline-content h3{font-size:12px}.city-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.city-card{min-height:183px;padding:12px;border-radius:10px}.city-temp{font-size:34px}.city-stats{gap:7px}.city-stats span{font-size:8px}.city-stats b{font-size:9px}.news-footer{padding:24px 14px;border-radius:0}.footer-logo{width:140px}}
 @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
+
+
+/* Final footer correction: clean white background with black typography. */
+.news-footer{
+  background:#ffffff!important;
+  background-image:none!important;
+  color:#111111!important;
+}
+.news-footer .footer-brand,
+.news-footer .footer-group h3,
+.news-footer .footer-group button,
+.news-footer .footer-group span,
+.news-footer .footer-copyright,
+.news-footer .footer-copyright strong{
+  color:#111111!important;
+}
+.news-footer .footer-brand span,
+.news-footer .footer-copyright{
+  color:#555555!important;
+}
+.news-footer .footer-group button:hover{color:#333333!important}
+.news-footer .footer-navigation{border-color:#dddddd!important}
