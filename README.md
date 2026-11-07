@@ -34,6 +34,50 @@ A global weather intelligence explorer built around a CesiumJS 3D globe, NASA sa
 
 **Source health:** A green/online status means the endpoint responded to a lightweight probe. It does not prove data freshness, scientific accuracy, full geographic coverage or service-level availability.
 
+
+## Automatic Firebase Hosting deployment (GitHub Actions)
+
+The repository includes `firebase.json`, `.firebaserc` and `.github/workflows/firebase-hosting-deploy.yml`. After the changes are merged to `main`, every push to `main` builds the frontend and deploys the production site to Firebase Hosting project **earthweatherchannel**.
+
+### One-time Google Cloud / Firebase setup
+
+1. In Firebase Console, open project **earthweatherchannel** and enable Firebase Hosting. Create the default Hosting site if prompted.
+2. In Google Cloud Console → IAM & Admin → Service Accounts, create a dedicated account named `earth-weather-firebase-deployer`.
+3. Grant it **Firebase Hosting Admin** (`roles/firebasehosting.admin`) on project `earthweatherchannel`. Do not grant Owner or Editor.
+4. Create a JSON key for this service account and immediately store its entire JSON contents as a GitHub Actions secret named `FIREBASE_SERVICE_ACCOUNT_EARTHWEATHERCHANNEL`. Never commit the JSON key or paste it into chat. Rotate/revoke the key if it is exposed.
+5. In GitHub → repository Settings → Secrets and variables → Actions → Variables, create these repository variables:
+   - `VITE_API_BASE_URL`: the deployed FastAPI service's HTTPS URL (no trailing slash).
+   - `VITE_FIREBASE_API_KEY`: Firebase web app API key.
+   - `VITE_FIREBASE_AUTH_DOMAIN`: `earthweatherchannel.firebaseapp.com`.
+   - `VITE_FIREBASE_DATABASE_URL`: `https://earthweatherchannel-default-rtdb.firebaseio.com`.
+   - `VITE_FIREBASE_PROJECT_ID`: `earthweatherchannel`.
+   - `VITE_FIREBASE_STORAGE_BUCKET`: `earthweatherchannel.firebasestorage.app`.
+   - `VITE_FIREBASE_MESSAGING_SENDER_ID`: `63892023947`.
+   - `VITE_FIREBASE_APP_ID`: `1:63892023947:web:e02df1985db98b30a6c28e`.
+   - `VITE_FIREBASE_MEASUREMENT_ID`: `G-SBDSSMSNCT`.
+6. In Firebase Authentication, enable Google sign-in and add the Firebase Hosting domain (for example `earthweatherchannel.web.app`) to Authorized domains.
+7. Create Firestore and Realtime Database, then publish the rules in `firestore.rules` and `database.rules.json`. The workflow deploys Hosting only; it does not silently create databases or change Auth providers/rules.
+8. After the first successful deploy, verify the Hosting URL in Firebase Console → Hosting and check Authentication / Firestore / Realtime Database from the browser.
+
+The workflow validates that the project ID matches `earthweatherchannel` and that the service-account secret, backend URL and Firebase web config variables exist before building. Firebase web configuration is public browser configuration, not a secret; the service-account JSON is highly sensitive and must only be stored as a GitHub Actions secret.
+
+### Deployment scope
+
+This GitHub workflow deploys the static React frontend to Firebase Hosting. The FastAPI backend remains a separate Render web service; set `VITE_API_BASE_URL` to that service's actual HTTPS URL. Render deployment and Firebase Hosting deployment are separate workflows. Firebase Hosting deployment does not provision Google Cloud service accounts, enable APIs, create Firestore/Realtime Database instances, or turn on Google sign-in; those one-time project-level permissions/settings require an authorized project administrator.
+
+## Firebase integration
+
+The frontend supports Firebase Google Authentication, Firestore user profile / last-location sync, Realtime Database live weather sync, and Analytics where browser support is available.
+
+1. Copy `frontend/.env.example` to `frontend/.env` and fill the Firebase web app values from Firebase Console → Project settings → Your apps.
+2. In Firebase Authentication, enable the **Google** provider and add your deployed website domain to Authorized domains.
+3. Create a Cloud Firestore database and a Realtime Database in the same Firebase project.
+4. Publish `firestore.rules` in Firestore Rules and `database.rules.json` in Realtime Database Rules. These rules restrict each signed-in user to their own `/users/{uid}` data.
+5. Enable Google Analytics for the Firebase project if you want web analytics. Analytics initializes only when supported by the browser.
+6. For Render, add the same `VITE_FIREBASE_*` variables to the `earth-weather-web` static service environment and redeploy. Vite variables are embedded into the public browser bundle; Firebase web config is not a server secret. Restrict the Firebase API key to the required web APIs and configure Firebase security rules.
+
+Google sign-in uses a popup, which requires popups to be allowed by the browser. Once signed in, the app stores the user's last selected coordinates/current model conditions in their private Firestore user document and Realtime Database live-weather node. Location is only used after browser geolocation permission is granted.
+
 ## Stack
 
 - Frontend: React, TypeScript, Vite, CesiumJS

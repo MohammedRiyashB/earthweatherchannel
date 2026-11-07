@@ -23,3 +23,20 @@ services:
           type: web
           name: earth-weather-api
           envVarKey: RENDER_EXTERNAL_URL
+      # Firebase Web config is public client configuration; protect data with Firebase Security Rules.
+      - key: VITE_FIREBASE_API_KEY
+        value: "AIzaSyDsIKBLzOwbIbw56XnjjpSpSkEenGLqwAo"
+      - key: VITE_FIREBASE_AUTH_DOMAIN
+        value: "earthweatherchannel.firebaseapp.com"
+      - key: VITE_FIREBASE_DATABASE_URL
+        value: "https://earthweatherchannel-default-rtdb.firebaseio.com"
+      - key: VITE_FIREBASE_PROJECT_ID
+        value: "earthweatherchannel"
+      - key: VITE_FIREBASE_STORAGE_BUCKET
+        value: "earthweatherchannel.firebasestorage.app"
+      - key: VITE_FIREBASE_MESSAGING_SENDER_ID
+        value: "63892023947"
+      - key: VITE_FIREBASE_APP_ID
+        value: "1:63892023947:web:e02df1985db98b30a6c28e"
+      - key: VITE_FIREBASE_MEASUREMENT_ID
+        value: "G-SBDSSMSNCT"
