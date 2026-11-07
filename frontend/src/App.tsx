@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import * as Cesium from "cesium";
 
+type HourlyFields = { time: string[]; [key: string]: (string | number | null)[] | undefined; precipitation_probability?: number[]; precipitation?: number[]; temperature_2m?: number[]; wind_speed_10m?: number[]; evapotranspiration?: number[]; relative_humidity_2m?: number[]; dew_point_2m?: number[] };
 type Weather = {
   latitude: number; longitude: number; timezone?: string;
   current?: { time: string; temperature_2m?: number; relative_humidity_2m?: number; apparent_temperature?: number; precipitation?: number; cloud_cover?: number; pressure_msl?: number; wind_speed_10m?: number; wind_direction_10m?: number; wind_gusts_10m?: number; weather_code?: number };
