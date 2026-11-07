@@ -185,7 +185,7 @@ const [section,setSection]=useState("Weather Report");const [page,setPage]=useSt
   let active=true;
   const refreshLocal=async()=>{
    const controller=new AbortController();
-   const timeout=window.setTimeout(()=>controller.abort(),12000);
+   const timeout=window.setTimeout(()=>controller.abort(),75000);
    try{
     const response=await fetch(`${API}/api/weather?latitude=${lat}&longitude=${lon}`,{cache:"no-store",signal:controller.signal});
     if(!response.ok)throw new Error(`Weather service returned HTTP ${response.status}`);
