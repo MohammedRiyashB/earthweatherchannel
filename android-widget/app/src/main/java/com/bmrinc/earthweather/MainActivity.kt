@@ -652,29 +652,72 @@ private fun WeatherScreen(
 
 @Composable
 private fun AnimatedSkyBackground(modifier: Modifier, code: Int, isDay: Boolean) {
-    val transition = rememberInfiniteTransition(label = "sky-video-like-motion")
+    val transition = rememberInfiniteTransition(label = "earth-weather-live-sky")
     val drift by transition.animateFloat(
-        initialValue = -14f, targetValue = 14f,
-        animationSpec = infiniteRepeatable(animation = tween(8500), repeatMode = RepeatMode.Reverse),
+        initialValue = -18f, targetValue = 18f,
+        animationSpec = infiniteRepeatable(animation = tween(9000), repeatMode = RepeatMode.Reverse),
         label = "cloud-drift"
     )
     val shimmer by transition.animateFloat(
-        initialValue = .22f, targetValue = .65f,
-        animationSpec = infiniteRepeatable(animation = tween(2600), repeatMode = RepeatMode.Reverse),
-        label = "star-shimmer"
+        initialValue = .18f, targetValue = .72f,
+        animationSpec = infiniteRepeatable(animation = tween(2400), repeatMode = RepeatMode.Reverse),
+        label = "sky-shimmer"
+    )
+    val rainShift by transition.animateFloat(
+        initialValue = 0f, targetValue = 18f,
+        animationSpec = infiniteRepeatable(animation = tween(1300, easing = LinearEasing)),
+        label = "rain-motion"
     )
     Canvas(modifier) {
-        val palette = if (isDay) listOf(Color(0xFF10234D), Color(0xFF223F73), Color(0xFF111C42))
-        else listOf(Color(0xFF03071D), Color(0xFF101B45), Color(0xFF081334))
-        drawRect(Brush.verticalGradient(palette, startY = 0f, endY = size.height))
-        for (i in 0 until 52) {
-            val x = ((i * 97) % 997) / 997f * size.width
-            val y = ((i * 61) % 503) / 503f * size.height * .63f
-            val radius = if (i % 7 == 0) 1.8f else .8f
-            val alpha = if (i % 3 == 0) shimmer else .25f
-            drawCircle(Color.White.copy(alpha = alpha), radius, Offset(x, y))
+        val isStorm = code in 95..99
+        val isRain = code in 51..67 || code in 80..82
+        val isSnow = code in 71..77 || code in 85..86
+        val isFog = code == 45 || code == 48
+        val isClear = code == 0
+        val isPartly = code in 1..2
+
+        val palette = when {
+            isStorm -> listOf(Color(0xFF050918), Color(0xFF1A294B), Color(0xFF080D25))
+            isRain -> listOf(Color(0xFF071329), Color(0xFF1D345A), Color(0xFF0A1531))
+            isSnow -> listOf(Color(0xFF20334E), Color(0xFF4C6684), Color(0xFF162844))
+            isFog -> listOf(Color(0xFF24334C), Color(0xFF60728A), Color(0xFF1A2943))
+            isDay && isClear -> listOf(Color(0xFF14518B), Color(0xFF3B8EB5), Color(0xFF172E5C))
+            isDay -> listOf(Color(0xFF102C59), Color(0xFF315D91), Color(0xFF101D42))
+            isClear -> listOf(Color(0xFF03071D), Color(0xFF101F48), Color(0xFF081334))
+            else -> listOf(Color(0xFF050A20), Color(0xFF17294F), Color(0xFF08132F))
         }
-        val cloudTint = if (code in 51..99) Color(0xFFAAB6D2) else Color(0xFF8799BD)
+        drawRect(Brush.verticalGradient(palette, startY = 0f, endY = size.height))
+
+        if (!isDay) {
+            for (i in 0 until 52) {
+                val x = ((i * 97) % 997) / 997f * size.width
+                val y = ((i * 61) % 503) / 503f * size.height * .70f
+                val radius = if (i % 7 == 0) 1.8f else .8f
+                val alpha = if (i % 3 == 0) shimmer else .25f
+                drawCircle(Color.White.copy(alpha = alpha), radius * density, Offset(x, y))
+            }
+        }
+
+        if (isDay && (isClear || isPartly)) {
+            val sun = Offset(size.width * .79f, size.height * .28f)
+            val radius = size.width * .13f
+            drawCircle(
+                brush = Brush.radialGradient(
+                    listOf(Color(0xFFFFD76E).copy(alpha = .52f), Color(0xFFFFC45C).copy(alpha = .15f), Color.Transparent),
+                    center = sun, radius = radius * 2.3f
+                ),
+                radius = radius * 2.3f, center = sun
+            )
+            drawCircle(Color(0xFFFFD76E), radius * .56f, sun)
+        }
+
+        val cloudTint = when {
+            isStorm -> Color(0xFF65728C)
+            isRain -> Color(0xFF91A0BB)
+            isSnow -> Color(0xFFD2DEEE)
+            isFog -> Color(0xFFB7C3D2)
+            else -> Color(0xFF9EACCC)
+        }
         fun cloud(x: Float, y: Float, r: Float, alpha: Float) {
             val center = Offset(x, y)
             drawCircle(
@@ -685,14 +728,56 @@ private fun AnimatedSkyBackground(modifier: Modifier, code: Int, isDay: Boolean)
                 radius = r, center = center
             )
         }
-        val baseY = size.height * .52f
+        val baseY = size.height * .53f
         val shift = drift * density
-        cloud(size.width * .18f + shift, baseY, size.width * .39f, .72f)
-        cloud(size.width * .46f + shift, baseY - size.height * .045f, size.width * .42f, .82f)
-        cloud(size.width * .79f + shift, baseY + size.height * .012f, size.width * .40f, .70f)
-        cloud(size.width * .34f - shift, baseY + size.height * .11f, size.width * .35f, .56f)
-        cloud(size.width * .70f - shift, baseY + size.height * .10f, size.width * .34f, .60f)
-        cloud(size.width * .52f, baseY + size.height * .19f, size.width * .50f, .36f)
+        if (!isClear || isPartly) {
+            cloud(size.width * .18f + shift, baseY, size.width * .39f, .72f)
+            cloud(size.width * .46f + shift, baseY - size.height * .045f, size.width * .42f, .82f)
+            cloud(size.width * .79f + shift, baseY + size.height * .012f, size.width * .40f, .70f)
+            if (!isPartly) {
+                cloud(size.width * .34f - shift, baseY + size.height * .11f, size.width * .35f, .56f)
+                cloud(size.width * .70f - shift, baseY + size.height * .10f, size.width * .34f, .60f)
+                cloud(size.width * .52f, baseY + size.height * .19f, size.width * .50f, .36f)
+            }
+        }
+        if (isFog) {
+            for (i in 0..4) {
+                val y = size.height * (.39f + i * .065f)
+                drawLine(
+                    Color(0xFFDCE5F2).copy(alpha = .12f + shimmer * .12f),
+                    Offset(0f, y), Offset(size.width, y + drift * density * .16f),
+                    strokeWidth = 13f * density, cap = StrokeCap.Round
+                )
+            }
+        }
+        if (isRain || isStorm) {
+            for (i in 0 until 42) {
+                val x = ((i * 79) % 997) / 997f * size.width
+                val rawY = ((i * 139) % 1009) / 1009f * size.height
+                val y = (rawY + rainShift * density * 2f) % size.height
+                drawLine(
+                    Color(0xFFB9D8FF).copy(alpha = .24f + shimmer * .17f),
+                    Offset(x, y), Offset(x - 3f * density, y + 13f * density),
+                    strokeWidth = 1.3f * density, cap = StrokeCap.Round
+                )
+            }
+        }
+        if (isSnow) {
+            for (i in 0 until 34) {
+                val x = ((i * 83) % 991) / 991f * size.width + drift * density * .24f
+                val rawY = ((i * 127) % 1009) / 1009f * size.height
+                val y = (rawY + rainShift * density) % size.height
+                drawCircle(Color.White.copy(alpha = .45f + shimmer * .30f), (1.1f + (i % 3)) * density, Offset(x, y))
+            }
+        }
+        if (isStorm) {
+            val x = size.width * (.66f + shimmer * .04f)
+            val y = size.height * .47f
+            val lightning = Color(0xFFE7F2FF).copy(alpha = .23f + shimmer * .45f)
+            drawLine(lightning, Offset(x, y), Offset(x - 12f * density, y + 22f * density), 2.6f * density)
+            drawLine(lightning, Offset(x - 12f * density, y + 22f * density), Offset(x + 2f * density, y + 22f * density), 2.6f * density)
+            drawLine(lightning, Offset(x + 2f * density, y + 22f * density), Offset(x - 10f * density, y + 48f * density), 2.6f * density)
+        }
         drawRect(
             Brush.verticalGradient(
                 0f to Color.Transparent,
