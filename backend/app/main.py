@@ -353,3 +353,52 @@ async def weather_news(
         }
     except (httpx.HTTPError, ValueError) as exc:
         raise HTTPException(status_code=502, detail=f"Weather news feed unavailable: {exc.__class__.__name__}") from exc
+
+
+SATELLITE_PROVIDER_CHECKS = [
+    {"id":"nasa-gibs","provider":"NASA EOSDIS GIBS","url":NASA_GIBS_CAPABILITIES,"access":"Public WMTS/WMS imagery; layer and timestamp dependent","coverage":"Global or product-specific","data_type":"Satellite-derived visual imagery"},
+    {"id":"noaa-goes","provider":"NOAA GOES / NESDIS","url":"https://www.goes.noaa.gov/","access":"Public imagery products; product-specific endpoints","coverage":"Americas and adjacent oceans","data_type":"Geostationary weather imagery"},
+    {"id":"eumetsat","provider":"EUMETSAT","url":"https://user.eumetsat.int/","access":"Account and product terms may apply; Data Store APIs","coverage":"Europe, Africa, Atlantic, Indian Ocean and product-dependent regions","data_type":"Meteorological satellite products"},
+    {"id":"copernicus","provider":"Copernicus Data Space","url":"https://documentation.dataspace.copernicus.eu/APIs.html","access":"Public catalogue discovery; processing/download APIs may require OAuth credentials","coverage":"Global archive; acquisition and revisit dependent","data_type":"Sentinel Earth-observation products"},
+    {"id":"jma-himawari","provider":"JMA Himawari","url":"https://www.data.jma.go.jp/mscweb/data/himawari/","access":"Public web imagery; full-resolution distribution has service conditions","coverage":"Asia-Pacific and western Pacific","data_type":"Geostationary cloud and atmospheric imagery"},
+    {"id":"imd-insat","provider":"IMD INSAT","url":"https://api.imd.gov.in/public/","access":"Registration and product permissions required for API integration","coverage":"India and surrounding region","data_type":"Weather satellite imagery and official products"},
+]
+
+@app.get("/api/satellites/health")
+async def satellite_provider_health() -> dict[str, Any]:
+    """Check provider service reachability; this is not a satellite-data ingestion or accuracy test."""
+    async def probe(client: httpx.AsyncClient, provider: dict[str, str]) -> dict[str, Any]:
+        started = datetime.now(timezone.utc)
+        try:
+            response = await client.get(provider["url"], follow_redirects=True)
+            elapsed = (datetime.now(timezone.utc) - started).total_seconds() * 1000
+            # A provider portal returning 401/403 is reachable but requires authorization.
+            if response.status_code in (401, 403):
+                status = "reachable_auth_required"
+            elif response.status_code < 400:
+                status = "reachable"
+            else:
+                status = "provider_error"
+            return {
+                "id": provider["id"], "provider": provider["provider"], "status": status,
+                "http_status": response.status_code, "latency_ms": round(elapsed),
+                "checked_at": utc_now(), "access": provider["access"],
+                "coverage": provider["coverage"], "data_type": provider["data_type"],
+            }
+        except httpx.HTTPError as exc:
+            return {
+                "id": provider["id"], "provider": provider["provider"], "status": "unreachable",
+                "error": exc.__class__.__name__, "checked_at": utc_now(),
+                "access": provider["access"], "coverage": provider["coverage"],
+                "data_type": provider["data_type"],
+            }
+
+    async with httpx.AsyncClient(timeout=12.0, headers={"User-Agent": "EARTH-WEATHER/1.0"}) as client:
+        results = await asyncio.gather(*(probe(client, item) for item in SATELLITE_PROVIDER_CHECKS))
+    reachable = sum(item["status"] in ("reachable", "reachable_auth_required") for item in results)
+    return {
+        "checked_at": utc_now(),
+        "summary": {"providers_checked": len(results), "reachable": reachable, "unreachable_or_error": len(results) - reachable},
+        "providers": results,
+        "important": "Reachability only: this endpoint does not mean imagery has been ingested, authenticated, processed, or scientifically validated. Provider access, licensing, geographic coverage, product latency and credentials still apply.",
+    }
