@@ -46,6 +46,8 @@ from app.satellite_sources import SATELLITE_PROVIDERS, fetch_gibs_layers
 
 logger = logging.getLogger("earthweather.weather")
 OPEN_METEO = "https://api.open-meteo.com/v1/forecast"
+_open_meteo_request_lock = asyncio.Lock()
+_open_meteo_last_request_at = 0.0
 EONET_EVENTS = "https://eonet.gsfc.nasa.gov/api/v3/events"
 RAINVIEWER = "https://api.rainviewer.com/public/weather-maps.json"
 NASA_GIBS_CAPABILITIES = "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/1.0.0/WMTSCapabilities.xml"
@@ -189,8 +191,21 @@ async def source_health() -> dict[str, Any]:
             elapsed = (datetime.now(timezone.utc) - started).total_seconds() * 1000
             response.raise_for_status()
             return {"id":source_id,"status":"online","http_status":response.status_code,"latency_ms":round(elapsed),"checked_at":utc_now()}
-        except (httpx.HTTPError, ValueError) as exc:
-            return {"id":source_id,"status":"degraded","error":exc.__class__.__name__,"checked_at":utc_now()}
+        except httpx.HTTPStatusError as exc:
+            status_code = exc.response.status_code
+            retry_after = exc.response.headers.get("retry-after")
+            return {
+                "id": source_id,
+                "status": "rate_limited" if status_code == 429 else "degraded",
+                "http_status": status_code,
+                "retry_after": retry_after,
+                "error": "upstream_rate_limit" if status_code == 429 else "upstream_http_error",
+                "checked_at": utc_now(),
+            }
+        except httpx.TimeoutException:
+            return {"id": source_id, "status": "degraded", "error": "timeout", "checked_at": utc_now()}
+        except httpx.HTTPError as exc:
+            return {"id": source_id, "status": "degraded", "error": exc.__class__.__name__, "checked_at": utc_now()}
     async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
         results = await asyncio.gather(*(probe(client, item) for item in checks))
     return {"checked_at":utc_now(),"checks":results,"note":"Reachability checks only; they do not certify data freshness, coverage or accuracy."}
@@ -204,14 +219,31 @@ async def _request_current_chunk(
     if not latitudes or len(latitudes) != len(longitudes):
         raise HTTPException(status_code=422, detail="Latitude and longitude counts do not match")
 
-    response = await client.get(
-        OPEN_METEO,
-        params=_current_weather_params(latitudes, longitudes),
-        headers={
-            "User-Agent": "EARTH-WEATHER/1.0 (+https://earthweatherchannel.web.app)",
-            "Accept": "application/json",
-        },
-    )
+    # Keep upstream traffic deliberately bounded. The public Open-Meteo endpoint
+    # rate-limits bursts from shared hosting egress IPs (HTTP 429).
+    global _open_meteo_last_request_at
+    async with _open_meteo_request_lock:
+        loop = asyncio.get_running_loop()
+        wait_for = 1.0 - (loop.time() - _open_meteo_last_request_at)
+        if wait_for > 0:
+            await asyncio.sleep(wait_for)
+        response = await client.get(
+            OPEN_METEO,
+            params=_current_weather_params(latitudes, longitudes),
+            headers={
+                "User-Agent": "EARTH-WEATHER/1.0 (+https://earthweatherchannel.web.app)",
+                "Accept": "application/json",
+            },
+        )
+        _open_meteo_last_request_at = loop.time()
+    if response.status_code == 429:
+        retry_after = response.headers.get("retry-after", "unknown")
+        logger.warning("Open-Meteo rate limit (429); Retry-After=%s", retry_after)
+        raise HTTPException(
+            status_code=503,
+            detail={"provider": "Open-Meteo", "reason": "rate_limited", "retry_after": retry_after},
+            headers={"Retry-After": retry_after} if retry_after.isdigit() else None,
+        )
     response.raise_for_status()
     payload = response.json()
     rows = payload if isinstance(payload, list) else [payload]
@@ -252,6 +284,13 @@ async def _fetch_open_meteo_current(client: httpx.AsyncClient, params: dict[str,
         raise HTTPException(status_code=504, detail="Open-Meteo weather request timed out") from exc
     except httpx.HTTPStatusError as exc:
         logger.warning("Open-Meteo returned HTTP %s", exc.response.status_code)
+        if exc.response.status_code == 429:
+            retry_after = exc.response.headers.get("retry-after", "unknown")
+            raise HTTPException(
+                status_code=503,
+                detail={"provider": "Open-Meteo", "reason": "rate_limited", "retry_after": retry_after},
+                headers={"Retry-After": retry_after} if retry_after.isdigit() else None,
+            ) from exc
         raise HTTPException(status_code=502, detail=f"Open-Meteo returned HTTP {exc.response.status_code}") from exc
     except httpx.HTTPError as exc:
         logger.warning("Open-Meteo connection error: %s", exc.__class__.__name__)
