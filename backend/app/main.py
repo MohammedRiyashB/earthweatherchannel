@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 from typing import Any
 import asyncio
 import os
+import logging
 
 import httpx
 from fastapi import FastAPI, HTTPException, Query
@@ -20,7 +21,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+logger = logging.getLogger("earthweather.weather")
 OPEN_METEO = "https://api.open-meteo.com/v1/forecast"
+_WEATHER_UPSTREAM_SEMAPHORE = asyncio.Semaphore(2)
 EONET_EVENTS = "https://eonet.gsfc.nasa.gov/api/v3/events"
 RAINVIEWER = "https://api.rainviewer.com/public/weather-maps.json"
 NASA_GIBS_CAPABILITIES = "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/1.0.0/WMTSCapabilities.xml"
@@ -130,7 +133,13 @@ async def _request_current_chunk(
     last_error: Exception | None = None
     for attempt in range(3):
         try:
-            response = await client.get(OPEN_METEO, params=params)
+            # Limit concurrent upstream calls: the homepage can request many cities at once.
+            async with _WEATHER_UPSTREAM_SEMAPHORE:
+                response = await client.get(
+                    OPEN_METEO,
+                    params=params,
+                    headers={"User-Agent": "EARTH-WEATHER/1.0 (+https://earthweatherchannel.web.app)", "Accept": "application/json"},
+                )
             response.raise_for_status()
             payload = response.json()
             rows = payload if isinstance(payload, list) else [payload]
@@ -142,8 +151,20 @@ async def _request_current_chunk(
             return rows
         except (httpx.HTTPError, ValueError, TypeError) as exc:
             last_error = exc
+            status_code = exc.response.status_code if isinstance(exc, httpx.HTTPStatusError) else None
+            logger.warning(
+                "Open-Meteo upstream failure attempt=%s/3 status=%s error=%s locations=%s",
+                attempt + 1, status_code, exc.__class__.__name__, len(latitudes),
+            )
             if attempt < 2:
-                await asyncio.sleep(0.6 * (2 ** attempt))
+                retry_after = None
+                if isinstance(exc, httpx.HTTPStatusError):
+                    retry_after = exc.response.headers.get("Retry-After")
+                try:
+                    delay = min(8.0, max(0.8 * (2 ** attempt), float(retry_after))) if retry_after else 0.8 * (2 ** attempt)
+                except (TypeError, ValueError):
+                    delay = 0.8 * (2 ** attempt)
+                await asyncio.sleep(delay)
     raise RuntimeError(f"Open-Meteo request failed: {last_error.__class__.__name__ if last_error else 'UnknownError'}")
 
 async def _fetch_open_meteo_current(client: httpx.AsyncClient, params: dict[str, Any]) -> Any:
