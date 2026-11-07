@@ -85,7 +85,7 @@ const [section,setSection]=useState("Weather Report");const [page,setPage]=useSt
    setIsSearchLocation(false);
    if(!sameArea){setVisitorLocation(null);try{localStorage.removeItem(CACHE_PREFIX+"visitor-location");}catch{/* storage may be unavailable */}}
    setLocationStatus("ready");
-   setLocationMessage("Updating weather for your detected coordinates…");
+   setLocationMessage("Resolving your nearby town or village…");
    const controller=new AbortController();
    const timeout=window.setTimeout(()=>controller.abort(),10000);
    void fetch(`${API}/api/location/reverse?latitude=${lat}&longitude=${lon}`,{cache:"no-store",signal:controller.signal})
