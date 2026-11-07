@@ -176,47 +176,38 @@ async def _request_current_chunk(
     latitudes: list[float],
     longitudes: list[float],
 ) -> list[dict[str, Any]]:
+    """Make one bounded provider call and cache only complete, valid results."""
     params = _current_weather_params(latitudes, longitudes)
-    last_error: Exception | None = None
-    for attempt in range(2):
-        try:
-            # Limit concurrent upstream calls: the homepage can request many cities at once.
-            async with _WEATHER_UPSTREAM_SEMAPHORE:
-                response = await client.get(
-                    OPEN_METEO,
-                    params=params,
-                    headers={"User-Agent": "EARTH-WEATHER/1.0 (+https://earthweatherchannel.web.app)", "Accept": "application/json"},
-                )
-            response.raise_for_status()
-            payload = response.json()
-            rows = payload if isinstance(payload, list) else [payload]
-            if len(rows) != len(latitudes) or any(not isinstance(row, dict) or not isinstance(row.get("current"), dict) for row in rows):
-                raise ValueError("Incomplete current-weather response")
-            now = asyncio.get_running_loop().time()
-            for lat, lon, row in zip(latitudes, longitudes, rows):
-                cache_key = (round(lat, 3), round(lon, 3))
-                _current_provider_cache[cache_key] = (now, row)
-                _current_provider_cache.move_to_end(cache_key)
-                while len(_current_provider_cache) > _CURRENT_PROVIDER_CACHE_MAX_ENTRIES:
-                    _current_provider_cache.popitem(last=False)
-            return rows
-        except (httpx.HTTPError, ValueError, TypeError) as exc:
-            last_error = exc
-            status_code = exc.response.status_code if isinstance(exc, httpx.HTTPStatusError) else None
-            logger.warning(
-                "Open-Meteo upstream failure attempt=%s/2 status=%s error=%s locations=%s",
-                attempt + 1, status_code, exc.__class__.__name__, len(latitudes),
+    try:
+        async with _WEATHER_UPSTREAM_SEMAPHORE:
+            response = await client.get(
+                OPEN_METEO,
+                params=params,
+                headers={"User-Agent": "EARTH-WEATHER/1.0 (+https://earthweatherchannel.web.app)", "Accept": "application/json"},
             )
-            if attempt < 1:
-                retry_after = None
-                if isinstance(exc, httpx.HTTPStatusError):
-                    retry_after = exc.response.headers.get("Retry-After")
-                try:
-                    delay = min(4.0, max(0.5, float(retry_after))) if retry_after else 0.5
-                except (TypeError, ValueError):
-                    delay = 0.8 * (2 ** attempt)
-                await asyncio.sleep(delay)
-    raise RuntimeError(f"Open-Meteo request failed: {last_error.__class__.__name__ if last_error else 'UnknownError'}")
+        response.raise_for_status()
+        payload = response.json()
+        rows = payload if isinstance(payload, list) else [payload]
+        if len(rows) != len(latitudes) or any(
+            not isinstance(row, dict) or not isinstance(row.get("current"), dict)
+            for row in rows
+        ):
+            raise ValueError("Incomplete current-weather response")
+        now = asyncio.get_running_loop().time()
+        for lat, lon, row in zip(latitudes, longitudes, rows):
+            cache_key = (round(lat, 3), round(lon, 3))
+            _current_provider_cache[cache_key] = (now, row)
+            _current_provider_cache.move_to_end(cache_key)
+            while len(_current_provider_cache) > _CURRENT_PROVIDER_CACHE_MAX_ENTRIES:
+                _current_provider_cache.popitem(last=False)
+        return rows
+    except (httpx.HTTPError, ValueError, TypeError) as exc:
+        status_code = exc.response.status_code if isinstance(exc, httpx.HTTPStatusError) else None
+        logger.warning(
+            "Open-Meteo upstream failure status=%s error=%s locations=%s",
+            status_code, exc.__class__.__name__, len(latitudes),
+        )
+        raise RuntimeError(f"Open-Meteo request failed: {exc.__class__.__name__}") from exc
 
 async def _fetch_open_meteo_current(client: httpx.AsyncClient, params: dict[str, Any]) -> Any:
     """Fetch one or many points safely; split bulk requests and retain stale good data on outages."""
@@ -250,20 +241,20 @@ async def _fetch_open_meteo_current(client: httpx.AsyncClient, params: dict[str,
             rows = await _request_current_chunk(client, chunk_lats, chunk_lons)
             return chunk, rows
         except RuntimeError:
-            # Retry individual points in parallel. The shared semaphore still
-            # caps upstream concurrency and stale reports remain available.
-            async def load_one(index: int) -> dict[str, Any] | None:
+            # Do not fan one failed batch out into individual provider calls.
+            # Reuse a recent per-coordinate report if it exists; otherwise let
+            # this location be unavailable until the next scheduled refresh.
+            rows: list[dict[str, Any] | None] = []
+            for index in chunk:
                 key = (round(latitudes[index], 3), round(longitudes[index], 3))
-                try:
-                    single = await _request_current_chunk(client, [latitudes[index]], [longitudes[index]])
-                    return single[0]
-                except RuntimeError:
-                    cached = _current_provider_cache.get(key)
-                    if cached:
-                        _current_provider_cache.move_to_end(key)
-                    return cached[1] if cached and now - cached[0] <= _CURRENT_STALE_TTL else None
-
-            rows = await asyncio.gather(*(load_one(index) for index in chunk))
+                cached = _current_provider_cache.get(key)
+                if cached:
+                    _current_provider_cache.move_to_end(key)
+                rows.append(
+                    cached[1]
+                    if cached and now - cached[0] <= _CURRENT_STALE_TTL
+                    else None
+                )
             return chunk, rows
 
     loaded_chunks = await asyncio.gather(*(load_chunk(chunk) for chunk in chunks))
