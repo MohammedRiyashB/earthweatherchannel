@@ -129,7 +129,7 @@ const [section,setSection]=useState("Weather Report");const [page,setPage]=useSt
    }));
    setCities(rows);writeCache("cities",rows);setPersonalizedCities(true);writeCache("cities-personalized",true);const timestamp=payload.retrieved_at||new Date().toISOString();setUpdated(timestamp);writeCache("cities-updated",timestamp);
   }catch{
-   if(requestVersion===cityRequestVersion.current)setCities(previous=>previous.map(city=>({...city,loading:false,error:!city.current})));
+   if(requestVersion===cityRequestVersion.current)setCities(previous=>previous.map(city=>({...city,loading:false,error:!hasValidCurrent(city.current)})));
   }finally{if(requestVersion===cityRequestVersion.current)setBusy(false);}
  };
  const refreshPopularCities=async()=>{
@@ -144,7 +144,7 @@ const [section,setSection]=useState("Weather Report");const [page,setPage]=useSt
    if(!Array.isArray(payload.reports)||payload.reports.length!==CITIES.length)throw new Error("Incomplete popular city response");
    if(requestVersion!==cityRequestVersion.current)return;
    const rows=CITIES.map((city,index)=>({...city,current:payload.reports[index]?.current||{},loading:false,error:!hasValidCurrent(payload.reports[index]?.current)}));setCities(rows);writeCache("cities",rows);
-   setPersonalizedCities(false);setUpdated(payload.retrieved_at||new Date().toISOString());
+   setPersonalizedCities(false);writeCache("cities-personalized",false);const timestamp=payload.retrieved_at||new Date().toISOString();setUpdated(timestamp);writeCache("cities-updated",timestamp);
   }catch{
    // Keep cached reports; avoid a slow fan-out of 12 individual requests.
    if(requestVersion===cityRequestVersion.current)setCities(previous=>previous.map(city=>({...city,loading:false,error:!city.current})));
