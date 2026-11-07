@@ -51,9 +51,11 @@ const [section,setSection]=useState("Weather Report");const [isSearchLocation,se
  const [locationStatus,setLocationStatus]=useState<"locating"|"ready"|"denied"|"error">("locating");
  const [locationMessage,setLocationMessage]=useState("Finding your nearby town or village…");
  const locationStarted=useRef(false);
+ const locationRequestVersion=useRef(0);
  useEffect(()=>{if(!auth||!firebaseReady)return;return onAuthStateChanged(auth,setUser)},[]);
 
  const detectLocalWeather=()=>{
+  const requestVersion=++locationRequestVersion.current;
   if(!navigator.geolocation){
    setLocationStatus("error");setLocationMessage("Location detection is not supported by this browser.");return;
   }
@@ -68,6 +70,7 @@ const [section,setSection]=useState("Weather Report");const [isSearchLocation,se
     if(!weatherResponse.ok)throw new Error("Local weather is temporarily unavailable.");
     const weatherData=await weatherResponse.json();
     const placeData=placeResponse.ok?await placeResponse.json():null;
+    if(requestVersion!==locationRequestVersion.current)return;
     const name=placeData?.name||"Your nearby area";
     const region=placeData?.region||"GPS location";
     setLocal({name,region,lat,lon,current:weatherData.current||{}});
@@ -78,6 +81,7 @@ const [section,setSection]=useState("Weather Report");const [isSearchLocation,se
     setLocationStatus("error");setLocationMessage(error instanceof Error?error.message:"Could not load your local weather.");
    }
   },error=>{
+   if(requestVersion!==locationRequestVersion.current)return;
    if(error.code===1){setLocationStatus("denied");setLocationMessage("Location permission is off. Allow location access to see weather for your current town or village.");}
    else if(error.code===3){setLocationStatus("error");setLocationMessage("Location request timed out. Please try again.");}
    else{setLocationStatus("error");setLocationMessage("Your current location could not be detected. Please try again.");}
@@ -110,7 +114,7 @@ const [section,setSection]=useState("Weather Report");const [isSearchLocation,se
  const active=cities.filter(c=>c.current);
  const hottest=useMemo(()=>[...active].sort((a,b)=>(b.current?.temperature_2m??-100)-(a.current?.temperature_2m??-100))[0],[active]);
  const headlines=newsRegion==="india"?indiaNews:worldNews;
- const search=async()=>{if(!query.trim())return;try{const r=await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(query)}`,{headers:{"Accept-Language":"en"}});const d=await r.json();if(!d.length)throw new Error("No matching place found");const p={name:d[0].name||query,region:d[0].display_name,lat:Number(d[0].lat),lon:Number(d[0].lon)};const w=await fetch(`${API}/api/weather?latitude=${p.lat}&longitude=${p.lon}`);if(!w.ok)throw new Error("Weather feed unavailable");const wd=await w.json();setLocal({...p,current:wd.current||{}});setIsSearchLocation(true);setLocationStatus("ready");setLocationMessage("");setNotice("");}catch(e){setNotice(e instanceof Error?e.message:"Search failed.");}};
+ const search=async()=>{if(!query.trim())return;const requestVersion=++locationRequestVersion.current;try{const r=await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(query)}`,{headers:{"Accept-Language":"en"}});const d=await r.json();if(requestVersion!==locationRequestVersion.current)return;if(!d.length)throw new Error("No matching place found");const p={name:d[0].name||query,region:d[0].display_name,lat:Number(d[0].lat),lon:Number(d[0].lon)};const w=await fetch(`${API}/api/weather?latitude=${p.lat}&longitude=${p.lon}`);if(requestVersion!==locationRequestVersion.current)return;if(!w.ok)throw new Error("Weather feed unavailable");const wd=await w.json();if(requestVersion!==locationRequestVersion.current)return;setLocal({...p,current:wd.current||{}});setIsSearchLocation(true);setLocationStatus("ready");setLocationMessage("");setNotice("");}catch(e){if(requestVersion!==locationRequestVersion.current)return;setNotice(e instanceof Error?e.message:"Search failed.");}};
  const signIn=async()=>{if(!auth)return;try{await signInWithPopup(auth,googleProvider)}catch{setNotice("Google sign-in could not be completed.")}};
  return <div className="news-site">
   <div className="breaking-strip"><div className="breaking-label">WEATHER BULLETIN</div><div className="ticker"><span>GLOBAL WEATHER DESK</span><i>•</i><span>LIVE MODEL UPDATES</span><i>•</i><span>INDIA & WORLD WEATHER HEADLINES</span><i>•</i><span>WEATHER CHECK EVERY 60 SECONDS</span></div><div className="utc-clock">{clock.toLocaleTimeString([], {hour:"2-digit",minute:"2-digit",second:"2-digit"})} LOCAL</div></div>
