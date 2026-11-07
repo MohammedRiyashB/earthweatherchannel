@@ -306,3 +306,53 @@ button,input,a{-webkit-tap-highlight-color:transparent}button:focus-visible,inpu
   .source-brand-showcase{margin-top:48px;margin-bottom:38px}
   .source-brand-track{will-change:auto!important}
 }
+
+
+/* Compact logo-only contributor marquee: no heading or disclaimer copy. */
+.source-brand-showcase{
+  margin:18px -1px 18px!important;
+  padding:12px 0 10px!important;
+}
+.source-brand-heading,
+.source-brand-note{display:none!important}
+.source-brand-motion{gap:8px!important;padding:0!important}
+.source-brand-tile{
+  flex-basis:190px!important;
+  min-height:60px!important;
+  padding:9px 11px!important;
+  gap:9px!important;
+  border-radius:11px!important;
+}
+.source-brand-monogram{
+  flex-basis:34px!important;
+  width:34px!important;
+  height:34px!important;
+  border-radius:8px!important;
+}
+.source-brand-monogram img{
+  max-width:100%;
+  max-height:100%;
+}
+.source-brand-copy strong{font-size:12px!important}
+.source-brand-copy small{font-size:9px!important}
+@media(max-width:620px){
+  .source-brand-showcase{
+    margin:14px -12px 14px!important;
+    padding:9px 0 8px!important;
+  }
+  .source-brand-motion{gap:7px!important}
+  .source-brand-tile{
+    flex-basis:170px!important;
+    min-height:54px!important;
+    padding:8px 9px!important;
+    gap:8px!important;
+  }
+  .source-brand-monogram{
+    flex-basis:30px!important;
+    width:30px!important;
+    height:30px!important;
+  }
+  .source-brand-copy strong{font-size:11px!important}
+  .source-brand-copy small{font-size:8px!important}
+  .source-brand-arrow{font-size:12px!important}
+}
