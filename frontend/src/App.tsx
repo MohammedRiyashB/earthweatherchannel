@@ -19,6 +19,7 @@ const CITIES:Place[]=[
 const CACHE_PREFIX="earth-weather-v2:";
 function readCache<T>(key:string,fallback:T):T{try{const raw=localStorage.getItem(CACHE_PREFIX+key);if(!raw)return fallback;const parsed=JSON.parse(raw);return parsed?.value??fallback;}catch{return fallback;}}
 function writeCache<T>(key:string,value:T){try{localStorage.setItem(CACHE_PREFIX+key,JSON.stringify({value,savedAt:Date.now()}));}catch{/* storage may be unavailable or full */}}
+async function fetchBounded(url:string,init:RequestInit={},timeoutMs=14000):Promise<Response>{const controller=new AbortController();const timer=window.setTimeout(()=>controller.abort(),timeoutMs);try{return await fetch(url,{...init,signal:controller.signal});}finally{window.clearTimeout(timer);}}
 const weatherLabel=(c?:number)=>c==null?"Weather update":c===0?"Clear skies":c===1?"Mainly clear":c===2?"Partly cloudy":c===3?"Overcast":[45,48].includes(c)?"Foggy":[51,53,55,56,57].includes(c)?"Drizzle":[61,63,65,66,67,80,81,82].includes(c)?"Rain":[71,73,75,77,85,86].includes(c)?"Snow":[95,96,99].includes(c)?"Thunderstorms":"Variable conditions";
 const weatherScene=(c?:number,cloud?:number)=>{
  if(c!=null&&[95,96,99].includes(c))return "scene-thunder";
@@ -116,7 +117,7 @@ const [section,setSection]=useState("Weather Report");const [page,setPage]=useSt
   try{
    const country=origin.country||origin.region.split(",").map(part=>part.trim()).filter(Boolean).pop()||"Unknown";
    const url=`${API}/api/weather/featured?latitude=${origin.lat}&longitude=${origin.lon}&country=${encodeURIComponent(country)}`;
-   const response=await fetch(url,{cache:"no-store"});
+   const response=await fetchBounded(url,{cache:"no-store"},14000);
    if(!response.ok)throw new Error(`Featured weather API returned HTTP ${response.status}`);
    const payload=await response.json();
    if(!Array.isArray(payload.reports)||payload.reports.length===0)throw new Error("No featured city reports returned");
@@ -138,7 +139,7 @@ const [section,setSection]=useState("Weather Report");const [page,setPage]=useSt
   try{
    const latitudes=CITIES.map(city=>city.lat).join(",");
    const longitudes=CITIES.map(city=>city.lon).join(",");
-   const response=await fetch(`${API}/api/weather/bulk?latitudes=${encodeURIComponent(latitudes)}&longitudes=${encodeURIComponent(longitudes)}`,{cache:"no-store"});
+   const response=await fetchBounded(`${API}/api/weather/bulk?latitudes=${encodeURIComponent(latitudes)}&longitudes=${encodeURIComponent(longitudes)}`,{cache:"no-store"},14000);
    if(!response.ok)throw new Error("Bulk weather endpoint unavailable");
    const payload=await response.json();
    if(!Array.isArray(payload.reports)||payload.reports.length!==CITIES.length)throw new Error("Incomplete popular city response");
@@ -158,7 +159,7 @@ const [section,setSection]=useState("Weather Report");const [page,setPage]=useSt
  },[visitorLocation?.lat,visitorLocation?.lon,visitorLocation?.country,visitorLocation?.region]);
  const refreshFeeds=async()=>{
   const urls=[`${API}/api/cyclones`,`${API}/api/weather-news?region=india&limit=30`,`${API}/api/weather-news?region=world&limit=30`];
-  const results=await Promise.allSettled(urls.map(url=>fetch(url,{cache:"no-store"})));
+  const results=await Promise.allSettled(urls.map(url=>fetchBounded(url,{cache:"no-store"},10000)));
   let failed=false;
   for(let index=0;index<results.length;index++){
    const result=results[index];
@@ -215,7 +216,7 @@ const [section,setSection]=useState("Weather Report");const [page,setPage]=useSt
  const regionalCities=cities.filter(city=>city.region.endsWith("· Regional reference"));
  const internationalCities=cities.filter(city=>city.region.endsWith("· Nearby international"));
  const renderCityCards=(items:Place[])=>items.map(c=><article className={`city-card weather-scene ${weatherScene(c.current?.weather_code,c.current?.cloud_cover)}`} key={c.name}><span className="weather-sky-art" aria-hidden="true"><i/><i/><i/></span><div className="city-top"><div><small>{c.region}</small><h3>{c.name}</h3></div><span className="weather-icon">{icon(c.current?.weather_code)}</span></div>{c.loading?<div className="city-loading">Loading report…</div>:c.error?<div className="city-loading">Report temporarily unavailable</div>:<><div className="city-temp">{Math.round(c.current?.temperature_2m??0)}<sup>°C</sup></div><div className="city-condition">{weatherLabel(c.current?.weather_code)}</div><div className="city-stats"><span>Humidity <b>{c.current?.relative_humidity_2m??"—"}%</b></span><span>Wind <b>{c.current?.wind_speed_10m??"—"} km/h</b></span><span>Cloud <b>{c.current?.cloud_cover??"—"}%</b></span></div><div className="city-observed">Model time: {modelTime(c.current?.time)}</div></>}</article>);
- const search=async()=>{if(!query.trim())return;const requestVersion=++locationRequestVersion.current;try{const r=await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(query)}`,{headers:{"Accept-Language":"en"}});const d=await r.json();if(requestVersion!==locationRequestVersion.current)return;if(!d.length)throw new Error("No matching place found");const p={name:d[0].name||query,region:d[0].display_name,source:"search" as const,country:d[0].display_name.split(",").map((part:string)=>part.trim()).filter(Boolean).pop(),lat:Number(d[0].lat),lon:Number(d[0].lon)};const w=await fetch(`${API}/api/weather?latitude=${p.lat}&longitude=${p.lon}`);if(requestVersion!==locationRequestVersion.current)return;if(!w.ok)throw new Error("Weather feed unavailable");const wd=await w.json();if(requestVersion!==locationRequestVersion.current)return;setLocal({...p,current:wd.current||{}});writeCache("local",{...p,current:wd.current||{}});setIsSearchLocation(true);setLocationStatus("ready");setLocationMessage("");setNotice("");}catch(e){if(requestVersion!==locationRequestVersion.current)return;setNotice(e instanceof Error?e.message:"Search failed.");}};
+ const search=async()=>{if(!query.trim())return;const requestVersion=++locationRequestVersion.current;try{const r=await fetchBounded(`https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(query)}`,{headers:{"Accept-Language":"en"}},10000);const d=await r.json();if(requestVersion!==locationRequestVersion.current)return;if(!d.length)throw new Error("No matching place found");const p={name:d[0].name||query,region:d[0].display_name,source:"search" as const,country:d[0].display_name.split(",").map((part:string)=>part.trim()).filter(Boolean).pop(),lat:Number(d[0].lat),lon:Number(d[0].lon)};const w=await fetchBounded(`${API}/api/weather?latitude=${p.lat}&longitude=${p.lon}`,{},14000);if(requestVersion!==locationRequestVersion.current)return;if(!w.ok)throw new Error("Weather feed unavailable");const wd=await w.json();if(requestVersion!==locationRequestVersion.current)return;setLocal({...p,current:wd.current||{}});writeCache("local",{...p,current:wd.current||{}});setIsSearchLocation(true);setLocationStatus("ready");setLocationMessage("");setNotice("");}catch(e){if(requestVersion!==locationRequestVersion.current)return;setNotice(e instanceof Error?e.message:"Search failed.");}};
  const signIn=async()=>{if(!auth)return;try{await signInWithPopup(auth,googleProvider)}catch{setNotice("Google sign-in could not be completed.")}};
  return <div className="news-site">
   <div className="breaking-strip"><div className="breaking-label">WEATHER BULLETIN</div><div className="ticker"><span>GLOBAL WEATHER DESK</span><i>•</i><span>LIVE MODEL UPDATES</span><i>•</i><span>INDIA & WORLD WEATHER HEADLINES</span><i>•</i><span>WEATHER CHECK EVERY 60 SECONDS</span></div><div className="utc-clock">{clock.toLocaleTimeString([], {hour:"2-digit",minute:"2-digit",second:"2-digit"})} LOCAL</div></div>
