@@ -94,6 +94,7 @@ class MainActivity : ComponentActivity() {
     private var celsius by mutableStateOf(true)
     private var notificationsEnabled by mutableStateOf(false)
     private var rainRemindersEnabled by mutableStateOf(false)
+    private var rainThreshold by mutableIntStateOf(60)
     private var refreshInProgress = false
 
     private val notificationPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -135,6 +136,8 @@ class MainActivity : ComponentActivity() {
                     onNotifications = { setWeatherNotifications(it) },
                     rainRemindersEnabled = rainRemindersEnabled,
                     onRainReminders = { setRainReminders(it) },
+                    rainThreshold = rainThreshold,
+                    onRainThreshold = { rainThreshold = it; getSharedPreferences("earth_weather_app", MODE_PRIVATE).edit().putInt("rain_threshold", it).apply(); getSharedPreferences("earth_weather", MODE_PRIVATE).edit().putInt("rain_probability_threshold", it).apply() },
                     onSearch = { searchCities(cityQuery) }
                 )
             }
@@ -149,6 +152,7 @@ class MainActivity : ComponentActivity() {
         celsius = prefs.getBoolean("celsius", true)
         notificationsEnabled = prefs.getBoolean("notifications_enabled", false)
         rainRemindersEnabled = prefs.getBoolean("rain_reminders_enabled", false)
+        rainThreshold = prefs.getInt("rain_threshold", 60).coerceIn(40, 90)
         try {
             val array = JSONArray(prefs.getString("saved_cities", "[]") ?: "[]")
             savedCities = (0 until array.length()).mapNotNull { i ->
@@ -396,7 +400,7 @@ private fun EarthWeatherApp(
     results: List<WeatherPlace>, searching: Boolean, searchError: String,
     savedCities: List<WeatherPlace>, onSelect: (WeatherPlace) -> Unit,
     onSave: (WeatherPlace) -> Unit, onRemove: (WeatherPlace) -> Unit,
-    celsius: Boolean, onUnit: (Boolean) -> Unit, notificationsEnabled: Boolean, onNotifications: (Boolean) -> Unit, rainRemindersEnabled: Boolean, onRainReminders: (Boolean) -> Unit, onSearch: () -> Unit
+    celsius: Boolean, onUnit: (Boolean) -> Unit, notificationsEnabled: Boolean, onNotifications: (Boolean) -> Unit, rainRemindersEnabled: Boolean, onRainReminders: (Boolean) -> Unit, rainThreshold: Int, onRainThreshold: (Int) -> Unit, onSearch: () -> Unit
 ) {
     Scaffold(
         containerColor = Page,
@@ -417,7 +421,7 @@ private fun EarthWeatherApp(
             "Forecast" -> ForecastScreen(state, place, Modifier.padding(padding), celsius)
             "Cities" -> CitiesScreen(place, savedCities, query, onQuery, results, searching, searchError, Modifier.padding(padding), onSelect, onSave, onRemove, onSearch, onDetectLocation)
             "Radar" -> RadarScreen(state, place, Modifier.padding(padding))
-            else -> SettingsScreen(celsius, onUnit, notificationsEnabled, onNotifications, rainRemindersEnabled, onRainReminders, Modifier.padding(padding), state)
+            else -> SettingsScreen(celsius, onUnit, notificationsEnabled, onNotifications, rainRemindersEnabled, onRainReminders, rainThreshold, onRainThreshold, Modifier.padding(padding), state)
         }
     }
 }
@@ -688,7 +692,7 @@ private fun RadarScreen(state: DashboardState, place: WeatherPlace?, modifier: M
 }
 
 @Composable
-private fun SettingsScreen(celsius: Boolean, onUnit: (Boolean) -> Unit, notificationsEnabled: Boolean, onNotifications: (Boolean) -> Unit, rainRemindersEnabled: Boolean, onRainReminders: (Boolean) -> Unit, modifier: Modifier, state: DashboardState) {
+private fun SettingsScreen(celsius: Boolean, onUnit: (Boolean) -> Unit, notificationsEnabled: Boolean, onNotifications: (Boolean) -> Unit, rainRemindersEnabled: Boolean, onRainReminders: (Boolean) -> Unit, rainThreshold: Int, onRainThreshold: (Int) -> Unit, modifier: Modifier, state: DashboardState) {
     Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp)) {
         ScreenTitle("Settings", "Personalise EARTH WEATHER")
         SectionHeader("UNITS", "Temperature")
@@ -715,12 +719,25 @@ private fun SettingsScreen(celsius: Boolean, onUnit: (Boolean) -> Unit, notifica
         }
         Spacer(Modifier.height(10.dp))
         Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp)) {
-            Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text("Rain reminders", color = Ink, fontWeight = FontWeight.SemiBold)
-                    Text("Notify when forecast rain probability reaches 60% within the next 6 hours", color = Muted, fontSize = 10.sp)
+            Column(Modifier.fillMaxWidth().padding(16.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Rain reminders", color = Ink, fontWeight = FontWeight.SemiBold)
+                        Text("Forecast-based notification within the next 6 hours", color = Muted, fontSize = 10.sp)
+                    }
+                    Switch(checked = rainRemindersEnabled, onCheckedChange = onRainReminders)
                 }
-                Switch(checked = rainRemindersEnabled, onCheckedChange = onRainReminders)
+                Spacer(Modifier.height(12.dp))
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("Rain probability threshold", color = Muted, fontSize = 11.sp)
+                    Text("$rainThreshold%", color = Sky, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                }
+                Slider(
+                    value = rainThreshold.toFloat(),
+                    onValueChange = { onRainThreshold(it.toInt().coerceIn(40, 90)) },
+                    valueRange = 40f..90f,
+                    steps = 9
+                )
             }
         }
         Spacer(Modifier.height(22.dp)); SectionHeader("DATA & PRIVACY", "About your weather")
