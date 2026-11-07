@@ -4,7 +4,7 @@ import { onAuthStateChanged, signInWithPopup, signOut, type User } from "firebas
 
 const API=import.meta.env.VITE_API_BASE_URL||"https://earthweather-api.onrender.com";
 type Current={time?:string;temperature_2m?:number;relative_humidity_2m?:number;apparent_temperature?:number;precipitation?:number;cloud_cover?:number;pressure_msl?:number;wind_speed_10m?:number;wind_direction_10m?:number;weather_code?:number};
-type Place={name:string;region:string;lat:number;lon:number;country?:string;country_code?:string;current?:Current;loading?:boolean;error?:boolean};
+type Place={name:string;region:string;lat:number;lon:number;country?:string;country_code?:string;accuracy?:number;current?:Current;loading?:boolean;error?:boolean};
 type Storm={id:string;title:string;description?:string;link?:string;coordinates?:{lat:number;lon:number;date?:string}[]};
 type Story={title:string;url:string;source:string;published_at?:string;language?:string;image?:string};
 const CITIES:Place[]=[
@@ -48,12 +48,12 @@ export default function App(){
  const [storms,setStorms]=useState<Storm[]>(()=>readCache<Storm[]>("storms",[]));
  const [indiaNews,setIndiaNews]=useState<Story[]>(()=>readCache<Story[]>("india-news",[]));const [worldNews,setWorldNews]=useState<Story[]>(()=>readCache<Story[]>("world-news",[]));
  const [newsRegion,setNewsRegion]=useState<"india"|"world">("india");
- const [updated,setUpdated]=useState("");const [clock,setClock]=useState(new Date());const [busy,setBusy]=useState(false);const [query,setQuery]=useState("");
+ const [updated,setUpdated]=useState<string>(()=>readCache<string>("cities-updated",""));const [clock,setClock]=useState(new Date());const [busy,setBusy]=useState(false);const [query,setQuery]=useState("");
 const [section,setSection]=useState("Weather Report");const [page,setPage]=useState<"home"|"about"|"terms"|"privacy">("home");const [isSearchLocation,setIsSearchLocation]=useState(false);
  const [user,setUser]=useState<User|null>(null);const [notice,setNotice]=useState("");
  const [local,setLocal]=useState<Place|null>(()=>readCache<Place|null>("local",null));
  const [visitorLocation,setVisitorLocation]=useState<Place|null>(()=>readCache<Place|null>("visitor-location",null));
- const [personalizedCities,setPersonalizedCities]=useState(false);
+ const [personalizedCities,setPersonalizedCities]=useState<boolean>(()=>readCache<boolean>("cities-personalized",false));
  const [locationStatus,setLocationStatus]=useState<"locating"|"ready"|"denied"|"error">(()=>readCache<Place|null>("local",null)?"ready":"locating");
  const [locationMessage,setLocationMessage]=useState(()=>readCache<Place|null>("local",null)?"":"Finding your nearby town or village…");
  const locationStarted=useRef(false);
@@ -64,48 +64,52 @@ const [section,setSection]=useState("Weather Report");const [page,setPage]=useSt
  const detectLocalWeather=()=>{
   const requestVersion=++locationRequestVersion.current;
   if(!navigator.geolocation){
-   setLocationStatus("error");setLocationMessage("Location detection is not supported by this browser.");return;
+   if(!local){setLocationStatus("error");setLocationMessage("Location detection is not supported by this browser.");}
+   else{setLocationStatus("ready");setLocationMessage("Showing your last saved location; this browser cannot refresh GPS.");}
+   return;
   }
-  setLocationStatus("locating");setLocationMessage(local?"Refreshing your location in the background…":"Finding your nearby town or village…");
-  navigator.geolocation.getCurrentPosition(async position=>{
-   const lat=position.coords.latitude,lon=position.coords.longitude;
-   try{
-    // Weather is the primary result. Reverse-geocoding is optional and must
-    // never hide a valid GPS weather response when the place-name service fails.
-    const weatherResponse=await fetch(`${API}/api/weather?latitude=${lat}&longitude=${lon}`,{cache:"no-store"});
-    if(!weatherResponse.ok)throw new Error(`Weather service returned HTTP ${weatherResponse.status}`);
-    const weatherData=await weatherResponse.json();
-    if(requestVersion!==locationRequestVersion.current)return;
-    const fallbackPlace:Place={name:"Your nearby area",region:"GPS coordinates",lat,lon,current:weatherData.current||{}};
-    setLocal(fallbackPlace);writeCache("local",fallbackPlace);
-    setIsSearchLocation(false);
-    setLocationStatus("ready");setLocationMessage("");
-
-    try{
-     const placeResponse=await fetch(`${API}/api/location/reverse?latitude=${lat}&longitude=${lon}`,{cache:"no-store"});
-     if(placeResponse.ok){
-      const placeData=await placeResponse.json();
-      if(requestVersion!==locationRequestVersion.current)return;
-      const visitor:Place={name:placeData?.name||"Your nearby area",region:placeData?.region||placeData?.country||"GPS location",lat,lon,country:placeData?.country||undefined,country_code:placeData?.country_code||undefined};
-      setLocal({...visitor,current:weatherData.current||{}});writeCache("local",{...visitor,current:weatherData.current||{}});
-      if(visitor.country){setVisitorLocation(visitor);writeCache("visitor-location",visitor);}
-     }
-    }catch{
-     // Keep the valid weather report and coordinates; place-name lookup can retry later.
-    }
-   }catch(error){
-    if(requestVersion!==locationRequestVersion.current)return;
-    setLocationStatus("error");setLocationMessage(error instanceof Error?error.message:"Could not load your local weather.");
-   }
+  if(!local)setLocationStatus("locating");
+  setLocationMessage(local?"Checking your device location in the background…":"Finding your device location…");
+  navigator.geolocation.getCurrentPosition(position=>{
+   if(requestVersion!==locationRequestVersion.current)return;
+   const lat=position.coords.latitude,lon=position.coords.longitude,accuracy=position.coords.accuracy;
+   const sameArea=Boolean(local&&Math.abs(local.lat-lat)<0.01&&Math.abs(local.lon-lon)<0.01);
+   const provisional:Place={
+    name:sameArea&&local?local.name:"Nearby location",
+    region:sameArea&&local?local.region:"GPS coordinates · resolving town or village",
+    lat,lon,accuracy,current:sameArea?local?.current:undefined,
+    loading:!sameArea||!local?.current,error:false,
+   };
+   setLocal(provisional);writeCache("local",provisional);
+   setIsSearchLocation(false);setLocationStatus("ready");
+   setLocationMessage("Updating weather for your detected coordinates…");
+   const controller=new AbortController();
+   const timeout=window.setTimeout(()=>controller.abort(),10000);
+   void fetch(`${API}/api/location/reverse?latitude=${lat}&longitude=${lon}`,{cache:"no-store",signal:controller.signal})
+    .then(response=>{if(!response.ok)throw new Error("Nearby place service unavailable");return response.json();})
+    .then(placeData=>{
+     if(requestVersion!==locationRequestVersion.current)return;
+     const visitor:Place={name:placeData?.name||"Nearby area",region:placeData?.region||placeData?.country||"GPS location",lat,lon,accuracy,country:placeData?.country||undefined,country_code:placeData?.country_code||undefined};
+     setLocal(previous=>{
+      if(!previous||Math.abs(previous.lat-lat)>0.001||Math.abs(previous.lon-lon)>0.001)return previous;
+      const next={...previous,name:visitor.name,region:visitor.region,country:visitor.country,country_code:visitor.country_code,accuracy};
+      writeCache("local",next);return next;
+     });
+     if(visitor.country){setVisitorLocation(visitor);writeCache("visitor-location",visitor);}
+     setLocationMessage("");
+    })
+    .catch(()=>{if(requestVersion===locationRequestVersion.current)setLocationMessage("Weather is shown for your GPS coordinates; nearby place name is temporarily unavailable.");})
+    .finally(()=>window.clearTimeout(timeout));
   },error=>{
    if(requestVersion!==locationRequestVersion.current)return;
-   if(error.code===1){setLocationStatus("denied");setLocationMessage("Location permission is off. Allow location access to see weather for your current town or village.");}
-   else if(error.code===3){setLocationStatus("error");setLocationMessage("Location request timed out. Please try again.");}
-   else{setLocationStatus("error");setLocationMessage("Your current location could not be detected. Please try again.");}
-  },{enableHighAccuracy:false,timeout:7000,maximumAge:600000});
+   if(local){setLocationStatus("ready");setLocationMessage("Could not refresh GPS; showing your last saved location and weather.");}
+   else if(error.code===1){setLocationStatus("denied");setLocationMessage("Location permission is off. Allow precise location access, or search for a city.");}
+   else if(error.code===3){setLocationStatus("error");setLocationMessage("Device location timed out. Check Location/GPS on your phone and retry.");}
+   else{setLocationStatus("error");setLocationMessage("Your device location could not be detected. Check GPS permission and retry.");}
+  },{enableHighAccuracy:true,timeout:12000,maximumAge:120000});
  };
 
- useEffect(()=>{if(locationStarted.current)return;locationStarted.current=true;if(!local)detectLocalWeather()},[]);
+ useEffect(()=>{if(locationStarted.current)return;locationStarted.current=true;detectLocalWeather()},[]);
  const refreshWeather=async(origin:Place)=>{
   const requestVersion=++cityRequestVersion.current;
   setBusy(true);
@@ -123,7 +127,7 @@ const [section,setSection]=useState("Weather Report");const [page,setPage]=useSt
     region:item.scope==="national"?`${item.country} · National`:item.scope==="regional"?`${item.country} · Regional reference`:`${item.country} · Nearby international`,
     lat:item.lat,lon:item.lon,current:item.current||{},loading:false,error:!item.current
    }));
-   setCities(rows);writeCache("cities",rows);setPersonalizedCities(true);setUpdated(payload.retrieved_at||new Date().toISOString());
+   setCities(rows);writeCache("cities",rows);setPersonalizedCities(true);writeCache("cities-personalized",true);const timestamp=payload.retrieved_at||new Date().toISOString();setUpdated(timestamp);writeCache("cities-updated",timestamp);
   }catch{
    if(requestVersion===cityRequestVersion.current)setCities(previous=>previous.map(city=>({...city,loading:false,error:!city.current})));
   }finally{if(requestVersion===cityRequestVersion.current)setBusy(false);}
@@ -153,18 +157,29 @@ const [section,setSection]=useState("Weather Report");const [page,setPage]=useSt
   return()=>window.clearInterval(id);
  },[visitorLocation?.lat,visitorLocation?.lon,visitorLocation?.country,visitorLocation?.region]);
  const refreshFeeds=async()=>{
-  try{
-   const [c,india,world]=await Promise.all([fetch(`${API}/api/cyclones`,{cache:"no-store"}),fetch(`${API}/api/weather-news?region=india&limit=30`,{cache:"no-store"}),fetch(`${API}/api/weather-news?region=world&limit=30`,{cache:"no-store"})]);
-   if(c.ok){const d=await c.json();setStorms(d.events||[]);writeCache("storms",d.events||[]);}
-   if(india.ok){const d=await india.json();setIndiaNews(d.articles||[]);writeCache("india-news",d.articles||[]);}if(world.ok){const d=await world.json();setWorldNews(d.articles||[]);writeCache("world-news",d.articles||[]);}
-  }catch{setNotice("Some live weather or headline feeds are temporarily unavailable.");}
+  const urls=[`${API}/api/cyclones`,`${API}/api/weather-news?region=india&limit=30`,`${API}/api/weather-news?region=world&limit=30`];
+  const results=await Promise.allSettled(urls.map(url=>fetch(url,{cache:"no-store"})));
+  let failed=false;
+  for(let index=0;index<results.length;index++){
+   const result=results[index];
+   if(result.status!=="fulfilled"||!result.value.ok){failed=true;continue;}
+   try{
+    const data=await result.value.json();
+    if(index===0){setStorms(data.events||[]);writeCache("storms",data.events||[]);}
+    else if(index===1){setIndiaNews(data.articles||[]);writeCache("india-news",data.articles||[]);}
+    else{setWorldNews(data.articles||[]);writeCache("world-news",data.articles||[]);}
+   }catch{failed=true;}
+  }
+  if(failed)setNotice("Some live weather or headline feeds are temporarily unavailable; last successful reports are retained.");
+  else setNotice("");
  };
- useEffect(()=>{if(!visitorLocation)void refreshPopularCities();void refreshFeeds();const newsId=window.setInterval(()=>void refreshFeeds(),5*60*1000);const clockId=window.setInterval(()=>setClock(new Date()),1000);return()=>{window.clearInterval(newsId);window.clearInterval(clockId)}},[]);
+ useEffect(()=>{void refreshFeeds();const newsId=window.setInterval(()=>void refreshFeeds(),5*60*1000);const clockId=window.setInterval(()=>setClock(new Date()),1000);return()=>{window.clearInterval(newsId);window.clearInterval(clockId)}},[]);
+ useEffect(()=>{if(visitorLocation)return;void refreshPopularCities();const id=window.setInterval(()=>void refreshPopularCities(),5*60*1000);return()=>window.clearInterval(id)},[visitorLocation?.lat,visitorLocation?.lon,visitorLocation?.country]);
 
  useEffect(()=>{
   if(!local)return;
   const {lat,lon,name,region}=local;
-  const refreshLocal=async()=>{try{const r=await fetch(`${API}/api/weather?latitude=${lat}&longitude=${lon}`,{cache:"no-store"});if(!r.ok)return;const d=await r.json();setLocal(prev=>{const next=prev?{...prev,name,region,lat,lon,current:d.current||prev.current}:prev;if(next)writeCache("local",next);return next;});}catch{/* retain the last good location report */}};
+  const refreshLocal=async()=>{try{const r=await fetch(`${API}/api/weather?latitude=${lat}&longitude=${lon}`,{cache:"no-store"});if(!r.ok)return;const d=await r.json();setLocal(prev=>{const next=prev?{...prev,name,region,lat,lon,current:d.current||prev.current,loading:false,error:false}:prev;if(next)writeCache("local",next);return next;});}catch{/* retain the last good location report */}};
   void refreshLocal();
   const id=window.setInterval(()=>void refreshLocal(),60*1000);
   return()=>window.clearInterval(id);
@@ -197,17 +212,17 @@ const [section,setSection]=useState("Weather Report");const [page,setPage]=useSt
       <div><h3>{local.name}</h3><p>{local.region}</p></div>
       <div className="local-temperature"><span>{icon(local.current?.weather_code)}</span><strong>{local.current?.temperature_2m!=null?Math.round(local.current.temperature_2m)+"°C":"—"}</strong><small>{weatherLabel(local.current?.weather_code)}</small></div>
      </div>
-     <div className="local-weather-stats">
+     {local.loading&&!local.current&&<p className="local-weather-foot">Getting current weather for this location…</p>}{local.error&&!local.current&&<p className="local-weather-foot">Weather data is temporarily unavailable. Your detected location is still shown.</p>}<div className="local-weather-stats">
       <div><span>Humidity</span><strong>{local.current?.relative_humidity_2m!=null?local.current.relative_humidity_2m+"%":"—"}</strong></div>
       <div><span>Wind</span><strong>{local.current?.wind_speed_10m!=null?local.current.wind_speed_10m+" km/h":"—"}</strong></div>
       <div><span>Cloud cover</span><strong>{local.current?.cloud_cover!=null?local.current.cloud_cover+"%":"—"}</strong></div>
      </div>
-     <div className="local-weather-foot">Weather model time: {modelTime(local.current?.time)} · Place name: <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">© OpenStreetMap contributors</a></div>
+     <div className="local-weather-foot">Weather model time: {modelTime(local.current?.time)}{local.accuracy?` · GPS accuracy ±${local.accuracy>=1000?(local.accuracy/1000).toFixed(1)+" km":Math.round(local.accuracy)+" m"}`:""} · Place name: <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">© OpenStreetMap contributors</a></div>
     </>:<div className="local-weather-prompt"><span>{locationMessage}</span><button onClick={detectLocalWeather} disabled={locationStatus==="locating"}>{locationStatus==="denied"?"Try location again":"Retry location"}</button></div>}
    </section>
 
    <section className="lead-grid">
-    <aside className="top-brief"><div className="section-heading"><h2>Weather briefing</h2><span>GLOBAL</span></div>{hottest&&<div className="brief-highlight"><small>WARMEST IN THIS CITY WATCHLIST</small><b>{hottest.name}</b><strong>{Math.round(hottest.current?.temperature_2m??0)}°C</strong><span>{weatherLabel(hottest.current?.weather_code)}</span></div>}<div className="brief-line"><span>Active severe-storm events</span><b>{storms.length}</b></div><div className="brief-line"><span>Reporting locations</span><b>{active.length}/{cities.length}</b></div><div className="brief-line"><span>Weather headlines</span><b>{indiaNews.length+worldNews.length}</b></div><div className="brief-line"><span>Auto refresh</span><b>{busy?"Updating":visitorLocation?"Every 5 minutes":"Global fallback"}</b></div><button className="refresh-button" onClick={()=>{if(visitorLocation)void refreshWeather(visitorLocation);else void refreshPopularCities();void refreshFeeds()}} disabled={busy}>{busy?"Refreshing…":"↻ Refresh live reports"}</button></aside>
+    <aside className="top-brief"><div className="section-heading"><h2>Weather briefing</h2><span>GLOBAL</span></div>{hottest&&<div className="brief-highlight"><small>WARMEST CITY IN THIS LIST · NOT YOUR LOCATION</small><b>{hottest.name}</b><strong>{Math.round(hottest.current?.temperature_2m??0)}°C</strong><span>{weatherLabel(hottest.current?.weather_code)}</span></div>}<div className="brief-line"><span>Active severe-storm events</span><b>{storms.length}</b></div><div className="brief-line"><span>Reporting locations</span><b>{active.length}/{cities.length}</b></div><div className="brief-line"><span>Weather headlines</span><b>{indiaNews.length+worldNews.length}</b></div><div className="brief-line"><span>Auto refresh</span><b>{busy?"Updating":visitorLocation?"Every 5 minutes":"Global fallback"}</b></div><button className="refresh-button" onClick={()=>{if(visitorLocation)void refreshWeather(visitorLocation);else void refreshPopularCities();void refreshFeeds()}} disabled={busy}>{busy?"Refreshing…":"↻ Refresh live reports"}</button></aside>
    </section>
    <section className="section-block">
     <div className="section-heading">
