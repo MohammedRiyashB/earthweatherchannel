@@ -199,11 +199,38 @@ const [section,setSection]=useState("Weather Report");const [isSearchLocation,se
    <section className="lead-grid">
     <aside className="top-brief"><div className="section-heading"><h2>Weather briefing</h2><span>GLOBAL</span></div>{hottest&&<div className="brief-highlight"><small>WARMEST IN THIS CITY WATCHLIST</small><b>{hottest.name}</b><strong>{Math.round(hottest.current?.temperature_2m??0)}°C</strong><span>{weatherLabel(hottest.current?.weather_code)}</span></div>}<div className="brief-line"><span>Active severe-storm events</span><b>{storms.length}</b></div><div className="brief-line"><span>Reporting locations</span><b>{active.length}/{cities.length}</b></div><div className="brief-line"><span>Weather headlines</span><b>{indiaNews.length+worldNews.length}</b></div><div className="brief-line"><span>Auto refresh</span><b>{busy?"Updating":visitorLocation?"Every 5 minutes":"Global fallback"}</b></div><button className="refresh-button" onClick={()=>{if(visitorLocation)void refreshWeather(visitorLocation);else void refreshPopularCities();void refreshFeeds()}} disabled={busy}>{busy?"Refreshing…":"↻ Refresh live reports"}</button></aside>
    </section>
-   <section className="section-block"><div className="section-heading"><div><span className="eyebrow">WEATHER NEWS ONLY · PAST 24 HOURS</span><h2>Latest weather headlines</h2></div><div className="news-tabs"><button className={newsRegion==="india"?"selected":""} onC{personalizedCities?<div className="city-report-groups">
-    {nationalCities.length>0&&<div className="city-report-group"><div className="city-group-heading">National · {visitorLocation?.country||"Your country"}</div><div className="city-grid">{renderCityCards(nationalCities)}</div></div>}
-    {regionalCities.length>0&&<div className="city-report-group"><div className="city-group-heading">Nearby regional cities</div><div className="city-grid">{renderCityCards(regionalCities)}</div></div>}
-    {internationalCities.length>0&&<div className="city-report-group"><div className="city-group-heading">Nearby international cities</div><div className="city-grid">{renderCityCards(internationalCities)}</div></div>}
-   </div>:<div className="city-grid">{renderCityCards(cities)}</div>}RNATIONAL CITY REPORTS":"GLOBAL CITY WATCHLIST"}</span><h2>{personalizedCities?"Weather for your country and nearby regions":"Live weather across the world"}</h2></div><span className="updated-label">LAST CHECKED · {updated?stamp(updated):"LOADING"} · LOCAL</span></div><div className="city-grid">{cities.map(c=><article className={`city-card weather-scene ${weatherScene(c.current?.weather_code,c.current?.cloud_cover)}`} key={c.name}><span className="weather-sky-art" aria-hidden="true"><i/><i/><i/></span><div className="city-top"><div><small>{c.region}</small><h3>{c.name}</h3></div><span className="weather-icon">{icon(c.current?.weather_code)}</span></div>{c.loading?<div className="city-loading">Loading report…</div>:c.error?<div className="city-loading">Report temporarily unavailable</div>:<><div className="city-temp">{Math.round(c.current?.temperature_2m??0)}<sup>°C</sup></div><div className="city-condition">{weatherLabel(c.current?.weather_code)}</div><div className="city-stats"><span>Humidity <b>{c.current?.relative_humidity_2m??"—"}%</b></span><span>Wind <b>{c.current?.wind_speed_10m??"—"} km/h</b></span><span>Cloud <b>{c.current?.cloud_cover??"—"}%</b></span></div><div className="city-observed">Model time: {c.current?.time?new Date(c.current.time+"Z").toLocaleString(undefined,{dateStyle:"medium",timeStyle:"short",timeZone:"UTC"})+" UTC":"—"}</div></>}</article>)}</div></section>
+   <section className="section-block">
+    <div className="section-heading">
+     <div><span className="eyebrow">WEATHER NEWS ONLY · PAST 24 HOURS</span><h2>Latest weather headlines</h2></div>
+     <div className="news-tabs">
+      <button className={newsRegion==="india"?"selected":""} onClick={()=>setNewsRegion("india")}>India</button>
+      <button className={newsRegion==="world"?"selected":""} onClick={()=>setNewsRegion("world")}>World</button>
+     </div>
+    </div>
+    <div className="headline-grid">
+     {headlines.length?headlines.slice(0,18).map((s,i)=><article className="headline-card" key={s.url}>
+      <div className="headline-index">{String(i+1).padStart(2,"0")}</div>
+      <div className="headline-content"><span>{s.source} · {published(s.published_at)}</span><h3><a href={s.url} target="_blank" rel="noreferrer">{s.title}</a></h3><small>{s.language||"Publisher report"}</small></div>
+     </article>):<div className="empty-report">Loading weather headlines or no matching reports were returned in the last 24 hours.</div>}
+    </div>
+    <p className="feed-note">Headlines are aggregated from publicly indexed news publishers through GDELT. This is not a complete feed from every TV channel or newspaper; availability depends on publisher indexing. Open the publisher link for the original article.</p>
+   </section>
+
+   <section className="section-block">
+    <div className="section-heading">
+     <div>
+      <span className="eyebrow">{personalizedCities?"NATIONAL & INTERNATIONAL CITY REPORTS":"GLOBAL CITY WATCHLIST"}</span>
+      <h2>{personalizedCities?"Weather for your country and nearby regions":"Live weather across the world"}</h2>
+     </div>
+     <span className="updated-label">LAST CHECKED · {updated?stamp(updated):"LOADING"} · LOCAL</span>
+    </div>
+    {personalizedCities?<div className="city-report-groups">
+     {nationalCities.length>0&&<div className="city-report-group"><div className="city-group-heading">National · {visitorLocation?.country||"Your country"}</div><div className="city-grid">{renderCityCards(nationalCities)}</div></div>}
+     {regionalCities.length>0&&<div className="city-report-group"><div className="city-group-heading">Nearby regional cities</div><div className="city-grid">{renderCityCards(regionalCities)}</div></div>}
+     {internationalCities.length>0&&<div className="city-report-group"><div className="city-group-heading">Nearby international cities</div><div className="city-grid">{renderCityCards(internationalCities)}</div></div>}
+    </div>:<div className="city-grid">{renderCityCards(cities)}</div>}
+   </section>
+
    <section className="section-block"><div><div className="section-heading"><div><span className="eyebrow">SEVERE WEATHER WATCH</span><h2>Storm & event reports</h2></div><span className="source-tag">NASA EONET</span></div>{storms.length?storms.slice(0,8).map(s=><article className="event-row" key={s.id}><div className="event-mark">!</div><div><h3>{s.title}</h3><p>{s.description||"A severe-weather event is listed in the NASA EONET event catalogue."}</p><small>EVENT CATALOGUE · {s.coordinates?.length||0} mapped positions</small></div>{s.link&&<a href={s.link} target="_blank" rel="noreferrer">Source ↗</a>}</article>):<div className="empty-report">No active severe-storm event entries were returned by the current event feed. This does not mean there is no severe weather.</div>}</div>
     
    </section>
