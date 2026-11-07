@@ -356,3 +356,21 @@ button,input,a{-webkit-tap-highlight-color:transparent}button:focus-visible,inpu
   .source-brand-copy small{font-size:8px!important}
   .source-brand-arrow{font-size:12px!important}
 }
+
+
+/* Final spacing fix: keep only the moving contributor rails, with no oversized section gaps. */
+.source-brand-showcase{
+  margin:0!important;
+  padding:4px 0!important;
+  border:0!important;
+  background:transparent!important;
+}
+.source-brand-motion{gap:5px!important;padding:0!important}
+.source-brand-rail{margin:0!important;padding:0!important}
+.source-brand-track{margin:0!important;padding:0!important}
+.source-brand-group{gap:8px!important}
+@media(max-width:620px){
+  .source-brand-showcase{margin:0!important;padding:3px 0!important}
+  .source-brand-motion{gap:4px!important}
+  .source-brand-group{gap:7px!important}
+}
