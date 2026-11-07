@@ -525,7 +525,8 @@ private fun EarthWeatherApp(
     savedCities: List<WeatherPlace>, onSelect: (WeatherPlace) -> Unit,
     onSave: (WeatherPlace) -> Unit, onRemove: (WeatherPlace) -> Unit,
     celsius: Boolean, onUnit: (Boolean) -> Unit, notificationsEnabled: Boolean, onNotifications: (Boolean) -> Unit, rainRemindersEnabled: Boolean, onRainReminders: (Boolean) -> Unit, rainThreshold: Int, onRainThreshold: (Int) -> Unit, rainStartHour: Int, rainEndHour: Int, onRainWindow: (Int, Int) -> Unit, morningBriefingEnabled: Boolean, morningBriefingHour: Int, onMorningBriefing: (Boolean) -> Unit, onMorningHour: (Int) -> Unit, onSearch: () -> Unit,
-    liveWeatherEnabled: Boolean, onLiveWeather: (Boolean) -> Unit
+    liveWeatherEnabled: Boolean, onLiveWeather: (Boolean) -> Unit,
+    weeklyForecastEnabled: Boolean, onWeeklyForecast: (Boolean) -> Unit
 ) {
     Scaffold(containerColor = NightBg) { padding ->
         when (tab) {
@@ -540,7 +541,8 @@ private fun EarthWeatherApp(
                 celsius, onUnit, notificationsEnabled, onNotifications, rainRemindersEnabled, onRainReminders,
                 rainThreshold, onRainThreshold, rainStartHour, rainEndHour, onRainWindow,
                 morningBriefingEnabled, morningBriefingHour, onMorningBriefing, onMorningHour,
-                Modifier.padding(padding), state, { onTab("Weather") }, { onTab("LiveNotifications") }
+                Modifier.padding(padding), state, { onTab("Weather") }, { onTab("LiveNotifications") },
+                weeklyForecastEnabled, onWeeklyForecast
             )
         }
     }
