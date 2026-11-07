@@ -40,10 +40,14 @@ class OpenMeteoProviderTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(raised.exception.status_code, 422)
 
     async def test_batch_keeps_coordinate_order(self):
-        async def fake(_client, provider, lat, lon):
-            return {"provider": provider, "current": {"temperature_2m": lat}}
-        with patch.object(weather_api, "_fetch_provider_current", new=fake):
-            result = await weather_api._fetch_weather_current(object(), params_for(3))
+        class FakeResponse:
+            def raise_for_status(self): pass
+            def json(self):
+                return [{"current":{"time":"2026-11-07T17:00","temperature_2m":value}}
+                        for value in (-6.0,-5.0,-4.0)]
+        class FakeClient:
+            async def get(self, url, params): return FakeResponse()
+        result = await weather_api._fetch_weather_current(FakeClient(), params_for(3))
         self.assertEqual([row["current"]["temperature_2m"] for row in result], [-6.0, -5.0, -4.0])
 
     async def test_open_meteo_adapter_maps_all_live_weather_fields(self):

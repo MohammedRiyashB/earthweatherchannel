@@ -168,6 +168,40 @@ def _normalize_metnorway(payload: dict[str, Any]) -> dict[str, Any]:
         "weather_description":code,"time":item.get("time")}
 
 
+def _normalize_open_meteo_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    raw = payload.get("current") or {}
+    hourly = payload.get("hourly") or {}
+    times = hourly.get("time") or []
+    current_time = raw.get("time")
+    try:
+        hour_index = times.index(current_time)
+    except (ValueError, TypeError):
+        hour_index = -1
+    def hourly_value(key: str):
+        values = hourly.get(key) or []
+        return values[hour_index] if 0 <= hour_index < len(values) else None
+    return {
+        "temperature_2m": raw.get("temperature_2m"),
+        "relative_humidity_2m": raw.get("relative_humidity_2m"),
+        "apparent_temperature": raw.get("apparent_temperature"),
+        "is_day": raw.get("is_day"),
+        "precipitation": raw.get("precipitation"),
+        "rain": raw.get("rain"),
+        "rainfall_rate_mm_h": hourly_value("rain"),
+        "cloud_cover": raw.get("cloud_cover"),
+        "pressure_msl": raw.get("pressure_msl"),
+        "wind_speed_10m": raw.get("wind_speed_10m"),
+        "wind_direction_10m": raw.get("wind_direction_10m"),
+        "wind_gusts_10m": raw.get("wind_gusts_10m"),
+        "weather_code": raw.get("weather_code"),
+        "time": current_time,
+        "interval_seconds": raw.get("interval", 900),
+        "units": payload.get("current_units") or {},
+        "source": "Open-Meteo multi-model weather analysis",
+        "source_url": "https://open-meteo.com/en/docs",
+    }
+
+
 async def _fetch_provider_current(client: httpx.AsyncClient, provider: str, lat: float, lon: float) -> dict[str, Any]:
     if provider == "open-meteo":
         response = await client.get(OPEN_METEO_FORECAST, params={
@@ -178,38 +212,7 @@ async def _fetch_provider_current(client: httpx.AsyncClient, provider: str, lat:
             "timezone": "UTC", "wind_speed_unit": "kmh",
         })
         response.raise_for_status()
-        payload = response.json()
-        raw = payload.get("current") or {}
-        hourly = payload.get("hourly") or {}
-        times = hourly.get("time") or []
-        current_time = raw.get("time")
-        try:
-            hour_index = times.index(current_time)
-        except (ValueError, TypeError):
-            hour_index = -1
-        def hourly_value(key: str):
-            values = hourly.get(key) or []
-            return values[hour_index] if 0 <= hour_index < len(values) else None
-        current = {
-            "temperature_2m": raw.get("temperature_2m"),
-            "relative_humidity_2m": raw.get("relative_humidity_2m"),
-            "apparent_temperature": raw.get("apparent_temperature"),
-            "is_day": raw.get("is_day"),
-            "precipitation": raw.get("precipitation"),
-            "rain": raw.get("rain"),
-            "rainfall_rate_mm_h": hourly_value("rain"),
-            "cloud_cover": raw.get("cloud_cover"),
-            "pressure_msl": raw.get("pressure_msl"),
-            "wind_speed_10m": raw.get("wind_speed_10m"),
-            "wind_direction_10m": raw.get("wind_direction_10m"),
-            "wind_gusts_10m": raw.get("wind_gusts_10m"),
-            "weather_code": raw.get("weather_code"),
-            "time": current_time,
-            "interval_seconds": raw.get("interval", 900),
-            "units": payload.get("current_units") or {},
-            "source": "Open-Meteo multi-model weather analysis",
-            "source_url": "https://open-meteo.com/en/docs",
-        }
+        current = _normalize_open_meteo_payload(response.json())
     elif provider == "weatherapi":
         response = await client.get(WEATHERAPI_CURRENT, params={"key":os.environ["WEATHERAPI_KEY"],"q":f"{lat:.4f},{lon:.4f}","aqi":"no"})
         response.raise_for_status()
@@ -262,12 +265,29 @@ async def _fetch_weather_rows(client: httpx.AsyncClient, latitudes: list[float],
             failures.append({"provider":provider,"reason":"not_configured"})
             continue
         try:
-            # Keep fan-out bounded; one provider must return the complete batch before it is selected.
-            semaphore = asyncio.Semaphore(6)
-            async def one(lat: float, lon: float):
-                async with semaphore:
-                    return await _fetch_provider_current(client, provider, lat, lon)
-            rows = await asyncio.wait_for(asyncio.gather(*(one(a,b) for a,b in zip(latitudes,longitudes))), timeout=18.0)
+            # Open-Meteo supports multi-coordinate responses; use one upstream call per city batch.
+            if provider == "open-meteo":
+                response = await asyncio.wait_for(client.get(OPEN_METEO_FORECAST, params={
+                    "latitude": ",".join(str(x) for x in latitudes),
+                    "longitude": ",".join(str(x) for x in longitudes),
+                    "current": "temperature_2m,relative_humidity_2m,apparent_temperature,is_day,precipitation,rain,showers,weather_code,cloud_cover,pressure_msl,wind_speed_10m,wind_direction_10m,wind_gusts_10m",
+                    "hourly": "rain,precipitation", "forecast_days": 1, "past_days": 1,
+                    "timezone": "UTC", "wind_speed_unit": "kmh",
+                }), timeout=18.0)
+                response.raise_for_status()
+                payload = response.json()
+                payloads = payload if isinstance(payload, list) else [payload]
+                if len(payloads) != len(latitudes):
+                    raise ValueError("Open-Meteo returned an incomplete multi-location response")
+                rows = [{"provider":provider,"current":_normalize_open_meteo_payload(item)} for item in payloads]
+                if any(not isinstance(item["current"].get("temperature_2m"),(int,float)) for item in rows):
+                    raise ValueError("Open-Meteo returned an invalid current temperature")
+            else:
+                semaphore = asyncio.Semaphore(6)
+                async def one(lat: float, lon: float):
+                    async with semaphore:
+                        return await _fetch_provider_current(client, provider, lat, lon)
+                rows = await asyncio.wait_for(asyncio.gather(*(one(a,b) for a,b in zip(latitudes,longitudes))), timeout=18.0)
             logger.info("Weather provider selected: %s for %s locations", provider, len(rows))
             return rows
         except (httpx.HTTPError, asyncio.TimeoutError, ValueError, KeyError) as exc:
