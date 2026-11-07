@@ -90,7 +90,7 @@ export const FOOTER_GROUPS: { title: string; links: { label: string; page: SiteP
 ];
 
 export function resolveSitePage(pathname: string): SitePageId | null {
-  const normalized = pathname.replace(/\\/+$/, "").toLowerCase() || "/";
+  const normalized = pathname.replace(/\/+$/, "").toLowerCase() || "/";
   const entry = (Object.entries(SITE_PATHS) as [SitePageId, string][]).find(([, path]) => path === normalized);
   return entry?.[0] ?? null;
 }
