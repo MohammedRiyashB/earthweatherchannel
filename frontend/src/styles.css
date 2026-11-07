@@ -823,3 +823,189 @@
 .news-footer .footer-copyright{color:#555555}
 .news-footer .footer-copyright strong{color:#111111}
 .news-footer .footer-navigation{border-color:#DDDDDD}
+
+
+/* Final low-cost weather motion: simple CSS clouds, sunlight and precipitation only. */
+.weather-scene{
+  overflow:hidden!important;
+  isolation:isolate;
+  contain:none!important;
+  transition:background-color .25s ease,border-color .25s ease!important;
+}
+.weather-scene .weather-sky-art{
+  position:absolute!important;
+  inset:0!important;
+  overflow:hidden!important;
+  border-radius:inherit;
+  contain:none!important;
+  transform:none!important;
+  opacity:.78;
+}
+.weather-scene .weather-sky-art i{
+  position:absolute;
+  display:block;
+  width:116px;
+  height:34px;
+  border-radius:50%;
+  background:
+    radial-gradient(ellipse at 28% 66%,#fff 0 34%,transparent 36%),
+    radial-gradient(ellipse at 52% 38%,#fff 0 42%,transparent 44%),
+    radial-gradient(ellipse at 76% 66%,#fff 0 32%,transparent 34%);
+  filter:none!important;
+  -webkit-filter:none!important;
+  box-shadow:none!important;
+  mix-blend-mode:normal!important;
+  will-change:auto!important;
+  opacity:0;
+}
+.weather-scene .weather-sky-art i:nth-child(1){
+  left:-24px;top:18%;
+  animation:weatherCloudSimple 26s ease-in-out infinite alternate!important;
+}
+.weather-scene .weather-sky-art i:nth-child(2){
+  left:38%;top:48%;
+  animation:weatherCloudSimple 34s ease-in-out infinite alternate-reverse!important;
+}
+.weather-scene .weather-sky-art i:nth-child(3){
+  right:-30px;top:8%;
+  animation:weatherCloudSimple 30s ease-in-out infinite alternate!important;
+}
+.weather-scene.cloud-clear .weather-sky-art i{opacity:0!important}
+.weather-scene.cloud-light .weather-sky-art i{opacity:.16!important}
+.weather-scene.cloud-medium .weather-sky-art i{opacity:.34!important}
+.weather-scene.cloud-dense .weather-sky-art i{opacity:.58!important}
+.weather-scene.cloud-heavy .weather-sky-art i{opacity:.78!important}
+
+/* One simple sun or moon: no glow filters or large shadow layers. */
+.weather-scene .weather-sky-art::before{
+  content:"";
+  position:absolute;
+  width:44px;height:44px;
+  right:12%;top:12%;
+  border-radius:50%;
+  background:#ffe28a;
+  box-shadow:none!important;
+  filter:none!important;
+  opacity:0;
+  animation:none!important;
+}
+.weather-scene.phase-day.scene-clear .weather-sky-art::before,
+.weather-scene.phase-day.scene-partly .weather-sky-art::before,
+.weather-scene.phase-dawn .weather-sky-art::before,
+.weather-scene.phase-dusk .weather-sky-art::before{
+  opacity:1;
+  animation:weatherSunSimple 14s ease-in-out infinite alternate!important;
+}
+.weather-scene.phase-night .weather-sky-art::before{
+  opacity:1;
+  background:#f1f4f8;
+  width:34px;height:34px;
+  animation:weatherMoonSimple 18s ease-in-out infinite alternate!important;
+}
+.weather-scene.phase-night .weather-sky-art{
+  background-image:
+    radial-gradient(1px 1px at 18% 20%,#ffffffb5 98%,transparent),
+    radial-gradient(1px 1px at 72% 16%,#ffffff90 98%,transparent),
+    radial-gradient(1px 1px at 84% 56%,#ffffff80 98%,transparent)!important;
+}
+.weather-scene.phase-night.scene-clear,
+.weather-scene.phase-night.scene-partly{background-color:#142448!important;background-image:linear-gradient(145deg,#142448,#263c68)!important}
+.weather-scene.phase-night.scene-overcast{background-image:linear-gradient(145deg,#34485c,#526579)!important}
+.weather-scene.phase-night.scene-rain,
+.weather-scene.phase-night.scene-thunder{background-image:linear-gradient(145deg,#1b2a40,#394b60)!important}
+
+/* Simple rain/snow/fog motion. The overlay remains clipped inside each card. */
+.weather-scene .weather-sky-art::after{
+  content:"";
+  position:absolute;
+  inset:0;
+  pointer-events:none;
+  filter:none!important;
+  -webkit-filter:none!important;
+  box-shadow:none!important;
+  animation:none!important;
+}
+.weather-scene.scene-rain .weather-sky-art::after,
+.weather-scene.scene-thunder .weather-sky-art::after{
+  background:repeating-linear-gradient(108deg,transparent 0 15px,rgba(255,255,255,.3) 16px,transparent 17px 30px);
+  opacity:.22;
+  animation:weatherRainSimple 2.2s linear infinite!important;
+}
+.weather-scene.scene-snow .weather-sky-art::after{
+  inset:-10% 0 0;
+  background:
+    radial-gradient(2px 2px at 12% 18%,#fff 98%,transparent),
+    radial-gradient(2px 2px at 42% 38%,#fff 98%,transparent),
+    radial-gradient(2px 2px at 72% 62%,#fff 98%,transparent),
+    radial-gradient(1.5px 1.5px at 88% 12%,#fff 98%,transparent);
+  background-size:100px 90px;
+  opacity:.55;
+  animation:weatherSnowSimple 9s linear infinite!important;
+}
+.weather-scene.scene-fog .weather-sky-art::after{
+  inset:50% -8% 0;
+  background:linear-gradient(180deg,transparent,rgba(255,255,255,.3),transparent);
+  opacity:.55;
+  animation:weatherFogSimple 15s ease-in-out infinite alternate!important;
+}
+.weather-scene.scene-thunder .weather-sky-art::before{
+  animation:weatherLightningSimple 10s linear infinite!important;
+}
+.weather-scene.phase-night .weather-sky-art i{
+  background:
+    radial-gradient(ellipse at 28% 66%,#a5b8d2 0 34%,transparent 36%),
+    radial-gradient(ellipse at 52% 38%,#8da4c4 0 42%,transparent 44%),
+    radial-gradient(ellipse at 76% 66%,#a5b8d2 0 32%,transparent 34%);
+}
+.weather-scene.phase-night .weather-sky-art i{opacity:.12!important}
+.weather-scene.phase-night.cloud-dense .weather-sky-art i{opacity:.45!important}
+.weather-scene.phase-night.cloud-heavy .weather-sky-art i{opacity:.68!important}
+
+/* Animate only cards currently in or close to view. */
+.weather-scene .weather-sky-art::before,
+.weather-scene .weather-sky-art::after,
+.weather-scene .weather-sky-art i{animation-play-state:paused!important}
+.weather-scene.weather-anim-active .weather-sky-art::before,
+.weather-scene.weather-anim-active .weather-sky-art::after,
+.weather-scene.weather-anim-active .weather-sky-art i{animation-play-state:running!important}
+.city-card{
+  content-visibility:visible!important;
+  contain:none!important;
+  contain-intrinsic-size:auto!important;
+}
+@keyframes weatherCloudSimple{
+  from{transform:translate3d(-5px,0,0)}
+  to{transform:translate3d(7px,2px,0)}
+}
+@keyframes weatherSunSimple{
+  from{transform:translate3d(0,1px,0)}
+  to{transform:translate3d(-8px,-1px,0)}
+}
+@keyframes weatherMoonSimple{
+  from{opacity:.88}
+  to{opacity:1}
+}
+@keyframes weatherRainSimple{
+  from{background-position:0 0}
+  to{background-position:-8px 24px}
+}
+@keyframes weatherSnowSimple{
+  from{background-position:0 0}
+  to{background-position:0 90px}
+}
+@keyframes weatherFogSimple{
+  from{transform:translate3d(-3px,0,0);opacity:.35}
+  to{transform:translate3d(3px,0,0);opacity:.55}
+}
+@keyframes weatherLightningSimple{
+  0%,90%,94%,100%{opacity:0}
+  91%,93%{opacity:.28}
+}
+@media(max-width:620px){
+  .weather-scene .weather-sky-art i{filter:none!important;box-shadow:none!important}
+}
+@media(prefers-reduced-motion:reduce){
+  .weather-scene .weather-sky-art::before,
+  .weather-scene .weather-sky-art::after,
+  .weather-scene .weather-sky-art i{animation:none!important;will-change:auto!important}
+}
