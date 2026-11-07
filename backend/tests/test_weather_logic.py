@@ -35,23 +35,28 @@ class WeatherProviderBatchTests(unittest.IsolatedAsyncioTestCase):
             [float(index - 6) for index in range(12)],
         )
 
-    async def test_failed_multi_city_batch_falls_back_without_reordering(self) -> None:
+    async def test_failed_multi_city_batch_uses_stale_cache_without_fanout(self) -> None:
+        now = asyncio.get_running_loop().time()
+        expected = [-6.0, -5.0, -4.0]
+        for index, temperature in enumerate(expected):
+            key = (temperature, float(index + 100))
+            weather_api._current_provider_cache[key] = (
+                now - 120,
+                {"current": {"temperature_2m": temperature}},
+            )
         calls: list[int] = []
 
         async def fake_request(_client, latitudes, longitudes):
             calls.append(len(latitudes))
-            if len(latitudes) > 1:
-                raise RuntimeError("simulated batch failure")
-            return [{"current": {"temperature_2m": latitudes[0]}}]
+            raise RuntimeError("simulated batch failure")
 
         with patch.object(weather_api, "_request_current_chunk", new=fake_request):
             result = await weather_api._fetch_open_meteo_current(object(), params_for(3))
 
-        self.assertEqual(calls[0], 3)
-        self.assertEqual(calls[1:], [1, 1, 1])
+        self.assertEqual(calls, [3])
         self.assertEqual(
             [row["current"]["temperature_2m"] for row in result],
-            [-6.0, -5.0, -4.0],
+            expected,
         )
 
     async def test_stale_good_report_is_used_after_upstream_failure(self) -> None:
