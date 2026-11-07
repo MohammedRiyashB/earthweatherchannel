@@ -43,7 +43,8 @@ data class AirQuality(
     }
 }
 data class WeatherAlert(val title: String, val severity: String, val description: String)
-data class RadarFrame(val time: Long, val path: String)\ndata class RadarInfo(val host: String = "", val generatedAt: String = "", val frames: List<RadarFrame> = emptyList(), val note: String = "")
+data class RadarFrame(val time: Long, val path: String)
+data class RadarInfo(val host: String = "", val generatedAt: String = "", val frames: List<RadarFrame> = emptyList(), val note: String = "")
 
 object EarthWeatherApi {
     private fun get(path: String): JSONObject {
