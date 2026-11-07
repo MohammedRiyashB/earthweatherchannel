@@ -115,18 +115,84 @@ async def source_health() -> dict[str, Any]:
 _weather_cache: dict[tuple[float, float], tuple[float, dict[str, Any]]] = {}
 _weather_cache_lock = asyncio.Lock()
 
-async def _fetch_open_meteo_current(client: httpx.AsyncClient, params: dict[str, Any]) -> Any:
+# Short-lived in-process cache with stale-if-error fallback. A provider outage must
+# not erase a previously successful report for the same coordinates.
+_current_provider_cache: dict[tuple[float, float], tuple[float, dict[str, Any]]] = {}
+_CURRENT_CACHE_TTL = 90
+_CURRENT_STALE_TTL = 30 * 60
+
+async def _request_current_chunk(
+    client: httpx.AsyncClient,
+    latitudes: list[float],
+    longitudes: list[float],
+) -> list[dict[str, Any]]:
+    params = _current_weather_params(latitudes, longitudes)
     last_error: Exception | None = None
     for attempt in range(3):
         try:
             response = await client.get(OPEN_METEO, params=params)
             response.raise_for_status()
-            return response.json()
-        except (httpx.HTTPError, ValueError) as exc:
+            payload = response.json()
+            rows = payload if isinstance(payload, list) else [payload]
+            if len(rows) != len(latitudes) or any(not isinstance(row, dict) or not isinstance(row.get("current"), dict) for row in rows):
+                raise ValueError("Incomplete current-weather response")
+            now = asyncio.get_running_loop().time()
+            for lat, lon, row in zip(latitudes, longitudes, rows):
+                _current_provider_cache[(round(lat, 3), round(lon, 3))] = (now, row)
+            return rows
+        except (httpx.HTTPError, ValueError, TypeError) as exc:
             last_error = exc
             if attempt < 2:
-                await asyncio.sleep(0.4 * (attempt + 1))
-    raise HTTPException(status_code=502, detail=f"Weather provider unavailable: {last_error.__class__.__name__ if last_error else 'UnknownError'}")
+                await asyncio.sleep(0.6 * (2 ** attempt))
+    raise RuntimeError(f"Open-Meteo request failed: {last_error.__class__.__name__ if last_error else 'UnknownError'}")
+
+async def _fetch_open_meteo_current(client: httpx.AsyncClient, params: dict[str, Any]) -> Any:
+    """Fetch one or many points safely; split bulk requests and retain stale good data on outages."""
+    try:
+        latitudes = [float(value) for value in str(params["latitude"]).split(",")]
+        longitudes = [float(value) for value in str(params["longitude"]).split(",")]
+    except (KeyError, TypeError, ValueError) as exc:
+        raise HTTPException(status_code=422, detail="Invalid weather coordinates") from exc
+    if not latitudes or len(latitudes) != len(longitudes):
+        raise HTTPException(status_code=422, detail="Latitude and longitude counts do not match")
+
+    now = asyncio.get_running_loop().time()
+    results: list[dict[str, Any] | None] = [None] * len(latitudes)
+    pending_indices: list[int] = []
+    for index, (lat, lon) in enumerate(zip(latitudes, longitudes)):
+        cached = _current_provider_cache.get((round(lat, 3), round(lon, 3)))
+        if cached and now - cached[0] <= _CURRENT_CACHE_TTL:
+            results[index] = cached[1]
+        else:
+            pending_indices.append(index)
+
+    # Keep upstream query strings small. Open-Meteo supports multi-location
+    # requests, but modest batches are more resilient to proxy/URL/provider limits.
+    chunks = [pending_indices[i:i + 4] for i in range(0, len(pending_indices), 4)]
+    for chunk in chunks:
+        chunk_lats = [latitudes[i] for i in chunk]
+        chunk_lons = [longitudes[i] for i in chunk]
+        try:
+            rows = await _request_current_chunk(client, chunk_lats, chunk_lons)
+            for index, row in zip(chunk, rows):
+                results[index] = row
+        except RuntimeError:
+            # A failed multi-city batch should not take down every city card.
+            # Retry each city independently, then use a bounded stale fallback.
+            for index in chunk:
+                lat, lon = latitudes[index], longitudes[index]
+                try:
+                    rows = await _request_current_chunk(client, [lat], [lon])
+                    results[index] = rows[0]
+                except RuntimeError:
+                    cached = _current_provider_cache.get((round(lat, 3), round(lon, 3)))
+                    if cached and now - cached[0] <= _CURRENT_STALE_TTL:
+                        results[index] = cached[1]
+
+    if all(row is None for row in results):
+        raise HTTPException(status_code=502, detail="Weather provider is temporarily unavailable; no recent cached report exists")
+    normalized = [row or {} for row in results]
+    return normalized[0] if len(normalized) == 1 else normalized
 
 
 # Small curated set of major-city reference points. The selected set is based on
