@@ -28,6 +28,8 @@ export default function App() {
   const viewer = useRef<Cesium.Viewer | null>(null);
   const particles = useRef<Particle[]>([]);
   const cloudEntities = useRef<Cesium.Entity[]>([]);
+  const cloudMotion = useRef<{lat:number;lon:number;entity:Cesium.Entity}[]>([]);
+  const rainEntities = useRef<Cesium.Entity[]>([]);
   const cycloneEntities = useRef<Cesium.Entity[]>([]);
   const [weather, setWeather] = useState<Weather | null>(null);
   const [atmosphere, setAtmosphere] = useState<Atmosphere | null>(null);
@@ -72,7 +74,7 @@ export default function App() {
       maximumLevel:9,credit:"NASA GIBS / VIIRS SNPP"
     });
     const layer=v.imageryLayers.addImageryProvider(nasa); layer.alpha=0.86; satelliteLayer.current=layer; viewer.current=v;
-    return () => { particles.current=[];cloudEntities.current=[];cycloneEntities.current=[];v.destroy();viewer.current=null;satelliteLayer.current=null; };
+    return () => { particles.current=[];cloudEntities.current=[];cloudMotion.current=[];rainEntities.current=[];cycloneEntities.current=[];v.destroy();viewer.current=null;satelliteLayer.current=null; };
   }, []);
 
   const loadWeather = useCallback(async (lat:number,lon:number,label:string) => {
@@ -141,7 +143,7 @@ export default function App() {
     particles.current.forEach(p=>{v.entities.remove(p.point);v.entities.remove(p.line);});particles.current=[];
     for(let i=0;i<150;i++){
       const lat=-68+Math.random()*136,lon=-180+Math.random()*360,wind=nearestWind(lat,lon,windGrid);
-      const point=v.entities.add({position:Cesium.Cartesian3.fromDegrees(lon,lat,18000),point:{pixelSize:2.4,color:Cesium.Color.fromCssColorString("#8be9ff").withAlpha(0.9),disableDepthTestDistance:Number.POSITIVE_INFINITY}});
+      const point=v.entities.add({position:new Cesium.ConstantPositionProperty(Cesium.Cartesian3.fromDegrees(lon,lat,18000)),show:windOn,point:{pixelSize:2.4,color:Cesium.Color.fromCssColorString("#8be9ff").withAlpha(0.9),disableDepthTestDistance:Number.POSITIVE_INFINITY}});
       const line=v.entities.add({polyline:{positions:[],width:1.2,material:Cesium.Color.fromCssColorString("#65d8ee").withAlpha(0.42),arcType:Cesium.ArcType.NONE}});
       particles.current.push({lat,lon,trail:[],point,line,speed:wind.speed_kmh,direction:wind.direction_deg});
     }
@@ -163,7 +165,7 @@ export default function App() {
         p.point.position=Cesium.Cartesian3.fromDegrees(p.lon,p.lat,18000);
         if(p.trail.length>1)p.line.polyline!.positions=p.trail;
       }
-      frame++;id=requestAnimationFrame(animate);
+      for(const cloud of cloudMotion.current){const cw=nearestWind(cloud.lat,cloud.lon,windGrid);const a=(cw.direction_deg+180)*Math.PI/180;const step=cw.speed_kmh*dt/3600*12;cloud.lat=clamp(cloud.lat+Math.cos(a)*step/111,-72,72);cloud.lon+=Math.sin(a)*step/(111*Math.max(0.18,Math.cos(cloud.lat*Math.PI/180)));if(cloud.lon>180)cloud.lon-=360;if(cloud.lon< -180)cloud.lon+=360;cloud.entity.position=new Cesium.ConstantPositionProperty(Cesium.Cartesian3.fromDegrees(cloud.lon,cloud.lat,25000));}\n      frame++;id=requestAnimationFrame(animate);
     };
     id=requestAnimationFrame(animate);return()=>cancelAnimationFrame(id);
   },[windGrid]);
@@ -173,7 +175,7 @@ export default function App() {
     cloudEntities.current.forEach(e=>v.entities.remove(e));cloudEntities.current=[];
     if(!cloudOn||!windGrid.length)return;
     windGrid.filter(p=>(p.cloud_cover_pct||0)>12).forEach(p=>{
-      const entity=v.entities.add({position:Cesium.Cartesian3.fromDegrees(p.lon,p.lat,25000),point:{
+      const entity=v.entities.add({position:new Cesium.ConstantPositionProperty(Cesium.Cartesian3.fromDegrees(p.lon,p.lat,25000)),point:{
         pixelSize:clamp((p.cloud_cover_pct||0)/5,4,17),color:Cesium.Color.fromCssColorString("#d9e9f2").withAlpha(0.12+(p.cloud_cover_pct||0)/180),
         outlineColor:Cesium.Color.WHITE.withAlpha(0.08),outlineWidth:1,disableDepthTestDistance:Number.POSITIVE_INFINITY
       }});
@@ -227,7 +229,7 @@ export default function App() {
           </select>
           <button className={layerOn?"active":""} onClick={()=>setLayerOn(v=>!v)}>◉ <span>IMAGERY</span></button>
           <button className={windOn?"active":""} onClick={()=>setWindOn(v=>!v)}>≋ <span>WIND</span></button>
-          <button className={cloudOn?"active":""} onClick={()=>setCloudOn(v=>!v)}>☁ <span>CLOUD</span></button>
+          <button className={cloudOn?"active":""} onClick={()=>setCloudOn(v=>!v)}>☁ <span>CLOUD</span></button><button className={rainOn?"active":""} onClick={()=>setRainOn(v=>!v)}>☂ <span>RAIN</span></button>
           <button onClick={()=>viewer.current?.camera.flyHome(2)}>◎ <span>GLOBAL</span></button>
         </div>
         {windOn&&<div className="layer-legend wind-legend">WIND FLOW · 10 m MODEL · 30° GRID</div>}
