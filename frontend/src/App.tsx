@@ -87,8 +87,8 @@ const [section,setSection]=useState("Weather Report");const [page,setPage]=useSt
       const placeData=await placeResponse.json();
       if(requestVersion!==locationRequestVersion.current)return;
       const visitor:Place={name:placeData?.name||"Your nearby area",region:placeData?.region||placeData?.country||"GPS location",lat,lon,country:placeData?.country||undefined,country_code:placeData?.country_code||undefined};
-      setLocal({...visitor,current:weatherData.current||{}});
-      if(visitor.country)setVisitorLocation(visitor);
+      setLocal({...visitor,current:weatherData.current||{}});writeCache("local",{...visitor,current:weatherData.current||{}});
+      if(visitor.country){setVisitorLocation(visitor);writeCache("visitor-location",visitor);}
      }
     }catch{
      // Keep the valid weather report and coordinates; place-name lookup can retry later.
@@ -165,7 +165,7 @@ const [section,setSection]=useState("Weather Report");const [page,setPage]=useSt
   if(!local)return;
   const {lat,lon,name,region}=local;
   const refreshLocal=async()=>{try{const r=await fetch(`${API}/api/weather?latitude=${lat}&longitude=${lon}`,{cache:"no-store"});if(!r.ok)return;const d=await r.json();setLocal(prev=>{const next=prev?{...prev,name,region,lat,lon,current:d.current||prev.current}:prev;if(next)writeCache("local",next);return next;});}catch{/* retain the last good location report */}};
-  const id=window.setInterval(()=>void refreshLocal(),60*1000);
+  void refreshLocal();\n  const id=window.setInterval(()=>void refreshLocal(),60*1000);
   return()=>window.clearInterval(id);
  },[local?.lat,local?.lon,local?.name,local?.region]);
 
