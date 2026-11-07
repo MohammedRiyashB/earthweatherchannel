@@ -140,6 +140,11 @@ class MainActivity : ComponentActivity() {
             .putString("lat", place.latitude.toString())
             .putString("lon", place.longitude.toString())
             .putString("city", place.name).apply()
+        // Keep the existing home-screen widget's preference namespace in sync with the app.
+        getSharedPreferences("earth_weather", MODE_PRIVATE).edit()
+            .putString("lat", place.latitude.toString())
+            .putString("lon", place.longitude.toString())
+            .putString("city", place.name).apply()
     }
 
     private fun persistSavedCities() {
