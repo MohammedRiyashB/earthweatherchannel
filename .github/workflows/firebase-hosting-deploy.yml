@@ -22,7 +22,7 @@ jobs:
       - name: Validate deployment configuration
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_EARTHWEATHERCHANNEL }}
-          API_BASE_URL: ${{ vars.VITE_API_BASE_URL }}
+          API_BASE_URL: https://earth-weather-api.onrender.com
           FIREBASE_API_KEY: ${{ vars.VITE_FIREBASE_API_KEY }}
           FIREBASE_AUTH_DOMAIN: ${{ vars.VITE_FIREBASE_AUTH_DOMAIN }}
           FIREBASE_DATABASE_URL: ${{ vars.VITE_FIREBASE_DATABASE_URL }}
@@ -52,7 +52,7 @@ jobs:
       - name: Build production frontend
         working-directory: frontend
         env:
-          VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL }}
+          VITE_API_BASE_URL: https://earth-weather-api.onrender.com
           VITE_FIREBASE_API_KEY: ${{ vars.VITE_FIREBASE_API_KEY }}
           VITE_FIREBASE_AUTH_DOMAIN: ${{ vars.VITE_FIREBASE_AUTH_DOMAIN }}
           VITE_FIREBASE_DATABASE_URL: ${{ vars.VITE_FIREBASE_DATABASE_URL }}
