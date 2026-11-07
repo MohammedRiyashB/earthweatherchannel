@@ -153,3 +153,36 @@
 .footer-links,.footer-legal{display:flex;flex-direction:column;align-items:flex-start;gap:10px;margin:0;padding:0}
 .footer-copyright{margin:0;padding-top:18px}
 @media(max-width:380px){.footer-navigation{column-gap:12px}.footer-links button,.footer-legal button{font-size:12px}}
+
+
+/* Footer navigation links: keep the existing grid and alignment, remove native button chrome */
+.news-footer .footer-links button,
+.news-footer .footer-legal button{
+  appearance:none;
+  -webkit-appearance:none;
+  display:inline;
+  width:auto;
+  min-height:0;
+  margin:0;
+  padding:0;
+  border:0;
+  border-radius:0;
+  background:transparent;
+  box-shadow:none;
+  color:#c1d0d9;
+  font:inherit;
+  font-size:11px;
+  font-weight:400;
+  line-height:1.5;
+  text-align:left;
+  cursor:pointer;
+}
+.news-footer .footer-links button:hover,
+.news-footer .footer-legal button:hover,
+.news-footer .footer-links button:focus-visible,
+.news-footer .footer-legal button:focus-visible{
+  color:#fff;
+  text-decoration:underline;
+  background:transparent;
+  box-shadow:none;
+}
