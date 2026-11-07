@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { auth, firebaseReady, googleProvider } from "./firebase";
 import { onAuthStateChanged, signInWithPopup, signOut, type User } from "firebase/auth";
 
-const API=import.meta.env.VITE_API_BASE_URL||"https://earth-weather-api.onrender.com";
+const API=import.meta.env.VITE_API_BASE_URL||"https://earthweather-api.onrender.com";
 type Current={time?:string;temperature_2m?:number;relative_humidity_2m?:number;apparent_temperature?:number;precipitation?:number;cloud_cover?:number;pressure_msl?:number;wind_speed_10m?:number;wind_direction_10m?:number;weather_code?:number};
 type Place={name:string;region:string;lat:number;lon:number;country?:string;country_code?:string;accuracy?:number;source?: "gps"|"search";current?:Current;loading?:boolean;error?:boolean};
 type Storm={id:string;title:string;description?:string;link?:string;coordinates?:{lat:number;lon:number;date?:string}[]};

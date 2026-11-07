@@ -22,5 +22,5 @@ jobs:
           set -euo pipefail
           curl --fail --silent --show-error --location \
             --connect-timeout 10 --max-time 90 \
-            https://earth-weather-api.onrender.com/health
+            https://earthweather-api.onrender.com/health
           echo
