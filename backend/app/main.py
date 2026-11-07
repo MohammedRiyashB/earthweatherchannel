@@ -233,3 +233,52 @@ async def radar() -> dict[str, Any]:
             }
     except (httpx.HTTPError, ValueError) as exc:
         raise HTTPException(status_code=502, detail="RainViewer radar metadata unavailable") from exc
+
+
+@app.get("/api/weather-news")
+async def weather_news(
+    region: str = Query("world", pattern="^(world|india)$"),
+    limit: int = Query(25, ge=1, le=50),
+) -> dict[str, Any]:
+    """Recent weather-only headlines aggregated from publicly indexed news outlets via GDELT."""
+    query = '(weather OR forecast OR rainfall OR cyclone OR storm OR heatwave OR monsoon OR flood OR snowfall OR drought)'
+    if region == "india":
+        query += ' sourcecountry:IN'
+    params = {
+        "query": query,
+        "mode": "ArtList",
+        "format": "json",
+        "sort": "DateDesc",
+        "maxrecords": limit,
+        "timespan": "24h",
+        "sourcelang": "english",
+    }
+    try:
+        async with httpx.AsyncClient(timeout=20.0, follow_redirects=True) as client:
+            response = await client.get("https://api.gdeltproject.org/api/v2/doc/doc", params=params)
+            response.raise_for_status()
+            payload = response.json()
+        articles = []
+        for item in payload.get("articles", []):
+            title = item.get("title")
+            url = item.get("url")
+            if not title or not url:
+                continue
+            articles.append({
+                "title": title,
+                "url": url,
+                "source": item.get("domain") or item.get("source") or "News outlet",
+                "published_at": item.get("seendate"),
+                "language": item.get("language"),
+                "image": item.get("socialimage"),
+            })
+        return {
+            "region": region,
+            "source": "GDELT Global Knowledge Graph",
+            "retrieved_at": utc_now(),
+            "window": "Past 24 hours",
+            "articles": articles,
+            "note": "Headlines are collected from publicly indexed news outlets and filtered for weather topics. Coverage depends on publisher indexing; this is not a complete feed from every television or newspaper channel. Open the original publisher for the full report.",
+        }
+    except (httpx.HTTPError, ValueError) as exc:
+        raise HTTPException(status_code=502, detail=f"Weather news feed unavailable: {exc.__class__.__name__}") from exc
