@@ -4,15 +4,35 @@ import asyncio
 import os
 import logging
 from collections import OrderedDict
+from contextlib import asynccontextmanager
 
 import httpx
 from fastapi import FastAPI, HTTPException, Query, Response
 from fastapi.middleware.cors import CORSMiddleware
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Keep one pooled upstream connection client for fast, uncached live requests."""
+    app.state.weather_http = httpx.AsyncClient(
+        timeout=httpx.Timeout(connect=2.5, read=6.0, write=3.0, pool=2.0),
+        limits=httpx.Limits(max_connections=40, max_keepalive_connections=20, keepalive_expiry=30.0),
+        follow_redirects=True,
+        headers={
+            "User-Agent": "EARTH-WEATHER/1.0 (+https://earthweatherchannel.web.app)",
+            "Accept": "application/json",
+        },
+    )
+    try:
+        yield
+    finally:
+        await app.state.weather_http.aclose()
+
+
 app = FastAPI(
     title="EARTH WEATHER API",
-    version="0.2.0",
-    description="Global atmospheric model fields, satellite metadata, cyclone events and source health.",
+    version="0.3.0",
+    description="Uncached live weather API with pooled upstream connections.",
+    lifespan=lifespan,
 )
 app.add_middleware(
     CORSMiddleware,
@@ -317,11 +337,14 @@ def _distance_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
 
 @app.get("/api/weather/featured")
 async def featured_weather(
+    response: Response,
     latitude: float = Query(..., ge=-90, le=90),
     longitude: float = Query(..., ge=-180, le=180),
     country: str = Query(..., min_length=2, max_length=80),
 ) -> dict[str, Any]:
     """Return four major cities in the visitor's country and four nearby international cities."""
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    response.headers["Pragma"] = "no-cache"
     normalized = COUNTRY_ALIASES.get(country.strip().lower(), country.strip())
     national = sorted(
         (item for item in FEATURED_CITIES if item["country"].lower() == normalized.lower()),
@@ -355,8 +378,7 @@ async def featured_weather(
     selected = national + regional + international
     params = _current_weather_params([item["lat"] for item in selected], [item["lon"] for item in selected])
     try:
-        async with httpx.AsyncClient(timeout=httpx.Timeout(12.0, connect=5.0), follow_redirects=True) as client:
-            payload = await _fetch_open_meteo_current(client, params)
+        payload = await _fetch_open_meteo_current(app.state.weather_http, params)
         rows = payload if isinstance(payload, list) else [payload]
         if len(rows) != len(selected):
             raise HTTPException(status_code=502, detail="Weather provider returned an incomplete featured-city batch")
@@ -386,10 +408,13 @@ async def featured_weather(
 
 @app.get("/api/weather/bulk")
 async def weather_bulk(
+    response: Response,
     latitudes: str = Query(..., min_length=1, max_length=1000),
     longitudes: str = Query(..., min_length=1, max_length=1000),
 ) -> dict[str, Any]:
     """Fetch current conditions for multiple cities in one upstream request."""
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    response.headers["Pragma"] = "no-cache"
     try:
         lats = [float(value) for value in latitudes.split(",")]
         lons = [float(value) for value in longitudes.split(",")]
@@ -402,8 +427,7 @@ async def weather_bulk(
 
     params = _current_weather_params(lats, lons)
     try:
-        async with httpx.AsyncClient(timeout=httpx.Timeout(12.0, connect=4.0), follow_redirects=True) as client:
-            payload = await _fetch_open_meteo_current(client, params)
+        payload = await _fetch_open_meteo_current(app.state.weather_http, params)
         rows = payload if isinstance(payload, list) else [payload]
         reports = []
         for index, row in enumerate(rows):
@@ -432,9 +456,7 @@ async def weather(
     response.headers["Pragma"] = "no-cache"
     params = _current_weather_params([latitude], [longitude])
     try:
-        timeout = httpx.Timeout(8.0, connect=3.0, read=6.0, write=3.0, pool=3.0)
-        async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
-            data = await _fetch_open_meteo_current(client, params)
+        data = await _fetch_open_meteo_current(app.state.weather_http, params)
         data["source"] = {
             "name": "Open-Meteo",
             "type": "numerical weather-model output",
