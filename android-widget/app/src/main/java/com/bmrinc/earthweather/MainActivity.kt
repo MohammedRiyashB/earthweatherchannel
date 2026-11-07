@@ -14,6 +14,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.Image
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -43,6 +44,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -55,6 +57,7 @@ import com.bmrinc.earthweatherwidget.WeatherAlertWorker
 import com.bmrinc.earthweatherwidget.WeatherWidgetWorker
 import com.bmrinc.earthweatherwidget.RainReminderWorker
 import com.bmrinc.earthweatherwidget.MorningBriefingWorker
+import com.bmrinc.earthweatherwidget.LiveWeatherNotificationWorker
 import java.util.concurrent.TimeUnit
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
@@ -70,14 +73,17 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
-private val Ink = Color(0xFF172630)
-private val Sky = Color(0xFF087FA3)
-private val Deep = Color(0xFF063F5B)
-private val Page = Color(0xFFF2F6F8)
-private val Muted = Color(0xFF778892)
-private val Line = Color(0xFFE5EBEF)
-private val Good = Color(0xFF28845B)
-private val Orange = Color(0xFFD78A28)
+private val NightBg = Color(0xFF05091F)
+private val CardSurface = Color(0xF20B1438)
+private val RaisedSurface = Color(0xFF1B2853)
+private val Ink = Color(0xFFF5F5FF)
+private val Sky = Color(0xFF82B9FF)
+private val Deep = Color(0xFF101B43)
+private val Page = NightBg
+private val Muted = Color(0xFF9AA2C0)
+private val Line = Color(0xFF2A355E)
+private val Good = Color(0xFF83D9A4)
+private val Orange = Color(0xFFFFC66C)
 
 private data class DashboardState(
     val current: CurrentConditions? = null,
@@ -109,6 +115,7 @@ class MainActivity : ComponentActivity() {
     private var rainEndHour by mutableIntStateOf(22)
     private var morningBriefingEnabled by mutableStateOf(false)
     private var morningBriefingHour by mutableIntStateOf(7)
+    private var liveWeatherEnabled by mutableStateOf(false)
     private var refreshInProgress = false
 
     private val notificationPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -130,6 +137,12 @@ class MainActivity : ComponentActivity() {
         else WorkManager.getInstance(this).cancelUniqueWork("earth-weather-morning-briefing")
     }
 
+    private val liveNotificationPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        liveWeatherEnabled = granted
+        getSharedPreferences("earth_weather_app", MODE_PRIVATE).edit().putBoolean("live_weather_enabled", granted).apply()
+        if (granted) LiveWeatherNotificationWorker.schedule(this) else LiveWeatherNotificationWorker.cancel(this)
+    }
+
     private val locationPermission = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { grants ->
@@ -139,8 +152,11 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         restorePreferences()
+        window.statusBarColor = android.graphics.Color.rgb(5, 9, 31)
+        window.navigationBarColor = android.graphics.Color.rgb(5, 9, 31)
+        window.decorView.systemUiVisibility = 0
         setContent {
-            MaterialTheme(colorScheme = lightColorScheme(primary = Sky, background = Page, surface = Color.White, onSurface = Ink)) {
+            MaterialTheme(colorScheme = darkColorScheme(primary = Color(0xFF347FF6), background = NightBg, surface = CardSurface, onSurface = Ink)) {
                 EarthWeatherApp(
                     state = dashboard, place = selectedPlace, tab = tab,
                     onTab = { tab = it },
@@ -174,6 +190,18 @@ class MainActivity : ComponentActivity() {
         if (notificationsEnabled) scheduleAlertChecks()
         if (rainRemindersEnabled) scheduleRainReminders()
         if (morningBriefingEnabled) MorningBriefingWorker.schedule(this)
+        if (liveWeatherEnabled) LiveWeatherNotificationWorker.schedule(this)
+    }
+
+    private fun setLiveWeatherNotifications(enabled: Boolean) {
+        if (enabled && Build.VERSION.SDK_INT >= 33 &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            liveNotificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+            return
+        }
+        liveWeatherEnabled = enabled
+        getSharedPreferences("earth_weather_app", MODE_PRIVATE).edit().putBoolean("live_weather_enabled", enabled).apply()
+        if (enabled) LiveWeatherNotificationWorker.schedule(this) else LiveWeatherNotificationWorker.cancel(this)
     }
 
     private fun restorePreferences() {
@@ -186,6 +214,7 @@ class MainActivity : ComponentActivity() {
         rainEndHour = prefs.getInt("rain_end_hour", 22).coerceIn(rainStartHour + 1, 24)
         morningBriefingEnabled = prefs.getBoolean("morning_briefing_enabled", false)
         morningBriefingHour = prefs.getInt("morning_briefing_hour", 7).coerceIn(5, 11)
+        liveWeatherEnabled = prefs.getBoolean("live_weather_enabled", false)
         try {
             val array = JSONArray(prefs.getString("saved_cities", "[]") ?: "[]")
             savedCities = (0 until array.length()).mapNotNull { i ->
@@ -462,116 +491,237 @@ private fun EarthWeatherApp(
     results: List<WeatherPlace>, searching: Boolean, searchError: String,
     savedCities: List<WeatherPlace>, onSelect: (WeatherPlace) -> Unit,
     onSave: (WeatherPlace) -> Unit, onRemove: (WeatherPlace) -> Unit,
-    celsius: Boolean, onUnit: (Boolean) -> Unit, notificationsEnabled: Boolean, onNotifications: (Boolean) -> Unit, rainRemindersEnabled: Boolean, onRainReminders: (Boolean) -> Unit, rainThreshold: Int, onRainThreshold: (Int) -> Unit, rainStartHour: Int, rainEndHour: Int, onRainWindow: (Int, Int) -> Unit, morningBriefingEnabled: Boolean, morningBriefingHour: Int, onMorningBriefing: (Boolean) -> Unit, onMorningHour: (Int) -> Unit, onSearch: () -> Unit
+    celsius: Boolean, onUnit: (Boolean) -> Unit, notificationsEnabled: Boolean, onNotifications: (Boolean) -> Unit, rainRemindersEnabled: Boolean, onRainReminders: (Boolean) -> Unit, rainThreshold: Int, onRainThreshold: (Int) -> Unit, rainStartHour: Int, rainEndHour: Int, onRainWindow: (Int, Int) -> Unit, morningBriefingEnabled: Boolean, morningBriefingHour: Int, onMorningBriefing: (Boolean) -> Unit, onMorningHour: (Int) -> Unit, onSearch: () -> Unit,
+    liveWeatherEnabled: Boolean, onLiveWeather: (Boolean) -> Unit
 ) {
-    Scaffold(
-        containerColor = Page,
-        bottomBar = {
-            NavigationBar(containerColor = Color.White) {
-                listOf("Weather", "Forecast", "Cities", "Radar", "Settings").forEach { item ->
-                    NavigationBarItem(
-                        selected = tab == item, onClick = { onTab(item) },
-                        icon = { Text(when (item) { "Weather" -> "☀"; "Forecast" -> "▥"; "Cities" -> "⌖"; "Radar" -> "◉"; else -> "⚙" }, fontSize = 19.sp) },
-                        label = { Text(item, fontSize = 10.sp, maxLines = 1) }
-                    )
-                }
-            }
-        }
-    ) { padding ->
+    Scaffold(containerColor = NightBg) { padding ->
         when (tab) {
             "Weather" -> WeatherScreen(state, place, Modifier.padding(padding), celsius, onRefresh, onTab, onSwipeCity)
             "Forecast" -> ForecastScreen(state, place, Modifier.padding(padding), celsius)
             "Cities" -> CitiesScreen(place, savedCities, query, onQuery, results, searching, searchError, Modifier.padding(padding), onSelect, onSave, onRemove, onSearch, onDetectLocation)
             "Radar" -> RadarScreen(state, place, Modifier.padding(padding))
-            else -> SettingsScreen(celsius, onUnit, notificationsEnabled, onNotifications, rainRemindersEnabled, onRainReminders, rainThreshold, onRainThreshold, rainStartHour, rainEndHour, onRainWindow, morningBriefingEnabled, morningBriefingHour, onMorningBriefing, onMorningHour, Modifier.padding(padding), state)
+            "LiveNotifications" -> LiveNotificationSettingsScreen(
+                place, savedCities, liveWeatherEnabled, onLiveWeather, onSelect, Modifier.padding(padding), { onTab("Settings") }
+            )
+            else -> SettingsScreen(
+                celsius, onUnit, notificationsEnabled, onNotifications, rainRemindersEnabled, onRainReminders,
+                rainThreshold, onRainThreshold, rainStartHour, rainEndHour, onRainWindow,
+                morningBriefingEnabled, morningBriefingHour, onMorningBriefing, onMorningHour,
+                Modifier.padding(padding), state, { onTab("Weather") }, { onTab("LiveNotifications") }
+            )
         }
     }
 }
 
 @Composable
-private fun WeatherScreen(state: DashboardState, place: WeatherPlace?, modifier: Modifier, celsius: Boolean, onRefresh: () -> Unit, onTab: (String) -> Unit, onSwipeCity: (Int) -> Unit) {
+private fun WeatherScreen(
+    state: DashboardState, place: WeatherPlace?, modifier: Modifier, celsius: Boolean,
+    onRefresh: () -> Unit, onTab: (String) -> Unit, onSwipeCity: (Int) -> Unit
+) {
     LaunchedEffect(place?.latitude, place?.longitude) {
-        while (true) {
-            delay(10 * 60 * 1000L)
-            onRefresh()
-        }
+        while (true) { delay(10 * 60 * 1000L); onRefresh() }
     }
     val current = state.current
-    val description = weatherDescription(current?.weatherCode ?: -1)
-    Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp)) {
-        Row(Modifier.fillMaxWidth().padding(top = 15.dp, bottom = 13.dp), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text("EARTH WEATHER", fontSize = 21.sp, fontWeight = FontWeight.Black, color = Ink)
-                Text("LIVE CONDITIONS · YOUR WORLD", fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Sky, letterSpacing = 1.5.sp)
-            }
-            TextButton(onClick = onRefresh) { Text("↻ Refresh") }
-        }
-        Row(Modifier.fillMaxWidth().padding(bottom = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text(place?.name ?: "Finding your location…", fontSize = 19.sp, color = Ink, fontWeight = FontWeight.Bold)
-                Text(place?.region ?: "Allow location or search a city", fontSize = 11.sp, color = Muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            }
-            TextButton(onClick = { onTab("Cities") }) { Text("Change") }
-        }
-        var horizontalTravel = 0f
-        Column(Modifier.fillMaxWidth().background(
-            Brush.linearGradient(weatherGradient(current?.weatherCode ?: -1, current?.isDay ?: true)),
-            RoundedCornerShape(28.dp)
-        ).pointerInput(place?.latitude, place?.longitude) {
-            detectHorizontalDragGestures(
-                onDragEnd = {
-                    if (horizontalTravel < -55f) onSwipeCity(1)
-                    else if (horizontalTravel > 55f) onSwipeCity(-1)
-                    horizontalTravel = 0f
-                },
-                onDragCancel = { horizontalTravel = 0f },
-                onHorizontalDrag = { change, amount -> horizontalTravel += amount; change.consume() }
+    val condition = weatherDescription(current?.weatherCode ?: -1).first
+    val high = state.daily.firstOrNull()?.high
+    val low = state.daily.firstOrNull()?.low
+    val aqiText = state.air?.let { if (it.europeanAqi >= 0) it.europeanAqi.toString() + " · " + it.category else "Unavailable" } ?: "Unavailable"
+    Column(
+        modifier.fillMaxSize().background(NightBg).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp)
+    ) {
+        Box(Modifier.fillMaxWidth().height(378.dp)) {
+            AnimatedSkyBackground(
+                Modifier.matchParentSize(), current?.weatherCode ?: -1, current?.isDay ?: false
             )
-        }.padding(22.dp)) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Top) {
-                Column {
-                    Text("CURRENT WEATHER", color = Color.White.copy(alpha = .76f), fontSize = 9.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.8.sp)
-                    Spacer(Modifier.height(6.dp))
-                    Text(description.first, color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+            var horizontalTravel = 0f
+            Column(Modifier.fillMaxSize().pointerInput(place?.latitude, place?.longitude) {
+                detectHorizontalDragGestures(
+                    onDragEnd = {
+                        if (horizontalTravel < -55f) onSwipeCity(1)
+                        else if (horizontalTravel > 55f) onSwipeCity(-1)
+                        horizontalTravel = 0f
+                    },
+                    onDragCancel = { horizontalTravel = 0f },
+                    onHorizontalDrag = { change, amount -> horizontalTravel += amount; change.consume() }
+                )
+            }) {
+                Row(Modifier.fillMaxWidth().padding(top = 20.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(place?.name ?: "Finding your location…", color = Ink, fontSize = 27.sp, fontFamily = FontFamily.Cursive)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("●", color = Muted, fontSize = 8.sp)
+                            Spacer(Modifier.width(5.dp))
+                            Text(place?.region ?: "Allow location access", color = Muted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                    }
+                    Text("☷", color = Ink, fontSize = 29.sp, modifier = Modifier.clickable { onTab("Cities") }.padding(horizontal = 12.dp))
+                    Text("⚙", color = Ink, fontSize = 27.sp, modifier = Modifier.clickable { onTab("Settings") }.padding(start = 8.dp, end = 4.dp))
                 }
-                AnimatedWeatherIcon(current?.weatherCode ?: -1, 62.dp)
-            }
-            Row(verticalAlignment = Alignment.Top) {
-                Text(displayTemp(current?.temperature ?: Double.NaN, celsius), color = Color.White, fontSize = 78.sp, fontWeight = FontWeight.Light, letterSpacing = (-4).sp)
-                Text(if (celsius) "°C" else "°F", color = Color.White, fontSize = 25.sp, modifier = Modifier.padding(top = 12.dp))
-            }
-            Text("Feels like " + displayTemp(current?.feelsLike ?: Double.NaN, celsius) + "°", color = Color.White.copy(alpha = .82f), fontSize = 13.sp)
-            Spacer(Modifier.height(22.dp))
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                HeroMetric("HUMIDITY", current?.humidity?.takeIf { it >= 0 }?.toString()?.plus("%") ?: "—")
-                HeroMetric("WIND", current?.windKmh?.let { formatValue(it) + " km/h" } ?: "—")
-                HeroMetric("RAIN", current?.precipitation?.let { formatValue(it, 1) + " mm" } ?: "—")
+                Spacer(Modifier.height(60.dp))
+                Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(displayTemp(current?.temperature ?: Double.NaN, celsius) + "°", color = Color.White, fontSize = 100.sp, fontWeight = FontWeight.Light, fontFamily = FontFamily.Cursive, letterSpacing = (-4).sp)
+                    Text(condition, color = Color.White, fontSize = 19.sp, fontFamily = FontFamily.Cursive)
+                    Text(
+                        (if (high != null && low != null) displayTemp(low, celsius) + "° / " + displayTemp(high, celsius) + "°" else "— / —") +
+                            "  ·  Air quality: " + aqiText,
+                        color = Color.White.copy(alpha = .90f), fontSize = 13.sp, fontFamily = FontFamily.Cursive,
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
+                    if (state.loading) LinearProgressIndicator(Modifier.fillMaxWidth(.45f).padding(top = 14.dp), color = Sky)
+                    if (state.error.isNotBlank()) Text(state.error, color = Orange, fontSize = 10.sp, modifier = Modifier.padding(top = 8.dp))
+                }
             }
         }
-        if (state.loading) LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 12.dp), color = Sky)
-        if (state.error.isNotBlank()) Text(state.error, color = Orange, fontSize = 10.sp, modifier = Modifier.padding(top = 10.dp))
-        Spacer(Modifier.height(20.dp))
-        SectionHeader("WEATHER DETAILS", "Current conditions")
-        WeatherDetailsCard(current, celsius)
-        Spacer(Modifier.height(20.dp))
-        SectionHeader("HOURLY FORECAST", "Next 24 hours")
-        HourlyStrip(state.hourly.take(24), celsius)
-        Spacer(Modifier.height(20.dp))
-        SectionHeader("15-DAY OUTLOOK", "View all", { onTab("Forecast") })
-        DailyPreview(state.daily.take(5), celsius)
-        Spacer(Modifier.height(20.dp))
-        SectionHeader("AIR QUALITY", "Model estimate")
+
+        PollenCard()
+        Spacer(Modifier.height(16.dp))
+        SectionHeader("Hourly forecast", "Next hours")
+        HourlyStrip(state.hourly.take(12), celsius)
+        Spacer(Modifier.height(16.dp))
+        SectionHeader("Multi-day forecast", "15 days", { onTab("Forecast") })
+        DailyPreview(state.daily.take(7), celsius)
+        Spacer(Modifier.height(16.dp))
+        SectionHeader("Air quality", "Details")
         AirQualityCard(state.air)
-        Spacer(Modifier.height(20.dp))
-        SectionHeader("DAILY LIFE INDICES", "Weather guidance")
-        LifeIndexCard(state)
-        Spacer(Modifier.height(20.dp))
-        SectionHeader("SUN & DAYLIGHT", "Today")
+        Spacer(Modifier.height(16.dp))
+        SectionHeader("Weather details", "Current conditions")
+        WeatherMetricGrid(state, celsius)
+        Spacer(Modifier.height(16.dp))
+        SectionHeader("Sunrise & sunset", "Daylight")
         SunriseCard(state.daily.firstOrNull())
-        Spacer(Modifier.height(20.dp))
-        SectionHeader("WEATHER ALERTS", "Coverage")
+        Spacer(Modifier.height(16.dp))
+        SectionHeader("Moon information", "Night sky")
+        MoonInfoCard()
+        Spacer(Modifier.height(16.dp))
+        SectionHeader("Lifestyle tips", "Weather guidance")
+        LifeIndexCard(state)
+        Spacer(Modifier.height(16.dp))
+        SectionHeader("Weather alerts", "Official coverage")
         AlertsCard(state.alerts, state.alertCoverage)
-        Text("Weather data · " + (current?.source ?: "EARTH WEATHER"), color = Muted, fontSize = 9.sp, modifier = Modifier.padding(vertical = 20.dp))
+        Spacer(Modifier.height(28.dp))
+        Text("EARTH WEATHER · BMR INC.", color = Muted, fontSize = 10.sp, fontFamily = FontFamily.Cursive, modifier = Modifier.align(Alignment.CenterHorizontally).padding(bottom = 16.dp))
+    }
+}
+
+@Composable
+private fun AnimatedSkyBackground(modifier: Modifier, code: Int, isDay: Boolean) {
+    val transition = rememberInfiniteTransition(label = "sky-video-like-motion")
+    val drift by transition.animateFloat(
+        initialValue = -14f, targetValue = 14f,
+        animationSpec = infiniteRepeatable(animation = tween(8500), repeatMode = RepeatMode.Reverse),
+        label = "cloud-drift"
+    )
+    val shimmer by transition.animateFloat(
+        initialValue = .22f, targetValue = .65f,
+        animationSpec = infiniteRepeatable(animation = tween(2600), repeatMode = RepeatMode.Reverse),
+        label = "star-shimmer"
+    )
+    Canvas(modifier) {
+        val palette = if (isDay) listOf(Color(0xFF10234D), Color(0xFF223F73), Color(0xFF111C42))
+        else listOf(Color(0xFF03071D), Color(0xFF101B45), Color(0xFF081334))
+        drawRect(Brush.verticalGradient(palette, startY = 0f, endY = size.height))
+        for (i in 0 until 52) {
+            val x = ((i * 97) % 997) / 997f * size.width
+            val y = ((i * 61) % 503) / 503f * size.height * .63f
+            val radius = if (i % 7 == 0) 1.8f else .8f
+            val alpha = if (i % 3 == 0) shimmer else .25f
+            drawCircle(Color.White.copy(alpha = alpha), radius, Offset(x, y))
+        }
+        val cloudTint = if (code in 51..99) Color(0xFFAAB6D2) else Color(0xFF8799BD)
+        fun cloud(x: Float, y: Float, r: Float, alpha: Float) {
+            val center = Offset(x, y)
+            drawCircle(
+                brush = Brush.radialGradient(
+                    colors = listOf(cloudTint.copy(alpha = alpha), cloudTint.copy(alpha = alpha * .54f), Color.Transparent),
+                    center = center, radius = r
+                ),
+                radius = r, center = center
+            )
+        }
+        val baseY = size.height * .52f
+        val shift = drift * density
+        cloud(size.width * .18f + shift, baseY, size.width * .39f, .72f)
+        cloud(size.width * .46f + shift, baseY - size.height * .045f, size.width * .42f, .82f)
+        cloud(size.width * .79f + shift, baseY + size.height * .012f, size.width * .40f, .70f)
+        cloud(size.width * .34f - shift, baseY + size.height * .11f, size.width * .35f, .56f)
+        cloud(size.width * .70f - shift, baseY + size.height * .10f, size.width * .34f, .60f)
+        cloud(size.width * .52f, baseY + size.height * .19f, size.width * .50f, .36f)
+        drawRect(
+            Brush.verticalGradient(
+                0f to Color.Transparent,
+                .55f to Color.Transparent,
+                1f to NightBg.copy(alpha = .96f)
+            ),
+            topLeft = Offset.Zero,
+            size = size
+        )
+    }
+}
+
+@Composable
+private fun PollenCard() {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = CardSurface),
+        shape = RoundedCornerShape(25.dp), modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 18.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("🌼", fontSize = 24.sp)
+                Spacer(Modifier.width(10.dp))
+                Text("Pollen", color = Ink, fontSize = 19.sp, fontFamily = FontFamily.Cursive)
+            }
+            Text("Pollen forecast is not available for this region", color = Ink.copy(alpha = .92f), fontSize = 12.sp, modifier = Modifier.padding(top = 7.dp))
+            Text("View details  ›", color = Muted, fontSize = 12.sp, modifier = Modifier.padding(top = 19.dp))
+        }
+    }
+}
+
+@Composable
+private fun WeatherMetricGrid(state: DashboardState, celsius: Boolean) {
+    val current = state.current
+    val items = listOf(
+        Triple("UV index", if (state.air?.uv?.isFinite() == true) formatValue(state.air!!.uv, 1) else "—", "☀️"),
+        Triple("Feels like", displayTemp(current?.feelsLike ?: Double.NaN, celsius) + "°", "🌡️"),
+        Triple("Humidity", current?.humidity?.takeIf { it >= 0 }?.toString()?.plus("%") ?: "—", "💧"),
+        Triple("Wind", current?.windKmh?.let { formatValue(it) + " km/h" } ?: "—", "🌬️"),
+        Triple("Air pressure", current?.pressure?.let { formatValue(it) + " hPa" } ?: "—", "↘️"),
+        Triple("Visibility", "—", "👁️")
+    )
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        items.chunked(2).forEach { row ->
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                row.forEach { item ->
+                    Card(
+                        modifier = Modifier.weight(1f),
+                        colors = CardDefaults.cardColors(containerColor = CardSurface),
+                        shape = RoundedCornerShape(18.dp)
+                    ) {
+                        Column(Modifier.fillMaxWidth().padding(14.dp)) {
+                            Text(item.third, fontSize = 17.sp)
+                            Text(item.first, color = Muted, fontSize = 11.sp, modifier = Modifier.padding(top = 7.dp))
+                            Text(item.second, color = Ink, fontSize = 17.sp, fontFamily = FontFamily.Cursive, modifier = Modifier.padding(top = 4.dp))
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MoonInfoCard() {
+    Card(colors = CardDefaults.cardColors(containerColor = CardSurface), shape = RoundedCornerShape(22.dp)) {
+        Row(Modifier.fillMaxWidth().padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("Moonrise", color = Muted, fontSize = 11.sp)
+                Text("—", color = Ink, fontSize = 16.sp, modifier = Modifier.padding(bottom = 12.dp))
+                Text("Moonset", color = Muted, fontSize = 11.sp)
+                Text("—", color = Ink, fontSize = 16.sp)
+            }
+            Text("🌘", fontSize = 56.sp)
+            Spacer(Modifier.width(12.dp))
+        }
+        Text("Moonrise and moonset times are not supplied by the current data provider.", color = Muted, fontSize = 9.sp, modifier = Modifier.padding(start = 18.dp, end = 18.dp, bottom = 14.dp))
     }
 }
 
@@ -609,7 +759,7 @@ private fun ForecastTemperatureChart(days: List<DailyPoint>, celsius: Boolean) {
     val minValue = valid.minOf { it.low }
     val maxValue = valid.maxOf { it.high }
     val range = (maxValue - minValue).coerceAtLeast(1.0)
-    Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(20.dp)) {
+    Card(colors = CardDefaults.cardColors(containerColor = CardSurface), shape = RoundedCornerShape(20.dp)) {
         Column(Modifier.fillMaxWidth().padding(14.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(18.dp), modifier = Modifier.padding(bottom = 12.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -674,53 +824,73 @@ private fun CitiesScreen(
     onSelect: (WeatherPlace) -> Unit, onSave: (WeatherPlace) -> Unit,
     onRemove: (WeatherPlace) -> Unit, onSearch: () -> Unit, onDetectLocation: () -> Unit
 ) {
-    LaunchedEffect(query) {
-        if (query.trim().length >= 2) { delay(500); onSearch() }
-    }
-    Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp)) {
-        ScreenTitle("Your cities", "Search and manage locations")
-        OutlinedButton(onClick = onDetectLocation, modifier = Modifier.fillMaxWidth()) { Text("⌖  Use my current location") }
-        OutlinedTextField(
-            value = query, onValueChange = onQuery, modifier = Modifier.fillMaxWidth(),
-            singleLine = true, shape = RoundedCornerShape(16.dp),
-            placeholder = { Text("Search city, town or village") },
-            leadingIcon = { Text("⌕", fontSize = 22.sp) },
-            trailingIcon = { if (query.isNotBlank()) TextButton(onClick = { onQuery("") }) { Text("Clear") } }
-        )
-        if (searching) LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 6.dp), color = Sky)
-        if (searchError.isNotBlank() && query.trim().length >= 2) Text(searchError, color = Orange, fontSize = 11.sp, modifier = Modifier.padding(top = 8.dp))
-        if (results.isNotEmpty() && query.trim().length >= 2) {
-            Spacer(Modifier.height(16.dp)); SectionHeader("SEARCH RESULTS", results.size.toString() + " places")
-            results.forEach { place ->
-                CityListRow(place, false, { onSelect(place) }) {
-                    TextButton(onClick = { onSave(place) }) { Text("＋ Save") }
+    LaunchedEffect(query) { if (query.trim().length >= 2) { delay(500); onSearch() } }
+    var showSearch by remember { mutableStateOf(true) }
+    Box(modifier.fillMaxSize().background(NightBg)) {
+        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 18.dp)) {
+            Row(Modifier.fillMaxWidth().padding(top = 22.dp, bottom = 20.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("‹", color = Ink, fontSize = 34.sp, modifier = Modifier.clickable { onDetectLocation() }.padding(end = 14.dp))
+                Text("Manage cities", color = Ink, fontSize = 25.sp, fontFamily = FontFamily.Cursive)
+            }
+            OutlinedTextField(
+                value = query, onValueChange = onQuery, modifier = Modifier.fillMaxWidth(),
+                singleLine = true, shape = RoundedCornerShape(28.dp),
+                placeholder = { Text("Search", color = Muted, fontFamily = FontFamily.Cursive) },
+                leadingIcon = { Text("⌕", fontSize = 25.sp, color = Muted) },
+                trailingIcon = { if (query.isNotBlank()) TextButton(onClick = { onQuery("") }) { Text("Clear", color = Sky) } },
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedContainerColor = Color(0xFF1C1C1F), unfocusedContainerColor = Color(0xFF1C1C1F),
+                    focusedBorderColor = Color.Transparent, unfocusedBorderColor = Color.Transparent,
+                    focusedTextColor = Ink, unfocusedTextColor = Ink, cursorColor = Sky
+                )
+            )
+            if (searching) LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 8.dp), color = Sky)
+            if (searchError.isNotBlank() && query.trim().length >= 2) Text(searchError, color = Orange, fontSize = 11.sp, modifier = Modifier.padding(top = 8.dp))
+            if (results.isNotEmpty() && query.trim().length >= 2) {
+                Spacer(Modifier.height(18.dp))
+                results.forEach { place ->
+                    DarkCityCard(place, false, "＋ Add") { onSave(place) }
+                    TextButton(onClick = { onSelect(place) }) { Text("Show weather", color = Sky) }
                 }
             }
+            Spacer(Modifier.height(20.dp))
+            Text("CURRENT CITY", color = Muted, fontSize = 11.sp, letterSpacing = 1.sp, modifier = Modifier.padding(bottom = 10.dp))
+            if (current != null) DarkCityCard(current, true, "Selected") { onSelect(current) }
+            Spacer(Modifier.height(18.dp))
+            Text("SAVED CITIES", color = Muted, fontSize = 11.sp, letterSpacing = 1.sp, modifier = Modifier.padding(bottom = 10.dp))
+            if (saved.isEmpty()) InfoCard("No saved cities", "Search for a city and add it to your list.")
+            else saved.forEach { place ->
+                DarkCityCard(place, current?.name == place.name, "× Remove") {
+                    if (current?.name == place.name) onSelect(place) else onRemove(place)
+                }
+            }
+            Spacer(Modifier.height(90.dp))
         }
-        Spacer(Modifier.height(20.dp)); SectionHeader("CURRENT CITY", "Device location")
-        if (current != null) CityListRow(current, true, { onSelect(current) })
-        val nationalCities = topCitiesFor(current?.countryCode ?: "")
-        Spacer(Modifier.height(20.dp)); SectionHeader("TOP CITIES · " + (current?.country ?: "YOUR REGION"), "Popular locations")
-        nationalCities.forEach { city ->
-            CityListRow(city, false, { onSelect(city) }) {
-                TextButton(onClick = { onSave(city) }) { Text("＋ Save") }
+        FloatingActionButton(
+            onClick = { if (results.isNotEmpty()) onSave(results.first()) else onDetectLocation() },
+            modifier = Modifier.align(Alignment.BottomEnd).padding(22.dp),
+            containerColor = Color(0xFF2879F5), contentColor = Color.White
+        ) { Text("+", fontSize = 35.sp, fontWeight = FontWeight.Light) }
+    }
+}
+
+@Composable
+private fun DarkCityCard(place: WeatherPlace, selected: Boolean, actionLabel: String, onClick: () -> Unit) {
+    Card(
+        onClick = onClick,
+        colors = CardDefaults.cardColors(containerColor = if (selected) Color(0xFF1A2859) else CardSurface),
+        shape = RoundedCornerShape(25.dp), modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp)
+    ) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 21.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(place.name, color = Ink, fontSize = 24.sp, fontFamily = FontFamily.Cursive, modifier = Modifier.weight(1f))
+                if (selected) Text("●", color = Sky, fontSize = 12.sp)
+            }
+            Row(Modifier.fillMaxWidth().padding(top = 24.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text(place.region, color = Muted, fontSize = 12.sp, maxLines = 1)
+                Text(actionLabel, color = Sky, fontSize = 11.sp)
             }
         }
-        val worldCities = worldTopCities()
-        Spacer(Modifier.height(20.dp)); SectionHeader("TOP CITIES · WORLD", "Global")
-        worldCities.forEach { city ->
-            CityListRow(city, false, { onSelect(city) }) {
-                TextButton(onClick = { onSave(city) }) { Text("＋ Save") }
-            }
-        }
-        Spacer(Modifier.height(20.dp)); SectionHeader("SAVED CITIES", saved.size.toString() + " saved")
-        if (saved.isEmpty()) InfoCard("No saved cities yet", "Search for a city and tap Save to keep it in your list.")
-        else saved.forEach { place ->
-            CityListRow(place, current?.name == place.name, { onSelect(place) }) {
-                TextButton(onClick = { onRemove(place) }) { Text("Remove", color = Orange) }
-            }
-        }
-        Spacer(Modifier.height(30.dp))
     }
 }
 
@@ -861,113 +1031,158 @@ setTimeout(()=>map.invalidateSize(),300);
 }
 
 @Composable
-private fun SettingsScreen(celsius: Boolean, onUnit: (Boolean) -> Unit, notificationsEnabled: Boolean, onNotifications: (Boolean) -> Unit, rainRemindersEnabled: Boolean, onRainReminders: (Boolean) -> Unit, rainThreshold: Int, onRainThreshold: (Int) -> Unit, rainStartHour: Int, rainEndHour: Int, onRainWindow: (Int, Int) -> Unit, morningBriefingEnabled: Boolean, morningBriefingHour: Int, onMorningBriefing: (Boolean) -> Unit, onMorningHour: (Int) -> Unit, modifier: Modifier, state: DashboardState) {
-    Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp)) {
-        ScreenTitle("Settings", "Personalise EARTH WEATHER")
-        SectionHeader("UNITS", "Temperature")
-        Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp)) {
-            Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+private fun SettingsScreen(
+    celsius: Boolean, onUnit: (Boolean) -> Unit, notificationsEnabled: Boolean, onNotifications: (Boolean) -> Unit,
+    rainRemindersEnabled: Boolean, onRainReminders: (Boolean) -> Unit, rainThreshold: Int, onRainThreshold: (Int) -> Unit,
+    rainStartHour: Int, rainEndHour: Int, onRainWindow: (Int, Int) -> Unit,
+    morningBriefingEnabled: Boolean, morningBriefingHour: Int, onMorningBriefing: (Boolean) -> Unit, onMorningHour: (Int) -> Unit,
+    modifier: Modifier, state: DashboardState, onBack: () -> Unit, onOpenRealtime: () -> Unit
+) {
+    var rainExpanded by remember { mutableStateOf(false) }
+    Column(modifier.fillMaxSize().background(Color.Black).verticalScroll(rememberScrollState()).padding(horizontal = 18.dp)) {
+        Row(Modifier.fillMaxWidth().padding(top = 20.dp, bottom = 28.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("‹", color = Ink, fontSize = 36.sp, modifier = Modifier.clickable { onBack() }.padding(end = 18.dp))
+            Text("Settings", color = Ink, fontSize = 26.sp, fontFamily = FontFamily.Cursive)
+        }
+        SettingsCaption("Weather alerts")
+        Column(Modifier.fillMaxWidth().background(Color(0xFF1D1D1F), RoundedCornerShape(23.dp)).padding(horizontal = 18.dp)) {
+            Row(Modifier.fillMaxWidth().clickable { rainExpanded = !rainExpanded }.padding(vertical = 19.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("Rain alerts", color = Ink, fontSize = 18.sp, fontFamily = FontFamily.Cursive, modifier = Modifier.weight(1f))
+                Text(String.format("%02d:00 am–%02d:00 pm", rainStartHour % 12, rainEndHour % 12), color = Muted, fontSize = 12.sp)
+                Text("›", color = Muted, fontSize = 27.sp, modifier = Modifier.padding(start = 8.dp))
+            }
+            if (rainExpanded) {
+                Text("Rain probability threshold · " + rainThreshold + "%", color = Muted, fontSize = 11.sp)
+                Slider(value = rainThreshold.toFloat(), onValueChange = { onRainThreshold(it.toInt().coerceIn(40, 90)) }, valueRange = 40f..90f, steps = 9)
+                Text("Reminder window · " + String.format("%02d:00–%02d:00", rainStartHour, rainEndHour), color = Muted, fontSize = 11.sp)
+                Slider(value = rainStartHour.toFloat(), onValueChange = { onRainWindow(it.toInt().coerceIn(0, rainEndHour - 1), rainEndHour) }, valueRange = 0f..22f, steps = 21)
+                Slider(value = rainEndHour.toFloat(), onValueChange = { onRainWindow(rainStartHour, it.toInt().coerceIn(rainStartHour + 1, 24)) }, valueRange = 1f..24f, steps = 22)
+            }
+            DarkDivider()
+            SettingSwitch("Severe weather alerts", "Receive supported official weather warnings.", notificationsEnabled, onNotifications)
+            DarkDivider()
+            DisabledSettingRow("Trip weather notifications", "Trip-based alerts need a trip location and official local warning feed.")
+            DarkDivider()
+            SettingSwitch(
+                "Daily weather forecasts",
+                "Get weather updates for your current city twice a day.",
+                morningBriefingEnabled, onMorningBriefing
+            )
+            if (morningBriefingEnabled) {
+                Text("Morning briefing · " + String.format("%02d:00", morningBriefingHour), color = Muted, fontSize = 11.sp)
+                Slider(value = morningBriefingHour.toFloat(), onValueChange = { onMorningHour(it.toInt().coerceIn(5, 11)) }, valueRange = 5f..11f, steps = 5)
+            }
+            DarkDivider()
+            DisabledSettingRow("Weekly weather forecast", "Weekly digest will be enabled after the forecast schedule is added.")
+            DarkDivider()
+            Row(Modifier.fillMaxWidth().clickable { onOpenRealtime() }.padding(vertical = 18.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("Real-time weather notifications", color = Ink, fontSize = 17.sp, fontFamily = FontFamily.Cursive, modifier = Modifier.weight(1f))
+                Text("›", color = Muted, fontSize = 27.sp)
+            }
+        }
+        SettingsCaption("Units")
+        Column(Modifier.fillMaxWidth().background(Color(0xFF1D1D1F), RoundedCornerShape(23.dp)).padding(horizontal = 18.dp)) {
+            UnitSettingRow("Temperature", if (celsius) "Celsius (°C)" else "Fahrenheit (°F)") { onUnit(!celsius) }
+            DarkDivider()
+            UnitSettingRow("Wind", "Kilometres per hour (km/h)") { }
+            DarkDivider()
+            UnitSettingRow("Air pressure", "Hectopascals (hPa)") { }
+            DarkDivider()
+            UnitSettingRow("Visibility", "Kilometres (km)") { }
+        }
+        Spacer(Modifier.height(28.dp))
+        Column(Modifier.fillMaxWidth().background(Color(0xFF1D1D1F), RoundedCornerShape(23.dp)).clickable { }.padding(18.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("About Weather", color = Ink, fontSize = 17.sp, fontFamily = FontFamily.Cursive, modifier = Modifier.weight(1f))
+                Text("›", color = Muted, fontSize = 27.sp)
+            }
+            Text("EARTH WEATHER · BMR INC.", color = Muted, fontSize = 10.sp, modifier = Modifier.padding(top = 13.dp))
+            Text("Forecast and AQI values are model guidance. Alert coverage depends on the connected provider.", color = Muted, fontSize = 10.sp, lineHeight = 15.sp, modifier = Modifier.padding(top = 6.dp))
+        }
+        Spacer(Modifier.height(36.dp))
+    }
+}
+
+@Composable
+private fun LiveNotificationSettingsScreen(
+    current: WeatherPlace?, saved: List<WeatherPlace>, enabled: Boolean, onEnabled: (Boolean) -> Unit,
+    onSelect: (WeatherPlace) -> Unit, modifier: Modifier, onBack: () -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+    Column(modifier.fillMaxSize().background(Color.Black).padding(horizontal = 18.dp)) {
+        Row(Modifier.fillMaxWidth().padding(top = 20.dp, bottom = 42.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("‹", color = Ink, fontSize = 36.sp, modifier = Modifier.clickable { onBack() }.padding(end = 18.dp))
+            Text("Real-time weather notifications", color = Ink, fontSize = 22.sp, fontFamily = FontFamily.Cursive)
+        }
+        Column(Modifier.fillMaxWidth().background(Color(0xFF1D1D1F), RoundedCornerShape(23.dp)).padding(18.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    Text("Temperature unit", color = Ink, fontWeight = FontWeight.SemiBold)
-                    Text("Choose Celsius or Fahrenheit", color = Muted, fontSize = 11.sp)
+                    Text("Real-time weather notifications", color = Ink, fontSize = 17.sp, fontFamily = FontFamily.Cursive)
+                    Text("Show an ongoing notification with periodic weather updates.", color = Muted, fontSize = 13.sp, lineHeight = 19.sp, modifier = Modifier.padding(top = 5.dp))
                 }
-                FilterChip(selected = celsius, onClick = { onUnit(true) }, label = { Text("°C") })
-                Spacer(Modifier.width(5.dp))
-                FilterChip(selected = !celsius, onClick = { onUnit(false) }, label = { Text("°F") })
+                Switch(checked = enabled, onCheckedChange = onEnabled)
             }
         }
-        Spacer(Modifier.height(18.dp))
-        Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp)) {
-            Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text("Severe weather notifications", color = Ink, fontWeight = FontWeight.SemiBold)
-                    Text("Background checks when an official provider has coverage", color = Muted, fontSize = 10.sp)
+        Spacer(Modifier.height(28.dp))
+        Row(Modifier.fillMaxWidth().background(Color(0xFF1D1D1F), RoundedCornerShape(23.dp)).clickable { expanded = true }.padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("Followed city", color = Ink, fontSize = 17.sp, fontFamily = FontFamily.Cursive, modifier = Modifier.weight(1f))
+            Text(current?.name ?: "Current city", color = Muted, fontSize = 14.sp)
+            Text("⌄", color = Muted, fontSize = 20.sp, modifier = Modifier.padding(start = 8.dp))
+            DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                (listOfNotNull(current) + saved.filter { it.name != current?.name }).distinctBy { it.name }.forEach { city ->
+                    DropdownMenuItem(text = { Text(city.name) }, onClick = { expanded = false; onSelect(city) })
                 }
-                Switch(checked = notificationsEnabled, onCheckedChange = onNotifications)
             }
         }
-        Spacer(Modifier.height(10.dp))
-        Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp)) {
-            Column(Modifier.fillMaxWidth().padding(16.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text("Rain reminders", color = Ink, fontWeight = FontWeight.SemiBold)
-                        Text("Forecast-based notification within the next 6 hours", color = Muted, fontSize = 10.sp)
-                    }
-                    Switch(checked = rainRemindersEnabled, onCheckedChange = onRainReminders)
-                }
-                Spacer(Modifier.height(12.dp))
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text("Rain probability threshold", color = Muted, fontSize = 11.sp)
-                    Text("$rainThreshold%", color = Sky, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                }
-                Slider(
-                    value = rainThreshold.toFloat(),
-                    onValueChange = { onRainThreshold(it.toInt().coerceIn(40, 90)) },
-                    valueRange = 40f..90f,
-                    steps = 9
-                )
-                Spacer(Modifier.height(8.dp))
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text("Quiet hours window", color = Muted, fontSize = 11.sp)
-                    Text(String.format("%02d:00–%02d:00", rainStartHour, rainEndHour), color = Sky, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                }
-                Text("Start time", color = Muted, fontSize = 9.sp)
-                Slider(
-                    value = rainStartHour.toFloat(),
-                    onValueChange = { onRainWindow(it.toInt().coerceIn(0, rainEndHour - 1), rainEndHour) },
-                    valueRange = 0f..22f,
-                    steps = 21
-                )
-                Text("End time", color = Muted, fontSize = 9.sp)
-                Slider(
-                    value = rainEndHour.toFloat(),
-                    onValueChange = { onRainWindow(rainStartHour, it.toInt().coerceIn(rainStartHour + 1, 24)) },
-                    valueRange = 1f..24f,
-                    steps = 22
-                )
-            }
+        Text("Android may defer background work to preserve battery. Updates are scheduled at a minimum 15-minute interval, not second-by-second.", color = Muted, fontSize = 10.sp, lineHeight = 15.sp, modifier = Modifier.padding(top = 14.dp))
+    }
+}
+
+@Composable
+private fun SettingsCaption(value: String) {
+    Text(value, color = Muted, fontSize = 12.sp, fontFamily = FontFamily.Cursive, modifier = Modifier.padding(start = 18.dp, bottom = 15.dp, top = 10.dp))
+}
+
+@Composable
+private fun DarkDivider() {
+    Divider(color = Color(0xFF3A3A3D), thickness = .6.dp)
+}
+
+@Composable
+private fun SettingSwitch(title: String, subtitle: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 17.dp), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f).padding(end = 12.dp)) {
+            Text(title, color = Ink, fontSize = 17.sp, fontFamily = FontFamily.Cursive)
+            Text(subtitle, color = Muted, fontSize = 12.sp, lineHeight = 18.sp, modifier = Modifier.padding(top = 4.dp))
         }
-        Spacer(Modifier.height(10.dp))
-        Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp)) {
-            Column(Modifier.fillMaxWidth().padding(16.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text("Morning weather briefing", color = Ink, fontWeight = FontWeight.SemiBold)
-                        Text("A daily forecast notification around the selected time", color = Muted, fontSize = 10.sp)
-                    }
-                    Switch(checked = morningBriefingEnabled, onCheckedChange = onMorningBriefing)
-                }
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text("Briefing time", color = Muted, fontSize = 11.sp)
-                    Text(String.format("%02d:00", morningBriefingHour), color = Sky, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                }
-                Slider(
-                    value = morningBriefingHour.toFloat(),
-                    onValueChange = { onMorningHour(it.toInt().coerceIn(5, 11)) },
-                    valueRange = 5f..11f,
-                    steps = 5
-                )
-                Text("Android may delay background delivery to save battery.", color = Muted, fontSize = 9.sp)
-            }
+        Switch(checked = checked, onCheckedChange = onChange)
+    }
+}
+
+@Composable
+private fun DisabledSettingRow(title: String, subtitle: String) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f).padding(end = 12.dp)) {
+            Text(title, color = Ink, fontSize = 17.sp, fontFamily = FontFamily.Cursive)
+            Text(subtitle, color = Muted, fontSize = 12.sp, lineHeight = 18.sp, modifier = Modifier.padding(top = 4.dp))
         }
-        Spacer(Modifier.height(22.dp)); SectionHeader("DATA & PRIVACY", "About your weather")
-        InfoCard("EARTH WEATHER API", "Weather information is served by BMR INC. infrastructure. Location is requested only to show local weather. City search works without GPS permission.")
-        Spacer(Modifier.height(9.dp))
-        InfoCard("DATA SOURCES", "Current weather uses the configured provider failover. Forecast and AQI currently use Open-Meteo evaluation endpoints (CC BY 4.0 attribution). The free tier is non-commercial; commercial release requires the appropriate customer licence/endpoint. City search and reverse geocoding use OpenStreetMap Nominatim attribution. Radar history uses RainViewer past frames; review its commercial terms before public monetisation.")
-        Spacer(Modifier.height(9.dp))
-        InfoCard("ALERT COVERAGE", state.alertCoverage.ifBlank { "Alert service status has not loaded." })
-        Spacer(Modifier.height(9.dp))
-        InfoCard("APP VERSION", "EARTH WEATHER · Android native · Version 1.0.0")
-        Text("BMR INC. · EARTH WEATHER", color = Muted, fontSize = 10.sp, modifier = Modifier.padding(vertical = 24.dp))
+        Switch(checked = false, onCheckedChange = {}, enabled = false)
+    }
+}
+
+@Composable
+private fun UnitSettingRow(title: String, value: String, onClick: () -> Unit) {
+    Row(Modifier.fillMaxWidth().clickable { onClick() }.padding(vertical = 20.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(title, color = Ink, fontSize = 17.sp, fontFamily = FontFamily.Cursive, modifier = Modifier.weight(1f))
+        Text(value, color = Muted, fontSize = 13.sp)
+        Text("⌃⌄", color = Muted, fontSize = 16.sp, modifier = Modifier.padding(start = 8.dp))
     }
 }
 
 @Composable
 private fun ScreenTitle(title: String, subtitle: String) {
     Column(Modifier.padding(top = 20.dp, bottom = 18.dp)) {
-        Text("EARTH WEATHER", color = Sky, fontWeight = FontWeight.Black, letterSpacing = 1.8.sp, fontSize = 10.sp)
-        Text(title, color = Ink, fontWeight = FontWeight.Bold, fontSize = 28.sp)
+        Text(title, color = Ink, fontSize = 26.sp, fontFamily = FontFamily.Cursive)
         Text(subtitle, color = Muted, fontSize = 12.sp)
     }
 }
@@ -975,9 +1190,9 @@ private fun ScreenTitle(title: String, subtitle: String) {
 @Composable
 private fun SectionHeader(title: String, trailing: String, onClick: (() -> Unit)? = null) {
     Row(Modifier.fillMaxWidth().padding(bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(title, color = Ink, fontWeight = FontWeight.Bold, fontSize = 12.sp, letterSpacing = .7.sp, modifier = Modifier.weight(1f))
-        if (onClick == null) Text(trailing, color = Sky, fontSize = 10.sp)
-        else TextButton(onClick = onClick, contentPadding = PaddingValues(0.dp)) { Text(trailing, fontSize = 10.sp) }
+        Text(title, color = Ink, fontSize = 17.sp, fontFamily = FontFamily.Cursive, modifier = Modifier.weight(1f))
+        if (onClick == null) Text(trailing, color = Muted, fontSize = 10.sp)
+        else TextButton(onClick = onClick, contentPadding = PaddingValues(0.dp)) { Text(trailing, color = Sky, fontSize = 10.sp) }
     }
 }
 
@@ -992,25 +1207,88 @@ private fun HeroMetric(label: String, value: String) {
 
 @Composable
 private fun HourlyStrip(items: List<HourlyPoint>, celsius: Boolean) {
-    if (items.isEmpty()) { InfoCard("Hourly forecast unavailable", "No forecast points were returned by the weather service."); return }
-    Row(Modifier.fillMaxWidth().horizontalScroll(androidx.compose.foundation.rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(9.dp)) {
-        items.forEachIndexed { index, point ->
-            Card(modifier = Modifier.width(76.dp), colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(17.dp)) {
-                Column(Modifier.fillMaxWidth().padding(vertical = 12.dp, horizontal = 7.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(if (index == 0) "Now" else point.time.substringAfter("T").take(5), color = Muted, fontSize = 10.sp)
-                    WeatherIcon(point.weatherCode, 32.dp, Modifier.padding(vertical = 7.dp))
-                    Text(displayTemp(point.temperature, celsius) + "°", color = Ink, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                    Text("☔ " + (point.precipitationProbability.takeIf { it >= 0 }?.toString() ?: "—") + "%", color = Sky, fontSize = 9.sp, modifier = Modifier.padding(top = 7.dp))
+    if (items.isEmpty()) {
+        DarkInfoCard("Hourly forecast", "Hourly forecast data is loading.")
+        return
+    }
+    Card(colors = CardDefaults.cardColors(containerColor = CardSurface), shape = RoundedCornerShape(25.dp)) {
+        Row(
+            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 13.dp, vertical = 18.dp),
+            horizontalArrangement = Arrangement.spacedBy(18.dp)
+        ) {
+            items.take(8).forEachIndexed { index, point ->
+                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.width(54.dp)) {
+                    Text(if (index == 0) "Now" else formatHourLabel(point.time), color = Ink, fontSize = 11.sp, fontFamily = FontFamily.Cursive)
+                    Text(weatherEmoji(point.weatherCode), fontSize = 27.sp, modifier = Modifier.padding(vertical = 8.dp))
+                    Text(displayTemp(point.temperature, celsius) + "°", color = Ink, fontSize = 15.sp, fontFamily = FontFamily.Cursive)
                 }
             }
         }
     }
 }
 
+private fun formatHourLabel(value: String): String {
+    val time = value.substringAfter("T", value).take(5)
+    return runCatching {
+        java.time.LocalTime.parse(time).format(DateTimeFormatter.ofPattern("h:mm a", Locale.US)).lowercase(Locale.US)
+    }.getOrDefault(time)
+}
+
+private fun weatherEmoji(code: Int): String = when (code) {
+    0 -> "☀️"
+    1 -> "🌤️"
+    2 -> "⛅"
+    3 -> "☁️"
+    45, 48 -> "🌫️"
+    51, 53, 55, 56, 57 -> "🌦️"
+    61, 63, 65, 66, 67 -> "🌧️"
+    71, 73, 75, 77, 85, 86 -> "❄️"
+    80, 81, 82 -> "🌦️"
+    95, 96, 99 -> "⛈️"
+    else -> "🌡️"
+}
+
 @Composable
 private fun DailyPreview(items: List<DailyPoint>, celsius: Boolean) {
-    if (items.isEmpty()) { InfoCard("Forecast unavailable", "The 15-day forecast is being refreshed."); return }
-    items.forEachIndexed { index, day -> DailyRow(day, index, celsius) }
+    if (items.isEmpty()) { DarkInfoCard("Multi-day forecast", "Daily forecast is being refreshed."); return }
+    var view by remember { mutableStateOf("List") }
+    Card(colors = CardDefaults.cardColors(containerColor = CardSurface), shape = RoundedCornerShape(25.dp)) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Multi-day forecast", color = Muted, fontSize = 13.sp, fontFamily = FontFamily.Cursive, modifier = Modifier.weight(1f))
+                Row(Modifier.background(RaisedSurface, CircleShape).padding(3.dp)) {
+                    listOf("Line", "List").forEach { label ->
+                        Text(
+                            label, color = if (view == label) Ink else Muted, fontSize = 11.sp,
+                            modifier = Modifier.background(if (view == label) Color(0xFF35416B) else Color.Transparent, CircleShape)
+                                .clickable { view = label }.padding(horizontal = 13.dp, vertical = 7.dp)
+                        )
+                    }
+                }
+            }
+            Divider(color = Line, modifier = Modifier.padding(vertical = 10.dp))
+            if (view == "List") {
+                items.take(7).forEachIndexed { index, day ->
+                    DarkDailyRow(day, index, celsius)
+                }
+            } else {
+                ForecastTemperatureChart(items, celsius)
+            }
+            Text("View details  ›", color = Sky, fontSize = 12.sp, modifier = Modifier.align(Alignment.CenterHorizontally).clickable { view = if (view == "List") "Line" else "List" }.padding(top = 8.dp))
+        }
+    }
+}
+
+@Composable
+private fun DarkDailyRow(day: DailyPoint, index: Int, celsius: Boolean) {
+    val dateLabel = if (index == 0) "Today" else runCatching {
+        java.time.LocalDate.parse(day.date).format(DateTimeFormatter.ofPattern("d MMM  EEE", Locale.US))
+    }.getOrDefault(day.date)
+    Row(Modifier.fillMaxWidth().padding(vertical = 11.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(dateLabel, color = Ink, fontSize = 13.sp, fontFamily = FontFamily.Cursive, modifier = Modifier.weight(1.15f))
+        Text(weatherEmoji(day.weatherCode), fontSize = 24.sp, modifier = Modifier.weight(.55f))
+        Text(displayTemp(day.low, celsius) + "° / " + displayTemp(day.high, celsius) + "°", color = Ink, fontSize = 13.sp, fontFamily = FontFamily.Cursive)
+    }
 }
 
 @Composable
@@ -1031,43 +1309,65 @@ private fun DailyRow(day: DailyPoint, index: Int, celsius: Boolean) {
 
 @Composable
 private fun AirQualityCard(air: AirQuality?) {
-    if (air == null || air.europeanAqi < 0) { InfoCard("Air quality unavailable", "No current AQI value was returned for this location."); return }
+    if (air == null || air.europeanAqi < 0) { DarkInfoCard("Air quality", "No AQI value is available for this location."); return }
     val tone = when (air.europeanAqi) {
-        in 0..20 -> Good; in 21..40 -> Color(0xFF6A9C49); in 41..60 -> Orange
-        in 61..80 -> Color(0xFFD15E3F); else -> Color(0xFFB83B3B)
+        in 0..20 -> Good; in 21..40 -> Color(0xFF9ACB73); in 41..60 -> Orange
+        in 61..80 -> Color(0xFFE58B67); else -> Color(0xFFE65F65)
     }
-    Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(20.dp)) {
-        Column(Modifier.fillMaxWidth().padding(16.dp)) {
+    Card(colors = CardDefaults.cardColors(containerColor = CardSurface), shape = RoundedCornerShape(23.dp)) {
+        Column(Modifier.fillMaxWidth().padding(18.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    Text("EUROPEAN AQI", color = Muted, fontSize = 9.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
-                    Text(air.europeanAqi.toString(), color = tone, fontSize = 34.sp, fontWeight = FontWeight.Bold)
-                    Text(air.category, color = tone, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                    Text("Air quality", color = Muted, fontSize = 12.sp, fontFamily = FontFamily.Cursive)
+                    Text(air.category + " " + air.europeanAqi, color = tone, fontSize = 23.sp, fontFamily = FontFamily.Cursive)
                 }
-                Column(horizontalAlignment = Alignment.End) {
-                    Text("US AQI", color = Muted, fontSize = 9.sp)
-                    Text(if (air.usAqi >= 0) air.usAqi.toString() else "—", color = Ink, fontSize = 22.sp, fontWeight = FontWeight.Bold)
-                }
+                Text("🌫️", fontSize = 35.sp)
             }
-            Divider(color = Line, modifier = Modifier.padding(vertical = 12.dp))
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Box(Modifier.fillMaxWidth().height(7.dp).background(
+                Brush.horizontalGradient(listOf(Good, Color(0xFFB7CB54), Orange, Color(0xFFE65F65), Color(0xFF794C91))), CircleShape
+            ))
+            Row(Modifier.fillMaxWidth().padding(top = 13.dp), horizontalArrangement = Arrangement.SpaceBetween) {
                 TinyMetric("PM2.5", formatValue(air.pm25, 1) + " µg/m³")
                 TinyMetric("PM10", formatValue(air.pm10, 1) + " µg/m³")
                 TinyMetric("OZONE", formatValue(air.ozone, 1))
             }
-            Text("Modelled air-quality estimate, not a ground-station reading.", color = Muted, fontSize = 9.sp, modifier = Modifier.padding(top = 12.dp))
+            Text("Modelled air-quality estimate, not a ground-station reading.", color = Muted, fontSize = 9.sp, modifier = Modifier.padding(top = 10.dp))
+        }
+    }
+}
+
+@Composable
+private fun DarkInfoCard(title: String, detail: String) {
+    Card(colors = CardDefaults.cardColors(containerColor = CardSurface), shape = RoundedCornerShape(20.dp)) {
+        Column(Modifier.fillMaxWidth().padding(17.dp)) {
+            Text(title, color = Ink, fontSize = 15.sp, fontFamily = FontFamily.Cursive)
+            Text(detail, color = Muted, fontSize = 11.sp, lineHeight = 16.sp, modifier = Modifier.padding(top = 5.dp))
         }
     }
 }
 
 @Composable
 private fun SunriseCard(day: DailyPoint?) {
-    if (day == null) { InfoCard("Sun data unavailable", "Sunrise and sunset appear with daily forecast data."); return }
-    Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(20.dp)) {
-        Row(Modifier.fillMaxWidth().padding(17.dp), horizontalArrangement = Arrangement.SpaceAround) {
-            TinyMetric("SUNRISE", day.sunrise.substringAfter("T").take(5).ifBlank { "—" }, "🌅")
-            TinyMetric("SUNSET", day.sunset.substringAfter("T").take(5).ifBlank { "—" }, "🌇")
-            TinyMetric("UV MAX", formatValue(day.uvMax, 1), "☀️")
+    if (day == null) { DarkInfoCard("Sunrise & sunset", "Sunrise and sunset data is loading."); return }
+    Card(colors = CardDefaults.cardColors(containerColor = CardSurface), shape = RoundedCornerShape(23.dp)) {
+        Column(Modifier.fillMaxWidth().padding(18.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Column {
+                    Text("🌅  Sunrise", color = Muted, fontSize = 12.sp)
+                    Text(day.sunrise.substringAfter("T").take(5).ifBlank { "—" }, color = Ink, fontSize = 18.sp, fontFamily = FontFamily.Cursive)
+                }
+                Column(horizontalAlignment = Alignment.End) {
+                    Text("🌇  Sunset", color = Muted, fontSize = 12.sp)
+                    Text(day.sunset.substringAfter("T").take(5).ifBlank { "—" }, color = Ink, fontSize = 18.sp, fontFamily = FontFamily.Cursive)
+                }
+            }
+            Canvas(Modifier.fillMaxWidth().height(56.dp).padding(top = 8.dp)) {
+                val y = size.height * .76f
+                drawLine(Line, Offset(8f, y), Offset(size.width - 8f, y), strokeWidth = 3f)
+                drawCircle(Color(0xFFFFD45E), radius = 8f, center = Offset(size.width * .5f, y - 18f))
+                drawArc(Color(0xFFFFD45E), 180f, 180f, false, Offset(size.width * .16f, y - 47f), androidx.compose.ui.geometry.Size(size.width * .68f, 76f), style = Stroke(width = 2f))
+            }
+            Text("Daylight forecast", color = Muted, fontSize = 10.sp)
         }
     }
 }
@@ -1075,16 +1375,16 @@ private fun SunriseCard(day: DailyPoint?) {
 @Composable
 private fun AlertsCard(alerts: List<WeatherAlert>, coverage: String) {
     if (alerts.isEmpty()) {
-        InfoCard(
-            if (coverage.contains("United States", true) || coverage.contains("NOAA", true)) "Official alert feed coverage" else "No active alert returned",
-            (coverage.ifBlank { "Connected warning provider did not return any active alerts." }) + ". This does not confirm that no local warning exists."
+        DarkInfoCard(
+            "No active alert returned",
+            (coverage.ifBlank { "The connected warning provider has not returned an active alert." }) + " This does not confirm that no local warning exists."
         )
     } else alerts.take(5).forEach { alert ->
-        Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(16.dp), modifier = Modifier.padding(bottom = 8.dp)) {
-            Column(Modifier.fillMaxWidth().padding(14.dp)) {
-                Text(alert.severity.ifBlank { "WEATHER ALERT" }.uppercase(), color = Orange, fontSize = 9.sp, fontWeight = FontWeight.Bold)
-                Text(alert.title, color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, modifier = Modifier.padding(top = 5.dp))
-                if (alert.description.isNotBlank()) Text(alert.description.take(350), color = Muted, fontSize = 11.sp, lineHeight = 16.sp, modifier = Modifier.padding(top = 5.dp))
+        Card(colors = CardDefaults.cardColors(containerColor = Color(0xFF261D2A)), shape = RoundedCornerShape(18.dp), modifier = Modifier.padding(bottom = 8.dp)) {
+            Column(Modifier.fillMaxWidth().padding(15.dp)) {
+                Text("⚠ " + alert.severity.uppercase(), color = Orange, fontSize = 10.sp)
+                Text(alert.title, color = Ink, fontSize = 15.sp, fontFamily = FontFamily.Cursive, modifier = Modifier.padding(top = 5.dp))
+                Text(alert.description.take(350), color = Muted, fontSize = 11.sp, lineHeight = 16.sp, modifier = Modifier.padding(top = 5.dp))
             }
         }
     }
@@ -1092,17 +1392,8 @@ private fun AlertsCard(alerts: List<WeatherAlert>, coverage: String) {
 
 @Composable
 private fun CityListRow(place: WeatherPlace, selected: Boolean, onClick: () -> Unit, trailing: (@Composable () -> Unit)? = null) {
-    Card(onClick = onClick, colors = CardDefaults.cardColors(containerColor = if (selected) Color(0xFFE5F3F7) else Color.White), shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
-        Row(Modifier.fillMaxWidth().padding(start = 14.dp, end = 8.dp, top = 11.dp, bottom = 11.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("⌖", color = Sky, fontSize = 22.sp, modifier = Modifier.padding(end = 12.dp))
-            Column(Modifier.weight(1f)) {
-                Text(place.name, color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
-                Text(place.region, color = Muted, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            }
-            if (selected) Text("SELECTED", color = Good, fontSize = 8.sp, fontWeight = FontWeight.Bold)
-            trailing?.invoke()
-        }
-    }
+    DarkCityCard(place, selected, if (selected) "SELECTED" else "Open") { onClick() }
+    trailing?.invoke()
 }
 
 @Composable
@@ -1116,14 +1407,8 @@ private fun TinyMetric(title: String, value: String, icon: String = "") {
 
 @Composable
 private fun InfoCard(title: String, detail: String) {
-    Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp), modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(15.dp)) {
-            Text(title, color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
-            Text(detail, color = Muted, fontSize = 10.sp, lineHeight = 15.sp, modifier = Modifier.padding(top = 5.dp))
-        }
-    }
+    DarkInfoCard(title, detail)
 }
-
 
 @Composable
 private fun AnimatedWeatherIcon(code: Int, size: Dp) {
@@ -1214,54 +1499,38 @@ private fun weatherGradient(code: Int, isDay: Boolean): List<Color> = when {
 
 @Composable
 private fun WeatherDetailsCard(current: CurrentConditions?, celsius: Boolean) {
-    Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(19.dp)) {
-        Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-            TinyMetric("FEELS LIKE", displayTemp(current?.feelsLike ?: Double.NaN, celsius) + if (celsius) "°C" else "°F", "🌡️")
-            TinyMetric("PRESSURE", current?.pressure?.let { formatValue(it) + " hPa" } ?: "—", "◉")
-            TinyMetric("CLOUD COVER", current?.cloud?.takeIf { it >= 0 }?.let { it.toString() + "%" } ?: "—", "☁️")
-        }
-    }
+    WeatherMetricGrid(DashboardState(current = current), celsius)
 }
 
 @Composable
 private fun LifeIndexCard(state: DashboardState) {
     val current = state.current
-    val nextHours = state.hourly.take(6)
-    val rainChance = nextHours.map { it.precipitationProbability }.filter { it >= 0 }.maxOrNull() ?: -1
+    val rainChance = state.hourly.take(6).map { it.precipitationProbability }.filter { it >= 0 }.maxOrNull() ?: -1
     val uv = state.daily.firstOrNull()?.uvMax ?: state.air?.uv ?: Double.NaN
-    val temperature = current?.temperature ?: Double.NaN
+    val temp = current?.temperature ?: Double.NaN
     val wind = current?.windKmh ?: Double.NaN
-    val umbrella = when {
-        rainChance >= 60 -> "Umbrella recommended"
-        rainChance in 30..59 -> "Keep an umbrella nearby"
-        rainChance >= 0 -> "Low rain probability"
-        else -> "Rain outlook unavailable"
-    }
-    val outdoor = when {
-        rainChance >= 70 -> "Rain likely soon"
-        temperature.isFinite() && temperature >= 35 -> "Hot conditions"
-        temperature.isFinite() && temperature <= 12 -> "Cool conditions"
-        wind.isFinite() && wind >= 35 -> "Windy conditions"
-        temperature.isFinite() -> "Generally suitable"
-        else -> "Not enough data"
-    }
-    val uvText = when {
-        uv.isNaN() -> "Unavailable"
-        uv < 3 -> "Low"
-        uv < 6 -> "Moderate"
-        uv < 8 -> "High"
-        uv < 11 -> "Very high"
-        else -> "Extreme"
-    }
-    Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(19.dp)) {
-        Column(Modifier.fillMaxWidth().padding(16.dp)) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                LifeIndexItem("OUTDOOR", outdoor, "🚶")
-                LifeIndexItem("RAIN GEAR", umbrella, "☂️")
+    val items = listOf(
+        Triple("Outdoor", if (rainChance >= 70) "Rain likely" else if (temp.isFinite() && temp >= 35) "Very hot" else "Suitable for a walk", "🚶"),
+        Triple("Rain gear", if (rainChance >= 60) "Carry umbrella" else if (rainChance >= 0) "Low rain chance" else "No data", "☂️"),
+        Triple("UV index", if (uv.isFinite()) formatValue(uv, 1) + " · " + if (uv >= 6) "High" else "Low" else "Unavailable", "☀️"),
+        Triple("Wind", if (wind.isFinite()) formatValue(wind) + " km/h" else "Unavailable", "🌬️"),
+        Triple("Humidity", current?.humidity?.takeIf { it >= 0 }?.let { it.toString() + "%" } ?: "Unavailable", "💧"),
+        Triple("Sky", weatherDescription(current?.weatherCode ?: -1).first, "☁️")
+    )
+    Card(colors = CardDefaults.cardColors(containerColor = CardSurface), shape = RoundedCornerShape(23.dp)) {
+        Column(Modifier.fillMaxWidth().padding(17.dp)) {
+            items.chunked(2).forEachIndexed { index, row ->
+                Row(Modifier.fillMaxWidth().padding(vertical = 9.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    row.forEach { item ->
+                        Column(Modifier.weight(1f)) {
+                            Text(item.third + "  " + item.first, color = Ink, fontSize = 13.sp, fontFamily = FontFamily.Cursive)
+                            Text(item.second, color = Muted, fontSize = 11.sp, modifier = Modifier.padding(top = 6.dp))
+                        }
+                    }
+                }
+                if (index < 2) Divider(color = Line)
             }
-            Divider(color = Line, modifier = Modifier.padding(vertical = 12.dp))
-            LifeIndexItem("UV EXPOSURE", uvText + " · " + formatValue(uv, 1), "☀️")
-            Text("Simple guidance derived from forecast values; not an official health or safety warning.", color = Muted, fontSize = 9.sp, lineHeight = 13.sp, modifier = Modifier.padding(top = 10.dp))
+            Text("Guidance is derived from forecast data and is not an official health or safety notice.", color = Muted, fontSize = 9.sp, lineHeight = 13.sp, modifier = Modifier.padding(top = 8.dp))
         }
     }
 }
