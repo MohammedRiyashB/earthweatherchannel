@@ -1,17 +1,47 @@
 # EARTH WEATHER
 
-Global weather intelligence explorer: a CesiumJS 3D globe, NASA GIBS satellite imagery, Open-Meteo global forecasts, and a FastAPI data service.
+A global weather intelligence explorer built around a CesiumJS 3D globe, NASA satellite imagery, global numerical weather-model fields, curated severe-storm events and live source-health checks.
 
-## Status
-This repository starts as an MVP foundation. It does **not** claim that every weather satellite is connected or that all displayed layers are real-time. Each source has its own coverage, latency, licensing, and update cadence. The UI labels imagery and model forecasts separately.
+## Current capabilities
+
+- **3D Earth:** Cesium globe with OpenStreetMap basemap and NASA GIBS imagery layers.
+- **Satellite imagery:** NASA VIIRS daily true-colour imagery and NOAA GOES-East / GOES-West GeoColor and GOES-East infrared layers through NASA GIBS.
+- **Historical imagery playback:** Seven-day date selector / playback for the daily VIIRS product. Product acquisition times and tile availability vary; this is not a continuous geostationary video archive.
+- **Global wind flow:** 15-degree global samples from Open-Meteo 10 m wind speed and direction, rendered as animated particle paths. This is a coarse model-derived visualization, not direct station observations or a high-resolution operational wind analysis.
+- **Cloud movement:** Cloud-cover model samples advected using the model wind field. This is a simplified model visualization, not a photorealistic satellite cloud texture or a cloud-resolving forecast.
+- **Rainfall:** Global coarse current model precipitation overlay and location-based hourly precipitation probability / amount timeline.
+- **Atmospheric water cycle:** Relative humidity, dew point, cloud layers, precipitation and modeled evapotranspiration time series.
+- **Severe-storm events:** NASA EONET active severe-storm event metadata, event locations and any available event geometry.
+- **Source health:** Backend probes Open-Meteo, NASA EONET, NASA GIBS and RainViewer; the UI refreshes health status every 60 seconds.
+- **Local conditions:** Browser geolocation (permission required), current model conditions and hourly forecast.
+- **Radar history:** RainViewer past radar frames where radar coverage exists.
+
+## Data provenance and important limits
+
+| Layer / feature | Data source | What it means |
+|---|---|---|
+| Wind flow | Open-Meteo global forecast models | Coarse 15° model sample, particle paths interpolate the field |
+| Cloud movement | Open-Meteo cloud-cover + wind fields | Simplified advection visualization; not observed cloud pixels |
+| Rainfall forecast | Open-Meteo | Model precipitation and probability; local hourly series plus coarse global current field |
+| Humidity / evapotranspiration | Open-Meteo | Model-derived atmospheric and surface water-flux estimates |
+| Storm events | NASA EONET | Curated severe-storm event metadata; not a complete tropical-cyclone tracker or warning service |
+| Satellite imagery | NASA GIBS / NOAA GOES | Product-dependent imagery with different coverage and latency |
+| Radar history | RainViewer | Patchy historical radar only; no free nowcast |
+
+**India-specific cyclone tracking:** The IMD API catalogue documents cyclone tracks, wind warnings and uncertainty cones. The public API management portal requires registration/access. Add IMD credentials and implement its authenticated adapter before marking official Indian cyclone tracking as connected. NASA EONET is not a substitute for IMD bulletins.
+
+**Photorealistic cloud animation:** The current cloud overlay is intentionally labeled as a simplified model-advection visualization. It should not be presented as raw satellite cloud imagery. A true high-resolution satellite time-lapse requires a time-indexed geostationary imagery feed with permitted tile access and reliable timestamps.
+
+**Source health:** A green/online status means the endpoint responded to a lightweight probe. It does not prove data freshness, scientific accuracy, full geographic coverage or service-level availability.
 
 ## Stack
+
 - Frontend: React, TypeScript, Vite, CesiumJS
-- Satellite imagery: NASA GIBS WMTS (VIIRS global daily imagery + GOES-East/West GeoColor and GOES-East infrared NRT layers where available)
-- Precipitation radar: RainViewer past radar frames (personal / educational use only; incomplete coverage; no free nowcast after 2026-01-01)
-- Global weather: Open-Meteo (model-based forecast/current conditions)
-- Backend: FastAPI with source metadata and weather proxy
-- US official alerts: NOAA/NWS API where supported (US coverage only)
+- Backend: FastAPI, HTTPX
+- Model data: Open-Meteo
+- Satellite imagery: NASA GIBS / NOAA GOES products
+- Severe-storm event metadata: NASA EONET
+- Radar history: RainViewer
 
 ## Run locally
 
@@ -35,19 +65,27 @@ uvicorn app.main:app --reload --port 8000
 
 Set `VITE_API_BASE_URL=http://localhost:8000` in `frontend/.env`.
 
-## Data and attribution
+## API endpoints
+
+- `GET /health`
+- `GET /api/sources`
+- `GET /api/health/sources`
+- `GET /api/weather?latitude=...&longitude=...`
+- `GET /api/atmosphere?latitude=...&longitude=...`
+- `GET /api/wind-grid`
+- `GET /api/cyclones`
+- `GET /api/radar`
+- `GET /api/alerts?latitude=...&longitude=...` (US only)
+
+## Attribution and operations
+
 - NASA GIBS: https://www.earthdata.nasa.gov/eosdis/science-system-description/eosdis-components/gibs
-- Open-Meteo: https://open-meteo.com/ (free API is for non-commercial use; review terms before public/commercial launch)
-- OpenStreetMap: https://www.openstreetmap.org/copyright (standard tile servers have a usage policy; do not treat them as an unlimited production tile CDN)
+- Open-Meteo: https://open-meteo.com/ (review current terms for your deployment and commercial use)
+- NASA EONET: https://eonet.gsfc.nasa.gov/docs/v3
+- IMD API portal: https://api.imd.gov.in/public/
+- OpenStreetMap: https://www.openstreetmap.org/copyright
 - CesiumJS: https://cesium.com/learn/cesiumjs-learn/
 
-## Important limitations
-- Browser geolocation requires HTTPS (or localhost) and explicit user permission.
-- NASA GIBS imagery is not uniformly live; many products are daily or delayed and can be missing for the newest date.
-- Open-Meteo current conditions are weather-model output, not direct satellite observations.
-- NOAA/NWS alerts and forecast endpoints cover the United States; they are not a global warning service.
-- GOES, Himawari, Meteosat/MTG, INSAT and other satellite missions need separate product endpoints, formats, coverage logic and licensing review. A source catalogue is not proof of a live connection.
-- Never use this site as the sole source for emergency decisions. Follow local meteorological authorities.
+Browser geolocation requires HTTPS (or localhost) and explicit user permission. Standard OpenStreetMap public tiles are not an unlimited production CDN. RainViewer free radar access is intended for limited personal / educational use and has incomplete coverage. Restrict backend CORS to the exact production frontend origin before public production. Set a monitored contact in `EARTH_WEATHER_USER_AGENT` before using NOAA/NWS endpoints.
 
-## Deployment
-A Render Blueprint is provided in `render.yaml`. Review the service settings and set a real `EARTH_WEATHER_USER_AGENT` contact value before relying on NOAA/NWS requests. Deploy the frontend as a static Vite site and the backend as a separate Python service. Configure the frontend API URL and restrict backend CORS to the exact production domain.
+**Not for emergency use.** Always follow official local meteorological authorities and warning bulletins.
