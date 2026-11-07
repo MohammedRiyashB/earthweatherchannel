@@ -916,3 +916,19 @@
  .footer-group h3{font-size:12px}
  .footer-group button,.footer-group span{font-size:13px}
 }
+
+
+/* Light monochrome footer theme */
+.news-footer{
+ background:#FFFFFF;
+ color:#111111;
+}
+.news-footer .footer-brand{color:#111111}
+.news-footer .footer-brand span{color:#555555}
+.news-footer .footer-group h3{color:#111111}
+.news-footer .footer-group button,
+.news-footer .footer-group span{color:#111111}
+.news-footer .footer-group button:hover{color:#444444}
+.news-footer .footer-copyright{color:#555555}
+.news-footer .footer-copyright strong{color:#111111}
+.news-footer .footer-navigation{border-color:#DDDDDD}
