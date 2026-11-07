@@ -529,9 +529,9 @@ private fun EarthWeatherApp(
     Scaffold(containerColor = NightBg) { padding ->
         when (tab) {
             "Weather" -> WeatherScreen(state, place, Modifier.padding(padding), celsius, onRefresh, onTab, onSwipeCity)
-            "Forecast" -> ForecastScreen(state, place, Modifier.padding(padding), celsius)
+            "Forecast" -> ForecastScreen(state, place, Modifier.padding(padding), celsius, { onTab("Weather") })
             "Cities" -> CitiesScreen(place, savedCities, query, onQuery, results, searching, searchError, Modifier.padding(padding), onSelect, onSave, onRemove, onSearch, onDetectLocation, { onTab("Weather") })
-            "Radar" -> RadarScreen(state, place, Modifier.padding(padding))
+            "Radar" -> RadarScreen(state, place, Modifier.padding(padding), { onTab("Weather") })
             "LiveNotifications" -> LiveNotificationSettingsScreen(
                 place, savedCities, liveWeatherEnabled, onLiveWeather, onSelect, Modifier.padding(padding), { onTab("Settings") }
             )
@@ -800,10 +800,10 @@ private fun MoonInfoCard() {
 }
 
 @Composable
-private fun ForecastScreen(state: DashboardState, place: WeatherPlace?, modifier: Modifier, celsius: Boolean) {
+private fun ForecastScreen(state: DashboardState, place: WeatherPlace?, modifier: Modifier, celsius: Boolean, onBack: () -> Unit) {
     var showChart by remember { mutableStateOf(false) }
     Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp)) {
-        ScreenTitle("Forecast", place?.name ?: "Selected location")
+        ScreenTitle("Forecast", place?.name ?: "Selected location", onBack)
         SectionHeader("HOURLY FORECAST", "48 hours")
         HourlyStrip(state.hourly.take(48), celsius)
         Spacer(Modifier.height(22.dp))
@@ -969,7 +969,7 @@ private fun DarkCityCard(place: WeatherPlace, selected: Boolean, actionLabel: St
 }
 
 @Composable
-private fun RadarScreen(state: DashboardState, place: WeatherPlace?, modifier: Modifier) {
+private fun RadarScreen(state: DashboardState, place: WeatherPlace?, modifier: Modifier, onBack: () -> Unit) {
     val frames = state.radar?.frames.orEmpty()
     var frameIndex by remember(frames.size) { mutableIntStateOf((frames.size - 1).coerceAtLeast(0)) }
     var playing by remember(frames.size) { mutableStateOf(false) }
@@ -981,7 +981,7 @@ private fun RadarScreen(state: DashboardState, place: WeatherPlace?, modifier: M
         }
     }
     Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp)) {
-        ScreenTitle("Rain & radar", place?.name ?: "Weather monitoring")
+        ScreenTitle("Rain & radar", place?.name ?: "Weather monitoring", onBack)
         if (selectedFrame != null && place != null && !state.radar?.host.isNullOrBlank()) {
             Card(shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFF0D2736))) {
                 Column(Modifier.fillMaxWidth().padding(12.dp)) {
@@ -1287,10 +1287,15 @@ private fun pressureUnitLabel(unit: String): String = when(unit) {
 private fun visibilityUnitLabel(unit: String): String = if (unit == "mi") "Miles (mi)" else "Kilometres (km)"
 
 @Composable
-private fun ScreenTitle(title: String, subtitle: String) {
-    Column(Modifier.padding(top = 20.dp, bottom = 18.dp)) {
-        Text(title, color = Ink, fontSize = 26.sp, fontFamily = FontFamily.Cursive)
-        Text(subtitle, color = Muted, fontSize = 12.sp)
+private fun ScreenTitle(title: String, subtitle: String, onBack: (() -> Unit)? = null) {
+    Row(Modifier.fillMaxWidth().padding(top = 20.dp, bottom = 18.dp), verticalAlignment = Alignment.CenterVertically) {
+        if (onBack != null) {
+            Text("‹", color = Ink, fontSize = 34.sp, modifier = Modifier.clickable { onBack() }.padding(end = 14.dp))
+        }
+        Column {
+            Text(title, color = Ink, fontSize = 26.sp, fontFamily = FontFamily.Cursive)
+            Text(subtitle, color = Muted, fontSize = 12.sp)
+        }
     }
 }
 
