@@ -202,3 +202,10 @@ button,input,a{-webkit-tap-highlight-color:transparent}button:focus-visible,inpu
  .location-city-pill.current{min-height:49px}
  .location-picker-section.world{margin-top:38px}
 }
+
+.masthead-actions button.masthead-account-button{
+  background:var(--ew-blue)!important;
+  color:#fff!important;
+  border-color:var(--ew-blue)!important;
+}
+.masthead-actions button.masthead-account-button:hover{background:var(--ew-deep)!important}
