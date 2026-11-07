@@ -808,3 +808,65 @@
 @media(prefers-reduced-motion:reduce){
   .weather-scene .weather-sky-art i{transform:none!important;filter:none}
 }
+
+
+/* Mobile scroll performance: animate only weather scenes close to the viewport. */
+.weather-scene .weather-sky-art::before,
+.weather-scene .weather-sky-art::after,
+.weather-scene .weather-sky-art i{
+  animation-play-state:paused!important;
+}
+.weather-scene.weather-anim-active .weather-sky-art::before,
+.weather-scene.weather-anim-active .weather-sky-art::after,
+.weather-scene.weather-anim-active .weather-sky-art i{
+  animation-play-state:running!important;
+}
+.weather-scene .weather-sky-art i{
+  will-change:auto;
+  filter:blur(3px);
+}
+.weather-scene.weather-anim-active .weather-sky-art i{
+  will-change:transform;
+}
+.weather-scene.weather-anim-active .weather-sky-art::before,
+.weather-scene.weather-anim-active .weather-sky-art::after{
+  will-change:transform,opacity;
+}
+.weather-scene .weather-sky-art i:nth-child(2){filter:blur(4px)}
+.weather-scene .weather-sky-art i:nth-child(3){filter:blur(3px)}
+.weather-scene.scene-overcast .weather-sky-art i{filter:blur(4px)}
+.weather-scene.scene-rain .weather-sky-art i,
+.weather-scene.scene-thunder .weather-sky-art i{filter:blur(4px)}
+.weather-scene.scene-thunder .weather-sky-art i{filter:blur(5px) brightness(.82)}
+.weather-scene.scene-snow .weather-sky-art i{filter:blur(4px)}
+.weather-scene.scene-fog .weather-sky-art i{filter:blur(5px)}
+.weather-scene.scene-fog .weather-sky-art::after{filter:blur(5px)}
+.weather-scene .weather-sky-art i{
+  contain:layout paint;
+}
+.city-card{
+  content-visibility:auto;
+  contain-intrinsic-size:auto 245px;
+}
+@keyframes earthSunGlow{
+  0%,100%{opacity:.82;transform:translate3d(0,0,0) scale(.98)}
+  50%{opacity:1;transform:translate3d(0,-1px,0) scale(1.025)}
+}
+@keyframes moonGlow{
+  0%,100%{opacity:.9;transform:scale(.99)}
+  50%{opacity:1;transform:scale(1.015)}
+}
+@keyframes thunderGlow{
+  0%,91%,94%,100%{opacity:.3}
+  92%,93%{opacity:.62}
+}
+@media(max-width:620px){
+  .weather-scene .weather-sky-art i{filter:blur(2.5px)}
+  .weather-scene .weather-sky-art i:nth-child(2){filter:blur(3px)}
+  .weather-scene.scene-fog .weather-sky-art::after{filter:blur(4px)}
+}
+@media(prefers-reduced-motion:reduce){
+  .weather-scene .weather-sky-art::before,
+  .weather-scene .weather-sky-art::after,
+  .weather-scene .weather-sky-art i{animation:none!important;will-change:auto!important}
+}
