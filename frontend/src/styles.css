@@ -63,3 +63,45 @@
 .local-weather-foot{font-size:8px;color:#8a969e;margin-top:12px}
 .local-weather-prompt{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:14px;background:#f4f7f8;padding:14px;color:#687984;font-size:11px;line-height:1.5}
 @media(max-width:620px){.local-weather-card{padding:16px 14px;margin-top:18px}.local-weather-heading h2{font-size:17px}.local-weather-heading p{font-size:9px;max-width:205px}.location-refresh,.local-weather-prompt button{padding:9px 10px;font-size:9px}.local-weather-place{padding:12px}.local-weather-place h3{font-size:18px}.local-temperature strong{font-size:29px}.local-weather-stats{gap:7px}.local-weather-stats>div{padding:10px 8px}.local-weather-stats span{font-size:9px}.local-weather-stats strong{font-size:16px}.local-weather-prompt{align-items:flex-start;flex-direction:column}}
+
+
+/* Live animated weather scenes — driven by each location's actual weather code and cloud cover */
+.weather-scene{position:relative;isolation:isolate;overflow:hidden;transition:background 500ms ease,border-color 500ms ease}
+.weather-scene>*:not(.weather-sky-art){position:relative;z-index:2}
+.weather-sky-art{position:absolute!important;z-index:0!important;inset:0;overflow:hidden;pointer-events:none;opacity:.9}
+.weather-sky-art i{position:absolute;display:block;border-radius:999px}
+.weather-scene.scene-clear{background:linear-gradient(145deg,#b9e6f8 0%,#d8f1f9 46%,#fff1c9 100%);border-color:#b8d9e8}
+.weather-scene.scene-clear .weather-sky-art:before{content:"";position:absolute;width:82px;height:82px;right:12%;top:12%;border-radius:50%;background:radial-gradient(circle,#fff8c8 0 28%,#ffe78a 30% 48%,#ffdc6b22 70%);box-shadow:0 0 38px 16px #ffe48b88;animation:sunPulse 5s ease-in-out infinite}
+.weather-scene.scene-partly{background:linear-gradient(145deg,#a9d8f2,#e1f1f8 65%,#f8f3df);border-color:#c5dce7}
+.weather-scene.scene-partly .weather-sky-art:before,.weather-scene.scene-overcast .weather-sky-art:before,.weather-scene.scene-rain .weather-sky-art:before,.weather-scene.scene-thunder .weather-sky-art:before,.weather-scene.scene-snow .weather-sky-art:before,.weather-scene.scene-fog .weather-sky-art:before{content:"";position:absolute;width:95px;height:30px;right:8%;top:24%;border-radius:30px;background:#fff;box-shadow:18px -15px 0 2px #fff,39px -3px 0 -1px #fff;filter:drop-shadow(0 7px 8px #4d789222);animation:cloudDrift 13s ease-in-out infinite}
+.weather-scene.scene-partly .weather-sky-art:after{content:"";position:absolute;width:52px;height:52px;right:21%;top:12%;border-radius:50%;background:#ffdc75;box-shadow:0 0 28px #ffdf8b;animation:sunPulse 5s ease-in-out infinite}
+.weather-scene.scene-overcast{background:linear-gradient(145deg,#b9cbd5,#e4eaed 70%,#d2dfe5);border-color:#cbd6dc}
+.weather-scene.scene-overcast .weather-sky-art i:nth-child(1),.weather-scene.scene-fog .weather-sky-art i:nth-child(1){width:115px;height:27px;right:12%;top:34%;background:#fff;box-shadow:17px -13px 0 3px #fff,40px -3px 0 #fff;animation:cloudDrift 17s ease-in-out infinite}
+.weather-scene.scene-overcast .weather-sky-art i:nth-child(2){width:100px;height:25px;right:35%;top:60%;background:#d9e4e9;box-shadow:16px -12px 0 2px #d9e4e9,38px -2px 0 #d9e4e9;animation:cloudDrift 22s ease-in-out infinite reverse}
+.weather-scene.scene-rain{background:linear-gradient(145deg,#9bb8ca,#d4e1e8 75%,#bdced9);border-color:#c0d1dc}
+.weather-scene.scene-rain .weather-sky-art:after,.weather-scene.scene-thunder .weather-sky-art:after{content:"";position:absolute;inset:0;background:repeating-linear-gradient(108deg,transparent 0 18px,#ffffff80 19px,#ffffff80 20px,transparent 21px 35px);opacity:.45;animation:rainFall .7s linear infinite}
+.weather-scene.scene-rain .weather-sky-art i,.weather-scene.scene-thunder .weather-sky-art i{width:110px;height:29px;right:10%;top:20%;background:#edf5f8;box-shadow:18px -15px 0 3px #edf5f8,43px -4px 0 #edf5f8;animation:cloudDrift 9s ease-in-out infinite}
+.weather-scene.scene-thunder{background:linear-gradient(145deg,#526b85,#9baebe 75%,#778fa3);border-color:#9aabba}
+.weather-scene.scene-thunder .weather-sky-art:before{content:"";position:absolute;inset:0;background:linear-gradient(110deg,transparent 40%,#fff8 48%,transparent 52%);opacity:0;animation:lightningFlash 6s linear infinite}
+.weather-scene.scene-snow{background:linear-gradient(145deg,#b7d4e8,#edf5fa 75%,#d4e5f0);border-color:#c9dce8}
+.weather-scene.scene-snow .weather-sky-art:after{content:"❄   ·   ❅    ·   ❄";position:absolute;inset:8% 0 auto;text-align:center;font-size:23px;letter-spacing:24px;color:#fff;animation:snowFloat 7s linear infinite}
+.weather-scene.scene-fog{background:linear-gradient(145deg,#c1cdd2,#eef1f1 65%,#dce4e7);border-color:#d4dcdf}
+.weather-scene.scene-fog .weather-sky-art:after{content:"";position:absolute;left:-20%;right:-20%;top:55%;height:24px;background:#fff9;filter:blur(8px);box-shadow:0 -28px 12px #fff7,0 28px 12px #fff7;animation:fogSlide 9s ease-in-out infinite alternate}
+.city-card{min-height:202px}
+.city-card .weather-sky-art{opacity:.52}
+.city-card .city-top,.city-card .city-temp,.city-card .city-condition,.city-card .city-stats,.city-card .city-observed,.city-card .city-loading{position:relative;z-index:2}
+.city-card .city-top small,.city-card .city-condition,.city-card .city-stats span,.city-card .city-observed{color:#536d7b}
+.city-card .city-top h3,.city-card .city-stats b{color:#203e50}
+.city-card .city-temp{color:#145777}
+.local-weather-place{min-height:130px}
+.local-weather-place .weather-sky-art{opacity:.68}
+.local-weather-place.scene-clear,.local-weather-place.scene-partly{color:#203e50}
+.local-weather-place .local-temperature,.local-weather-place>div{position:relative;z-index:2}
+.local-weather-place .local-live-indicator{color:#286e56}
+@keyframes cloudDrift{0%,100%{transform:translateX(0)}50%{transform:translateX(-17px)}}
+@keyframes sunPulse{0%,100%{transform:scale(.96);opacity:.88}50%{transform:scale(1.06);opacity:1}}
+@keyframes rainFall{from{background-position:0 0}to{background-position:-18px 42px}}
+@keyframes lightningFlash{0%,89%,93%,100%{opacity:0}90%,92%{opacity:.75}}
+@keyframes snowFloat{0%{transform:translateY(-12px)}100%{transform:translateY(65px)}}
+@keyframes fogSlide{from{transform:translateX(-18px);opacity:.45}to{transform:translateX(18px);opacity:.9}}
+@media(prefers-reduced-motion:reduce){.weather-sky-art,.weather-sky-art *{animation:none!important}}
