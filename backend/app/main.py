@@ -121,6 +121,77 @@ async def weather(
     except (httpx.HTTPError, ValueError) as exc:
         raise HTTPException(status_code=502, detail=f"Weather provider unavailable: {exc.__class__.__name__}") from exc
 
+
+# Public Nominatim reverse-geocoding: one request at a time, cached by nearby coordinates.
+_reverse_location_cache: dict[tuple[float, float], tuple[float, dict[str, Any]]] = {}
+_reverse_location_lock = asyncio.Lock()
+_last_reverse_location_request = 0.0
+
+@app.get("/api/location/reverse")
+async def reverse_location(
+    latitude: float = Query(..., ge=-90, le=90),
+    longitude: float = Query(..., ge=-180, le=180),
+) -> dict[str, Any]:
+    """Resolve GPS coordinates to the closest mapped town, village or settlement."""
+    global _last_reverse_location_request
+    cache_key = (round(latitude, 3), round(longitude, 3))
+    async with _reverse_location_lock:
+        cached = _reverse_location_cache.get(cache_key)
+        now = asyncio.get_running_loop().time()
+        if cached and cached[0] > now:
+            return cached[1]
+
+        # Respect the public Nominatim service's one-request-per-second application limit.
+        elapsed = now - _last_reverse_location_request
+        if elapsed < 1.1:
+            await asyncio.sleep(1.1 - elapsed)
+
+        params = {
+            "format": "jsonv2",
+            "lat": latitude,
+            "lon": longitude,
+            "zoom": 16,
+            "addressdetails": 1,
+        }
+        headers = {
+            "User-Agent": "EARTH-WEATHER/1.0 (+https://earthweatherchannel.web.app)",
+            "Referer": "https://earthweatherchannel.web.app/",
+            "Accept-Language": "en",
+        }
+        _last_reverse_location_request = asyncio.get_running_loop().time()
+        try:
+            async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
+                response = await client.get(
+                    "https://nominatim.openstreetmap.org/reverse",
+                    params=params,
+                    headers=headers,
+                )
+                response.raise_for_status()
+                payload = response.json()
+        except (httpx.HTTPError, ValueError) as exc:
+            raise HTTPException(status_code=502, detail="Nearby place lookup is temporarily unavailable") from exc
+
+        address = payload.get("address") or {}
+        place_name = (
+            address.get("village") or address.get("hamlet") or address.get("town")
+            or address.get("city") or address.get("municipality")
+            or address.get("suburb") or address.get("city_district")
+            or address.get("county") or address.get("state_district")
+            or address.get("state") or payload.get("name") or "Nearby area"
+        )
+        state = address.get("state") or address.get("region")
+        country = address.get("country")
+        region = ", ".join(part for part in (state, country) if part and part != place_name)
+        result = {
+            "name": place_name,
+            "region": region or country or "GPS location",
+            "source": "OpenStreetMap Nominatim",
+            "attribution": "© OpenStreetMap contributors",
+            "retrieved_at": utc_now(),
+        }
+        _reverse_location_cache[cache_key] = (asyncio.get_running_loop().time() + 30 * 24 * 60 * 60, result)
+        return result
+
 @app.get("/api/wind-grid")
 async def wind_grid() -> dict[str, Any]:
     """15-degree global model sample for large-scale near-surface wind and cloud visualization."""
