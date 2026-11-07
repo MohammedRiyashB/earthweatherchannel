@@ -105,3 +105,11 @@
 @keyframes snowFloat{0%{transform:translateY(-12px)}100%{transform:translateY(65px)}}
 @keyframes fogSlide{from{transform:translateX(-18px);opacity:.45}to{transform:translateX(18px);opacity:.9}}
 @media(prefers-reduced-motion:reduce){.weather-sky-art,.weather-sky-art *{animation:none!important}}
+
+
+/* Location-aware city report groups */
+.city-report-groups{display:flex;flex-direction:column;gap:20px}
+.city-report-group{min-width:0}
+.city-group-heading{display:flex;align-items:center;gap:10px;margin:0 0 11px;padding:0 0 9px;border-bottom:1px solid #dce4e9;color:#29495d;font-size:11px;font-weight:800;letter-spacing:.8px;text-transform:uppercase}
+.city-group-heading:after{content:"";height:1px;flex:1;background:#e7edf0}
+@media(max-width:620px){.city-report-groups{gap:16px}.city-group-heading{font-size:10px}}
