@@ -247,7 +247,7 @@ export default function App() {
           <button className={cloudOn?"active":""} onClick={()=>setCloudOn(v=>!v)}>☁ <span>CLOUD</span></button><button className={rainOn?"active":""} onClick={()=>setRainOn(v=>!v)}>☂ <span>RAIN</span></button>
           <button onClick={()=>viewer.current?.camera.flyHome(2)}>◎ <span>GLOBAL</span></button>
         </div>
-        {windOn&&<div className="layer-legend wind-legend">WIND FLOW · 10 m MODEL · 30° GRID</div>}
+        {windOn&&<div className="layer-legend wind-legend">WIND FLOW · 10 m MODEL · 15° GRID</div>}
         {cloudOn&&<div className="layer-legend cloud-legend">CLOUD COVER · MODEL FIELD · ADVECTED VISUAL LAYER</div>}
         {selectedSatellite==="VIIRS"&&<div className="history-timeline">
           <div><b>HISTORICAL SATELLITE PLAYBACK</b><span>{dateUTC(historyOffset)} · VIIRS DAILY</span></div>
