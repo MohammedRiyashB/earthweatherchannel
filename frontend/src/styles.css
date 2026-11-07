@@ -23,3 +23,17 @@
 .feed-note{font-size:9px;line-height:1.65;color:#83919a;margin:12px 0 0}
 .city-observed{font-size:8px;color:#9aa5ad;margin-top:9px}
 @media(max-width:760px){.headline-grid{grid-template-columns:1fr}.headline-card{min-height:unset}.brand-symbol{width:45px;height:45px}.brand-symbol .brand-orbit{font-size:40px}.brand-symbol .brand-ew{font-size:17px}}
+
+
+/* Official EARTH WEATHER wordmark */
+.brand-lockup{gap:0;min-width:0;flex:0 1 auto}
+.brand-wordmark{display:block;width:315px;height:auto;max-width:100%;object-fit:contain}
+@media(max-width:900px){.brand-wordmark{width:270px}}
+@media(max-width:620px){
+  .masthead{padding:0 10px;gap:8px}
+  .brand-wordmark{width:clamp(132px,43vw,180px)}
+  .brand-lockup{flex:0 1 auto}
+  .masthead-actions{gap:5px;flex:none}
+  .masthead-actions button{padding:8px 8px;font-size:9px}
+  .masthead-actions button:first-child{max-width:86px;white-space:normal;line-height:1.2}
+}
