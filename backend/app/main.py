@@ -16,6 +16,7 @@ app.add_middleware(
 
 SOURCES = [
     {"id":"nasa-gibs","name":"NASA GIBS / VIIRS","kind":"satellite imagery","coverage":"Global (product-dependent)","status":"connected","update":"Daily / product-dependent","note":"Public imagery tile service. Latest available acquisition can lag; current-date tiles may be empty."},
+    {"id":"rainviewer","name":"RainViewer radar","kind":"precipitation radar tiles","coverage":"Patchy global radar network","status":"connected","update":"Past frames; refreshed about every 10 minutes","note":"Personal / educational use only under free terms; historical radar frames only, no free nowcast after the 2026 API change. Attribution required."},
     {"id":"open-meteo","name":"Open-Meteo","kind":"weather model API","coverage":"Global","status":"connected","update":"Model-dependent; typically updated several times daily","note":"Provides model-based current conditions and forecasts; not a direct satellite observation."},
     {"id":"osm","name":"OpenStreetMap","kind":"map basemap","coverage":"Global","status":"connected","update":"Community maintained","note":"Attribution required. Standard public tile servers have a usage policy and are not an unlimited production CDN."},
     {"id":"noaa-nws","name":"NOAA / NWS API","kind":"official forecasts and alerts","coverage":"United States","status":"available-us-only","update":"Operational API","note":"Official US weather forecasts, observations and alerts; not a global alert feed."},
@@ -77,3 +78,23 @@ async def alerts(
             return response.json()
     except httpx.HTTPError as exc:
         raise HTTPException(status_code=502, detail="NOAA/NWS alert service unavailable") from exc
+
+
+@app.get("/api/radar")
+async def radar() -> dict[str, Any]:
+    """Return RainViewer's currently available past radar frames (no nowcast)."""
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            response = await client.get("https://api.rainviewer.com/public/weather-maps.json")
+            response.raise_for_status()
+            payload = response.json()
+            radar_data = payload.get("radar", {})
+            return {
+                "source": "RainViewer",
+                "host": payload.get("host"),
+                "generated": payload.get("generated"),
+                "frames": radar_data.get("past", []),
+                "note": "Past radar frames only. Coverage is incomplete and transparent tiles mean no radar return / no coverage, not guaranteed dry weather."
+            }
+    except (httpx.HTTPError, ValueError) as exc:
+        raise HTTPException(status_code=502, detail="RainViewer radar metadata unavailable") from exc
