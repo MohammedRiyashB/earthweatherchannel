@@ -17,7 +17,7 @@ const CITIES:Place[]=[
 ];
 
 const CACHE_PREFIX="earth-weather-v3:";
-function readCache<T>(key:string,fallback:T):T{try{const raw=localStorage.getItem(CACHE_PREFIX+key);if(!raw)return fallback;const parsed=JSON.parse(raw);return parsed?.value??fallback;}catch{return fallback;}}
+function readCache<T>(key:string,fallback:T):T{try{const raw=localStorage.getItem(CACHE_PREFIX+key);if(!raw)return fallback;const parsed=JSON.parse(raw);if(!parsed?.savedAt||Date.now()-parsed.savedAt>6*60*60*1000){localStorage.removeItem(CACHE_PREFIX+key);return fallback;}return parsed?.value??fallback;}catch{return fallback;}}
 function writeCache<T>(key:string,value:T){try{localStorage.setItem(CACHE_PREFIX+key,JSON.stringify({value,savedAt:Date.now()}));}catch{/* storage may be unavailable or full */}}
 const weatherLabel=(c?:number)=>c==null?"Weather update":c===0?"Clear skies":[1,2,3].includes(c)?"Partly cloudy":[45,48].includes(c)?"Foggy":[51,53,55,56,57].includes(c)?"Drizzle":[61,63,65,66,67,80,81,82].includes(c)?"Rain":[71,73,75,77,85,86].includes(c)?"Snow":[95,96,99].includes(c)?"Thunderstorms":"Variable conditions";
 const weatherScene=(c?:number,cloud?:number)=>{
@@ -83,7 +83,7 @@ const [section,setSection]=useState("Weather Report");const [page,setPage]=useSt
     .then(placeData=>{
      if(requestVersion!==locationRequestVersion.current)return;
      const visitor:Place={name:placeData?.name||"Nearby area",region:placeData?.region||placeData?.country||"GPS location",lat,lon,country:placeData?.country||undefined,country_code:placeData?.country_code||undefined};
-     setLocal(prev=>prev&&prev.lat===lat&&prev.lon===lon?{...prev,...visitor,current:prev.current}:prev);
+     setLocal(prev=>{const next=prev&&prev.lat===lat&&prev.lon===lon?{...prev,...visitor,current:prev.current}:prev;if(next)writeCache("local",next);return next;});
      if(visitor.country)setVisitorLocation(visitor);
     })
     .catch(()=>{/* GPS coordinates and weather remain usable without a resolved town name. */});
@@ -158,7 +158,7 @@ const [section,setSection]=useState("Weather Report");const [page,setPage]=useSt
  useEffect(()=>{
   if(!local)return;
   const {lat,lon,name,region}=local;
-  const refreshLocal=async()=>{try{const r=await fetch(`${API}/api/weather?latitude=${lat}&longitude=${lon}`,{cache:"no-store"});if(!r.ok)throw new Error("Weather API unavailable");const d=await r.json();setLocal(prev=>prev?{...prev,name,region,lat,lon,current:d.current||prev.current}:prev);}catch{/* retain the last good location report */}};
+  const refreshLocal=async()=>{try{const r=await fetch(`${API}/api/weather?latitude=${lat}&longitude=${lon}`,{cache:"no-store"});if(!r.ok)throw new Error("Weather API unavailable");const d=await r.json();setLocal(prev=>{const next=prev?{...prev,name,region,lat,lon,current:d.current||prev.current}:prev;if(next)writeCache("local",next);return next;});}catch{/* retain the last good location report */}};
   void refreshLocal();
   const id=window.setInterval(()=>void refreshLocal(),60*1000);
   return()=>window.clearInterval(id);
@@ -201,7 +201,7 @@ const [section,setSection]=useState("Weather Report");const [page,setPage]=useSt
    </section>
 
    <section className="lead-grid">
-    <aside className="top-brief"><div className="section-heading"><h2>Weather briefing</h2><span>GLOBAL</span></div>{hottest&&<div className="brief-highlight"><small>WARMEST IN THIS CITY WATCHLIST</small><b>{hottest.name}</b><strong>{Math.round(hottest.current?.temperature_2m??0)}°C</strong><span>{weatherLabel(hottest.current?.weather_code)}</span></div>}<div className="brief-line"><span>Active severe-storm events</span><b>{storms.length}</b></div><div className="brief-line"><span>Reporting locations</span><b>{active.length}/{cities.length}</b></div><div className="brief-line"><span>Weather headlines</span><b>{indiaNews.length+worldNews.length}</b></div><div className="brief-line"><span>Auto refresh</span><b>{busy?"Updating":visitorLocation?"Every 5 minutes":"Global fallback"}</b></div><button className="refresh-button" onClick={()=>{if(visitorLocation)void refreshWeather(visitorLocation);else void refreshPopularCities();void refreshFeeds()}} disabled={busy}>{busy?"Refreshing…":"↻ Refresh live reports"}</button></aside>
+    <aside className="top-brief"><div className="section-heading"><h2>Weather briefing</h2><span>GLOBAL</span></div>{hottest&&<div className="brief-highlight"><small>WARMEST IN CURRENT CITY REPORTS</small><b>{hottest.name}</b><strong>{Math.round(hottest.current?.temperature_2m??0)}°C</strong><span>{weatherLabel(hottest.current?.weather_code)}</span></div>}<div className="brief-line"><span>Active severe-storm events</span><b>{storms.length}</b></div><div className="brief-line"><span>Reporting locations</span><b>{active.length}/{cities.length}</b></div><div className="brief-line"><span>Weather headlines</span><b>{indiaNews.length+worldNews.length}</b></div><div className="brief-line"><span>Auto refresh</span><b>{busy?"Updating":visitorLocation?"Every 5 minutes":"Global fallback"}</b></div><button className="refresh-button" onClick={()=>{if(visitorLocation)void refreshWeather(visitorLocation);else void refreshPopularCities();void refreshFeeds()}} disabled={busy}>{busy?"Refreshing…":"↻ Refresh live reports"}</button></aside>
    </section>
    <section className="section-block">
     <div className="section-heading">
