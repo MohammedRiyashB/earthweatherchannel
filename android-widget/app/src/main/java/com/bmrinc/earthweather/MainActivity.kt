@@ -104,6 +104,8 @@ class MainActivity : ComponentActivity() {
     private var notificationsEnabled by mutableStateOf(false)
     private var rainRemindersEnabled by mutableStateOf(false)
     private var rainThreshold by mutableIntStateOf(60)
+    private var rainStartHour by mutableIntStateOf(7)
+    private var rainEndHour by mutableIntStateOf(22)
     private var morningBriefingEnabled by mutableStateOf(false)
     private var morningBriefingHour by mutableIntStateOf(7)
     private var refreshInProgress = false
@@ -156,6 +158,9 @@ class MainActivity : ComponentActivity() {
                     onRainReminders = { setRainReminders(it) },
                     rainThreshold = rainThreshold,
                     onRainThreshold = { rainThreshold = it; getSharedPreferences("earth_weather_app", MODE_PRIVATE).edit().putInt("rain_threshold", it).apply(); getSharedPreferences("earth_weather", MODE_PRIVATE).edit().putInt("rain_probability_threshold", it).apply() },
+                    rainStartHour = rainStartHour,
+                    rainEndHour = rainEndHour,
+                    onRainWindow = { start, end -> rainStartHour = start; rainEndHour = end; getSharedPreferences("earth_weather_app", MODE_PRIVATE).edit().putInt("rain_start_hour", start).putInt("rain_end_hour", end).apply(); getSharedPreferences("earth_weather", MODE_PRIVATE).edit().putInt("rain_start_hour", start).putInt("rain_end_hour", end).apply() },
                     morningBriefingEnabled = morningBriefingEnabled,
                     morningBriefingHour = morningBriefingHour,
                     onMorningBriefing = { setMorningBriefing(it) },
@@ -176,6 +181,8 @@ class MainActivity : ComponentActivity() {
         notificationsEnabled = prefs.getBoolean("notifications_enabled", false)
         rainRemindersEnabled = prefs.getBoolean("rain_reminders_enabled", false)
         rainThreshold = prefs.getInt("rain_threshold", 60).coerceIn(40, 90)
+        rainStartHour = prefs.getInt("rain_start_hour", 7).coerceIn(0, 22)
+        rainEndHour = prefs.getInt("rain_end_hour", 22).coerceIn(rainStartHour + 1, 24)
         morningBriefingEnabled = prefs.getBoolean("morning_briefing_enabled", false)
         morningBriefingHour = prefs.getInt("morning_briefing_hour", 7).coerceIn(5, 11)
         try {
@@ -441,7 +448,7 @@ private fun EarthWeatherApp(
     results: List<WeatherPlace>, searching: Boolean, searchError: String,
     savedCities: List<WeatherPlace>, onSelect: (WeatherPlace) -> Unit,
     onSave: (WeatherPlace) -> Unit, onRemove: (WeatherPlace) -> Unit,
-    celsius: Boolean, onUnit: (Boolean) -> Unit, notificationsEnabled: Boolean, onNotifications: (Boolean) -> Unit, rainRemindersEnabled: Boolean, onRainReminders: (Boolean) -> Unit, rainThreshold: Int, onRainThreshold: (Int) -> Unit, morningBriefingEnabled: Boolean, morningBriefingHour: Int, onMorningBriefing: (Boolean) -> Unit, onMorningHour: (Int) -> Unit, onSearch: () -> Unit
+    celsius: Boolean, onUnit: (Boolean) -> Unit, notificationsEnabled: Boolean, onNotifications: (Boolean) -> Unit, rainRemindersEnabled: Boolean, onRainReminders: (Boolean) -> Unit, rainThreshold: Int, onRainThreshold: (Int) -> Unit, rainStartHour: Int, rainEndHour: Int, onRainWindow: (Int, Int) -> Unit, morningBriefingEnabled: Boolean, morningBriefingHour: Int, onMorningBriefing: (Boolean) -> Unit, onMorningHour: (Int) -> Unit, onSearch: () -> Unit
 ) {
     Scaffold(
         containerColor = Page,
@@ -462,7 +469,7 @@ private fun EarthWeatherApp(
             "Forecast" -> ForecastScreen(state, place, Modifier.padding(padding), celsius)
             "Cities" -> CitiesScreen(place, savedCities, query, onQuery, results, searching, searchError, Modifier.padding(padding), onSelect, onSave, onRemove, onSearch, onDetectLocation)
             "Radar" -> RadarScreen(state, place, Modifier.padding(padding))
-            else -> SettingsScreen(celsius, onUnit, notificationsEnabled, onNotifications, rainRemindersEnabled, onRainReminders, rainThreshold, onRainThreshold, morningBriefingEnabled, morningBriefingHour, onMorningBriefing, onMorningHour, Modifier.padding(padding), state)
+            else -> SettingsScreen(celsius, onUnit, notificationsEnabled, onNotifications, rainRemindersEnabled, onRainReminders, rainThreshold, onRainThreshold, rainStartHour, rainEndHour, onRainWindow, morningBriefingEnabled, morningBriefingHour, onMorningBriefing, onMorningHour, Modifier.padding(padding), state)
         }
     }
 }
@@ -840,7 +847,7 @@ setTimeout(()=>map.invalidateSize(),300);
 }
 
 @Composable
-private fun SettingsScreen(celsius: Boolean, onUnit: (Boolean) -> Unit, notificationsEnabled: Boolean, onNotifications: (Boolean) -> Unit, rainRemindersEnabled: Boolean, onRainReminders: (Boolean) -> Unit, rainThreshold: Int, onRainThreshold: (Int) -> Unit, morningBriefingEnabled: Boolean, morningBriefingHour: Int, onMorningBriefing: (Boolean) -> Unit, onMorningHour: (Int) -> Unit, modifier: Modifier, state: DashboardState) {
+private fun SettingsScreen(celsius: Boolean, onUnit: (Boolean) -> Unit, notificationsEnabled: Boolean, onNotifications: (Boolean) -> Unit, rainRemindersEnabled: Boolean, onRainReminders: (Boolean) -> Unit, rainThreshold: Int, onRainThreshold: (Int) -> Unit, rainStartHour: Int, rainEndHour: Int, onRainWindow: (Int, Int) -> Unit, morningBriefingEnabled: Boolean, morningBriefingHour: Int, onMorningBriefing: (Boolean) -> Unit, onMorningHour: (Int) -> Unit, modifier: Modifier, state: DashboardState) {
     Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp)) {
         ScreenTitle("Settings", "Personalise EARTH WEATHER")
         SectionHeader("UNITS", "Temperature")
@@ -885,6 +892,25 @@ private fun SettingsScreen(celsius: Boolean, onUnit: (Boolean) -> Unit, notifica
                     onValueChange = { onRainThreshold(it.toInt().coerceIn(40, 90)) },
                     valueRange = 40f..90f,
                     steps = 9
+                )
+                Spacer(Modifier.height(8.dp))
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("Quiet hours window", color = Muted, fontSize = 11.sp)
+                    Text(String.format("%02d:00–%02d:00", rainStartHour, rainEndHour), color = Sky, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                }
+                Text("Start time", color = Muted, fontSize = 9.sp)
+                Slider(
+                    value = rainStartHour.toFloat(),
+                    onValueChange = { onRainWindow(it.toInt().coerceIn(0, rainEndHour - 1), rainEndHour) },
+                    valueRange = 0f..22f,
+                    steps = 21
+                )
+                Text("End time", color = Muted, fontSize = 9.sp)
+                Slider(
+                    value = rainEndHour.toFloat(),
+                    onValueChange = { onRainWindow(rainStartHour, it.toInt().coerceIn(rainStartHour + 1, 24)) },
+                    valueRange = 1f..24f,
+                    steps = 22
                 )
             }
         }
