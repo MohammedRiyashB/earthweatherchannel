@@ -45,7 +45,7 @@ export default function App(){
  const [indiaNews,setIndiaNews]=useState<Story[]>([]);const [worldNews,setWorldNews]=useState<Story[]>([]);
  const [newsRegion,setNewsRegion]=useState<"india"|"world">("india");
  const [updated,setUpdated]=useState("");const [clock,setClock]=useState(new Date());const [busy,setBusy]=useState(false);const [query,setQuery]=useState("");
-const [section,setSection]=useState("Weather Report");const [isSearchLocation,setIsSearchLocation]=useState(false);
+const [section,setSection]=useState("Weather Report");const [page,setPage]=useState<"home"|"about"|"terms"|"privacy">("home");const [isSearchLocation,setIsSearchLocation]=useState(false);
  const [user,setUser]=useState<User|null>(null);const [notice,setNotice]=useState("");
  const [local,setLocal]=useState<Place|null>(null);
  const [visitorLocation,setVisitorLocation]=useState<Place|null>(null);
@@ -181,7 +181,7 @@ const [section,setSection]=useState("Weather Report");const [isSearchLocation,se
   <div className="breaking-strip"><div className="breaking-label">WEATHER BULLETIN</div><div className="ticker"><span>GLOBAL WEATHER DESK</span><i>•</i><span>LIVE MODEL UPDATES</span><i>•</i><span>INDIA & WORLD WEATHER HEADLINES</span><i>•</i><span>WEATHER CHECK EVERY 60 SECONDS</span></div><div className="utc-clock">{clock.toLocaleTimeString([], {hour:"2-digit",minute:"2-digit",second:"2-digit"})} LOCAL</div></div>
   <header className="masthead"><div className="brand-lockup"><img className="brand-wordmark" src="https://raw.githubusercontent.com/MohammedRiyashB/earthweatherchannel/main/logo.png" alt="EARTH WEATHER" width="1200" height="220" /></div><div className="masthead-center"><span className="on-air"><b/> LIVE WEATHER DESK</span><small>Global reports · Forecasts · Weather headlines</small></div><div className="masthead-actions">{user?<button onClick={()=>void signOut(auth!)}>{user.displayName||"Account"}</button>:<button onClick={()=>void signIn()}>Sign in</button>}</div></header>
   <nav className="news-nav">{["Weather Report","World","Asia","India","Americas","Europe","Africa","Oceania","Satellite","Forecast"].map(x=><button className={section===x?"active":""} key={x} onClick={()=>{setSection(x);if(x==="India"||x==="Asia")setNewsRegion("india");else if(x!=="Weather Report")setNewsRegion("world")}}>{x}</button>)}</nav>
-  <main className="news-main">
+  {page==="home"?<main className="news-main">
    {notice&&<div className="notice">{notice}</div>}
    <div className="news-toolbar"><div><span className="eyebrow">GLOBAL WEATHER COVERAGE</span><h1>Weather around the world</h1><p>Live weather conditions, forecasts and weather-only news from India and around the world.</p></div><form className="search-weather" onSubmit={e=>{e.preventDefault();void search()}}><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search city or region" aria-label="Search city or region"/><button type="submit">Search</button></form></div>
 
@@ -243,6 +243,49 @@ const [section,setSection]=useState("Weather Report");const [isSearchLocation,se
     
    </section>
   </main>
-  <footer className="news-footer"><div className="footer-brand">EARTH WEATHER <span>GLOBAL WEATHER NEWSROOM</span></div><div>Weather reporting only · No general political or entertainment news</div><div>Weather models: Open-Meteo · Events: NASA EONET · Headlines: GDELT publisher index</div></footer>
+  </main>:<main className="news-main info-page">
+   <div className="info-page-brand"><img src="https://raw.githubusercontent.com/MohammedRiyashB/earthweatherchannel/main/logo.png" alt="EARTH WEATHER" /></div>
+   {page==="about"?<article className="info-card">
+    <span className="eyebrow">ABOUT EARTH WEATHER</span>
+    <h1>Weather information for a connected world.</h1>
+    <p className="info-lead">EARTH WEATHER CHANNEL is an independent weather information platform created to make weather conditions, forecasts and weather-related updates easier to access across locations.</p>
+    <div className="founder-panel"><span>FOUNDER OF EARTH WEATHER CHANNEL</span><h2>Mohammed Riyash B</h2><p>Founder · BMR INC.</p></div>
+    <h2>Why we created Earth Weather</h2>
+    <p>Our purpose is to bring useful weather information into one clear place: local conditions, city reports, forecasts, severe-weather information and weather-only headlines. We want people to understand the weather around them and the conditions affecting communities around the world.</p>
+    <h2>Live weather updates</h2>
+    <p>Weather conditions and city reports are retrieved from connected weather data services and refreshed periodically. Forecasts and current conditions are model or provider products; update times and coverage can differ by location and source.</p>
+    <h2>Satellite data and monitoring</h2>
+    <p>Our backend maintains a catalogue of <strong>7 satellite data provider groups</strong>, including public and account-dependent services. This is a catalogue of available data sources and missions—not a claim that seven satellites, or every listed satellite, are directly connected to a live feed. Actual imagery access depends on provider availability, product coverage, permissions and processing.</p>
+    <div className="info-note"><strong>Data transparency</strong><span>We distinguish provider connectivity from actual data retrieval and processing. Satellite imagery is not presented as a direct measurement of every weather value.</span></div>
+    <h2>Our mission</h2>
+    <p>To make timely, understandable weather information more accessible and help people make better-informed everyday decisions about weather and safety.</p>
+    <h2>Our vision</h2>
+    <p>To build a dependable, globally accessible weather information platform that brings together trusted data sources, clear reporting and responsible technology.</p>
+    <p className="info-attribution">EARTH WEATHER CHANNEL · An initiative of BMR INC.</p>
+   </article>:page==="terms"?<article className="info-card">
+    <span className="eyebrow">LEGAL INFORMATION</span><h1>Terms and Conditions</h1>
+    <p className="info-lead">By accessing EARTH WEATHER CHANNEL, you agree to use this website responsibly and in accordance with these terms.</p>
+    <h2>Weather information</h2><p>Weather observations, forecasts, model outputs, satellite products and alerts may be delayed, incomplete or unavailable. They are provided for general information and should not be treated as a substitute for official emergency instructions or professional advice.</p>
+    <h2>Third-party data</h2><p>Some information is supplied by third-party providers. Their coverage, update schedules, availability, attribution and usage conditions may apply independently.</p>
+    <h2>Responsible use</h2><p>Do not misuse the website, interfere with its services, attempt unauthorized access or rely on this platform as the sole source for decisions involving personal safety or property.</p>
+    <h2>Availability and changes</h2><p>We may update, modify or temporarily suspend parts of the website to maintain or improve the service. These terms may also be updated as the platform develops.</p>
+    <h2>Contact</h2><p>For questions about these terms, contact the EARTH WEATHER CHANNEL team through the official contact details published by BMR INC.</p>
+   </article>:<article className="info-card">
+    <span className="eyebrow">YOUR INFORMATION</span><h1>Privacy Policy</h1>
+    <p className="info-lead">This page explains, in general terms, how EARTH WEATHER CHANNEL handles information when you use the website.</p>
+    <h2>Location access</h2><p>If you choose to allow browser location access, your device coordinates are used to request weather for your current area and identify a nearby place. You can deny or revoke location permission in your browser settings and use city search instead.</p>
+    <h2>Account sign-in</h2><p>If you choose Google sign-in, authentication is handled through Firebase Authentication. Google and Firebase may process information under their own privacy terms.</p>
+    <h2>Weather requests and technical data</h2><p>Weather searches and API requests may transmit the requested place or coordinates to the weather services needed to return the report. Hosting and service providers may process standard technical logs for security and operation.</p>
+    <h2>Third-party services</h2><p>The website may use third-party weather, geocoding, news-indexing, satellite-data and authentication services. Their own privacy policies and terms govern their services.</p>
+    <h2>Your choices</h2><p>You can use manual city search without granting location permission, sign out of your account, and manage browser permissions through your device settings.</p>
+    <h2>Policy updates</h2><p>This policy may be revised as the service and its integrations change. The latest version will be published on this page.</p>
+   </article>}
+   <button className="back-home" onClick={()=>{setPage("home");window.scrollTo({top:0,behavior:"smooth"})}}>← Back to Weather</button>
+  </main>}
+  <footer className="news-footer">
+   <div className="footer-column"><div className="footer-brand">EARTH WEATHER <span>GLOBAL WEATHER NEWSROOM</span></div><button onClick={()=>{setPage("about");window.scrollTo({top:0,behavior:"smooth"})}}>About</button><button onClick={()=>{setPage("about");window.scrollTo({top:0,behavior:"smooth"})}}>Our mission &amp; vision</button></div>
+   <div className="footer-legal"><button onClick={()=>{setPage("terms");window.scrollTo({top:0,behavior:"smooth"})}}>Terms and Conditions</button><button onClick={()=>{setPage("privacy");window.scrollTo({top:0,behavior:"smooth"})}}>Privacy Policy</button></div>
+   <div className="footer-copyright">© {new Date().getFullYear()} Earth Weather Channel. All rights reserved. <strong>BMR INC.</strong></div>
+  </footer>
  </div>;
 }
