@@ -13,12 +13,20 @@ app = FastAPI(
     version="0.2.0",
     description="Global atmospheric model fields, satellite metadata, cyclone events and source health.",
 )
+_cors_origins = [
+    origin.strip().rstrip("/")
+    for origin in os.getenv(
+        "CORS_ORIGINS",
+        "https://earthweatherchannel.web.app,https://earthweatherchannel.firebaseapp.com",
+    ).split(",")
+    if origin.strip()
+]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Set CORS_ORIGINS to comma-separated production origins.
+    allow_origins=_cors_origins,
     allow_credentials=False,
     allow_methods=["GET"],
-    allow_headers=["*"],
+    allow_headers=["Accept", "Content-Type"],
 )
 
 from app.cache_middleware import PublicResponseCacheMiddleware
@@ -28,7 +36,7 @@ app.add_middleware(PublicResponseCacheMiddleware)
 
 logger = logging.getLogger("earthweather.weather")
 OPEN_METEO = "https://api.open-meteo.com/v1/forecast"
-_WEATHER_UPSTREAM_SEMAPHORE = asyncio.Semaphore(2)
+_WEATHER_UPSTREAM_SEMAPHORE = asyncio.Semaphore(4)
 EONET_EVENTS = "https://eonet.gsfc.nasa.gov/api/v3/events"
 RAINVIEWER = "https://api.rainviewer.com/public/weather-maps.json"
 NASA_GIBS_CAPABILITIES = "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/1.0.0/WMTSCapabilities.xml"
@@ -136,14 +144,14 @@ async def _request_current_chunk(
 ) -> list[dict[str, Any]]:
     params = _current_weather_params(latitudes, longitudes)
     last_error: Exception | None = None
-    for attempt in range(3):
+    for attempt in range(2):
         try:
             # Limit concurrent upstream calls: the homepage can request many cities at once.
             async with _WEATHER_UPSTREAM_SEMAPHORE:
                 response = await client.get(
                     OPEN_METEO,
                     params=params,
-                    headers={"User-Agent": "EARTH-WEATHER/1.0 (+https://earthweatherchannel.web.app)", "Accept": "application/json"},
+                    headers={"User-Agent": os.getenv("EARTH_WEATHER_USER_AGENT", "EARTH-WEATHER/1.0 (+https://earthweatherchannel.web.app)"), "Accept": "application/json"},
                 )
             response.raise_for_status()
             payload = response.json()
@@ -161,12 +169,12 @@ async def _request_current_chunk(
                 "Open-Meteo upstream failure attempt=%s/3 status=%s error=%s locations=%s",
                 attempt + 1, status_code, exc.__class__.__name__, len(latitudes),
             )
-            if attempt < 2:
+            if attempt < 1:
                 retry_after = None
                 if isinstance(exc, httpx.HTTPStatusError):
                     retry_after = exc.response.headers.get("Retry-After")
                 try:
-                    delay = min(8.0, max(0.8 * (2 ** attempt), float(retry_after))) if retry_after else 0.8 * (2 ** attempt)
+                    delay = min(2.0, max(0.5, float(retry_after))) if retry_after else 0.5
                 except (TypeError, ValueError):
                     delay = 0.8 * (2 ** attempt)
                 await asyncio.sleep(delay)
@@ -204,16 +212,12 @@ async def _fetch_open_meteo_current(client: httpx.AsyncClient, params: dict[str,
             rows = await _request_current_chunk(client, chunk_lats, chunk_lons)
             return chunk, rows
         except RuntimeError:
-            # Retry individual coordinates so one bad upstream batch cannot
-            # prevent otherwise healthy cities from receiving a report.
+            # Never fan out into sequential per-city retries. Use recent cached
+            # reports for this failed chunk and let other chunks finish promptly.
             rows: list[dict[str, Any] | None] = []
             for index in chunk:
-                try:
-                    single = await _request_current_chunk(client, [latitudes[index]], [longitudes[index]])
-                    rows.append(single[0])
-                except RuntimeError:
-                    cached = _current_provider_cache.get((round(latitudes[index], 3), round(longitudes[index], 3)))
-                    rows.append(cached[1] if cached and now - cached[0] <= _CURRENT_STALE_TTL else None)
+                cached = _current_provider_cache.get((round(latitudes[index], 3), round(longitudes[index], 3)))
+                rows.append(cached[1] if cached and now - cached[0] <= _CURRENT_STALE_TTL else None)
             return chunk, rows  # type: ignore[return-value]
 
     loaded_chunks = await asyncio.gather(*(load_chunk(chunk) for chunk in chunks))
@@ -409,7 +413,7 @@ async def weather_bulk(
 
     params = _current_weather_params(lats, lons)
     try:
-        async with httpx.AsyncClient(timeout=35.0, follow_redirects=True) as client:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(14.0, connect=4.0), follow_redirects=True) as client:
             payload = await _fetch_open_meteo_current(client, params)
         rows = payload if isinstance(payload, list) else [payload]
         reports = []
@@ -487,7 +491,7 @@ async def reverse_location(
             "addressdetails": 1,
         }
         headers = {
-            "User-Agent": "EARTH-WEATHER/1.0 (+https://earthweatherchannel.web.app)",
+            "User-Agent": os.getenv("EARTH_WEATHER_USER_AGENT", "EARTH-WEATHER/1.0 (+https://earthweatherchannel.web.app)"),
             "Referer": "https://earthweatherchannel.web.app/",
             "Accept-Language": "en",
         }

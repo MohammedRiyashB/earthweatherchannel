@@ -9,7 +9,9 @@ services:
       - key: PYTHON_VERSION
         value: 3.12.3
       - key: EARTH_WEATHER_USER_AGENT
-        value: "EARTH-WEATHER/0.1 (replace-with-your-monitored-contact)"
+        value: "EARTH-WEATHER/1.0 (+https://earthweatherchannel.web.app)"
+      - key: CORS_ORIGINS
+        value: "https://earthweatherchannel.web.app,https://earthweatherchannel.firebaseapp.com"
 
   - type: web
     name: earth-weather-web
