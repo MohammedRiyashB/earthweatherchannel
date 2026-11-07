@@ -248,6 +248,8 @@ async def reverse_location(
         result = {
             "name": place_name,
             "region": region or country or "GPS location",
+            "country": country,
+            "country_code": (address.get("country_code") or "").upper() or None,
             "source": "OpenStreetMap Nominatim",
             "attribution": "© OpenStreetMap contributors",
             "retrieved_at": utc_now(),
