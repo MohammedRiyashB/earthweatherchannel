@@ -45,7 +45,7 @@ export default function App(){
  const [indiaNews,setIndiaNews]=useState<Story[]>([]);const [worldNews,setWorldNews]=useState<Story[]>([]);
  const [newsRegion,setNewsRegion]=useState<"india"|"world">("india");
  const [updated,setUpdated]=useState("");const [clock,setClock]=useState(new Date());const [busy,setBusy]=useState(false);const [query,setQuery]=useState("");
- const [searchResult,setSearchResult]=useState<Place|null>(null);const [section,setSection]=useState("Weather Report");const [isSearchLocation,setIsSearchLocation]=useState(false);
+const [section,setSection]=useState("Weather Report");const [isSearchLocation,setIsSearchLocation]=useState(false);
  const [user,setUser]=useState<User|null>(null);const [notice,setNotice]=useState("");
  const [local,setLocal]=useState<Place|null>(null);
  const [locationStatus,setLocationStatus]=useState<"locating"|"ready"|"denied"|"error">("locating");
@@ -70,7 +70,7 @@ export default function App(){
     const placeData=placeResponse.ok?await placeResponse.json():null;
     const name=placeData?.name||"Your nearby area";
     const region=placeData?.region||"GPS location";
-    setLocal({name,region,lat,lon,current:weatherData.current||{}});\n    setIsSearchLocation(false);\n    setSearchResult(null);
+    setLocal({name,region,lat,lon,current:weatherData.current||{}});\n    setIsSearchLocation(false);\n    
     setLocationStatus("ready");setLocationMessage("");
    }catch(error){
     setLocationStatus("error");setLocationMessage(error instanceof Error?error.message:"Could not load your local weather.");
