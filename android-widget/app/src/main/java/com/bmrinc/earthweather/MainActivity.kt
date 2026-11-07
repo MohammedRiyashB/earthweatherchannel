@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
+import android.os.Build
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -31,6 +32,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
+import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.PeriodicWorkRequestBuilder
+import androidx.work.WorkManager
+import com.bmrinc.earthweatherwidget.WeatherAlertWorker
+import java.util.concurrent.TimeUnit
 import com.google.android.gms.location.LocationServices
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -70,7 +76,14 @@ class MainActivity : ComponentActivity() {
     private var searchError by mutableStateOf("")
     private var savedCities by mutableStateOf<List<WeatherPlace>>(emptyList())
     private var celsius by mutableStateOf(true)
+    private var notificationsEnabled by mutableStateOf(false)
     private var refreshInProgress = false
+
+    private val notificationPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        notificationsEnabled = granted
+        getSharedPreferences("earth_weather_app", MODE_PRIVATE).edit().putBoolean("notifications_enabled", granted).apply()
+        if (granted) scheduleAlertChecks() else WorkManager.getInstance(this).cancelUniqueWork("earth-weather-alert-checks")
+    }
 
     private val locationPermission = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -93,16 +106,20 @@ class MainActivity : ComponentActivity() {
                     onSelect = { choosePlace(it) }, onSave = { saveCity(it) }, onRemove = { removeCity(it) },
                     celsius = celsius,
                     onUnit = { celsius = it; getSharedPreferences("earth_weather_app", MODE_PRIVATE).edit().putBoolean("celsius", it).apply() },
+                    notificationsEnabled = notificationsEnabled,
+                    onNotifications = { setWeatherNotifications(it) },
                     onSearch = { searchCities(cityQuery) }
                 )
             }
         }
         requestLocation()
+        if (notificationsEnabled) scheduleAlertChecks()
     }
 
     private fun restorePreferences() {
         val prefs = getSharedPreferences("earth_weather_app", MODE_PRIVATE)
         celsius = prefs.getBoolean("celsius", true)
+        notificationsEnabled = prefs.getBoolean("notifications_enabled", false)
         try {
             val array = JSONArray(prefs.getString("saved_cities", "[]") ?: "[]")
             savedCities = (0 until array.length()).mapNotNull { i ->
@@ -254,6 +271,28 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun setWeatherNotifications(enabled: Boolean) {
+        if (!enabled) {
+            notificationsEnabled = false
+            getSharedPreferences("earth_weather_app", MODE_PRIVATE).edit().putBoolean("notifications_enabled", false).apply()
+            WorkManager.getInstance(this).cancelUniqueWork("earth-weather-alert-checks")
+            return
+        }
+        if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+        } else {
+            notificationsEnabled = true
+            getSharedPreferences("earth_weather_app", MODE_PRIVATE).edit().putBoolean("notifications_enabled", true).apply()
+            scheduleAlertChecks()
+        }
+    }
+
+    private fun scheduleAlertChecks() {
+        if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return
+        val request = PeriodicWorkRequestBuilder<WeatherAlertWorker>(1, TimeUnit.HOURS).build()
+        WorkManager.getInstance(this).enqueueUniquePeriodicWork("earth-weather-alert-checks", ExistingPeriodicWorkPolicy.UPDATE, request)
+    }
+
     private fun saveCity(place: WeatherPlace) {
         if (savedCities.none { it.name.equals(place.name, true) && it.countryCode == place.countryCode }) {
             savedCities = savedCities + place
@@ -281,7 +320,7 @@ private fun EarthWeatherApp(
     results: List<WeatherPlace>, searching: Boolean, searchError: String,
     savedCities: List<WeatherPlace>, onSelect: (WeatherPlace) -> Unit,
     onSave: (WeatherPlace) -> Unit, onRemove: (WeatherPlace) -> Unit,
-    celsius: Boolean, onUnit: (Boolean) -> Unit, onSearch: () -> Unit
+    celsius: Boolean, onUnit: (Boolean) -> Unit, notificationsEnabled: Boolean, onNotifications: (Boolean) -> Unit, onSearch: () -> Unit
 ) {
     Scaffold(
         containerColor = Page,
@@ -302,7 +341,7 @@ private fun EarthWeatherApp(
             "Forecast" -> ForecastScreen(state, place, Modifier.padding(padding), celsius)
             "Cities" -> CitiesScreen(place, savedCities, query, onQuery, results, searching, searchError, Modifier.padding(padding), onSelect, onSave, onRemove, onSearch)
             "Radar" -> RadarScreen(state, place, Modifier.padding(padding))
-            else -> SettingsScreen(celsius, onUnit, Modifier.padding(padding), state)
+            else -> SettingsScreen(celsius, onUnit, notificationsEnabled, onNotifications, Modifier.padding(padding), state)
         }
     }
 }
@@ -459,7 +498,7 @@ private fun RadarScreen(state: DashboardState, place: WeatherPlace?, modifier: M
 }
 
 @Composable
-private fun SettingsScreen(celsius: Boolean, onUnit: (Boolean) -> Unit, modifier: Modifier, state: DashboardState) {
+private fun SettingsScreen(celsius: Boolean, onUnit: (Boolean) -> Unit, notificationsEnabled: Boolean, onNotifications: (Boolean) -> Unit, modifier: Modifier, state: DashboardState) {
     Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp)) {
         ScreenTitle("Settings", "Personalise EARTH WEATHER")
         SectionHeader("UNITS", "Temperature")
@@ -472,6 +511,16 @@ private fun SettingsScreen(celsius: Boolean, onUnit: (Boolean) -> Unit, modifier
                 FilterChip(selected = celsius, onClick = { onUnit(true) }, label = { Text("°C") })
                 Spacer(Modifier.width(5.dp))
                 FilterChip(selected = !celsius, onClick = { onUnit(false) }, label = { Text("°F") })
+            }
+        }
+        Spacer(Modifier.height(18.dp))
+        Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp)) {
+            Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Severe weather notifications", color = Ink, fontWeight = FontWeight.SemiBold)
+                    Text("Background checks when an official provider has coverage", color = Muted, fontSize = 10.sp)
+                }
+                Switch(checked = notificationsEnabled, onCheckedChange = onNotifications)
             }
         }
         Spacer(Modifier.height(22.dp)); SectionHeader("DATA & PRIVACY", "About your weather")
