@@ -102,30 +102,41 @@ async def weather(
 
 @app.get("/api/wind-grid")
 async def wind_grid() -> dict[str, Any]:
-    """Coarse global model sample for visualizing large-scale near-surface wind flow."""
-    latitudes = [-60, -30, 0, 30, 60]
-    longitudes = list(range(-180, 180, 30))
-    lats = [lat for lat in latitudes for _ in longitudes]
-    lons = longitudes * len(latitudes)
-    params = {
-        "latitude": ",".join(map(str, lats)),
-        "longitude": ",".join(map(str, lons)),
-        "current": "wind_speed_10m,wind_direction_10m,wind_gusts_10m,cloud_cover,relative_humidity_2m,precipitation",
-        "timezone": "UTC",
-    }
+    """15-degree global model sample for large-scale near-surface wind and cloud visualization."""
+    latitudes = list(range(-60, 61, 15))
+    longitudes = list(range(-180, 180, 15))
+    locations = [(lat, lon) for lat in latitudes for lon in longitudes]
+    chunks = [locations[i:i + 72] for i in range(0, len(locations), 72)]
+    async def fetch_chunk(client: httpx.AsyncClient, chunk: list[tuple[int, int]]) -> list[dict[str, Any]]:
+        params = {
+            "latitude": ",".join(str(p[0]) for p in chunk),
+            "longitude": ",".join(str(p[1]) for p in chunk),
+            "current": "wind_speed_10m,wind_direction_10m,wind_gusts_10m,cloud_cover,relative_humidity_2m,precipitation",
+            "timezone": "UTC",
+        }
+        response = await client.get(OPEN_METEO, params=params)
+        response.raise_for_status()
+        payload = response.json()
+        return payload if isinstance(payload, list) else [payload]
     try:
-        async with httpx.AsyncClient(timeout=25.0) as client:
-            response = await client.get(OPEN_METEO, params=params)
-            response.raise_for_status()
-            payload = response.json()
-        rows = payload if isinstance(payload, list) else [payload]
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            batches = await asyncio.gather(*(fetch_chunk(client, chunk) for chunk in chunks))
         points = []
-        for lat, lon, row in zip(lats, lons, rows):
-            current = row.get("current") or {}
-            speed, direction = current.get("wind_speed_10m"), current.get("wind_direction_10m")
-            if speed is not None and direction is not None:
-                points.append({"lat":lat,"lon":lon,"speed_kmh":speed,"direction_deg":direction,"gust_kmh":current.get("wind_gusts_10m"),"cloud_cover_pct":current.get("cloud_cover"),"humidity_pct":current.get("relative_humidity_2m"),"precipitation_mm":current.get("precipitation")})
-        return {"source":"Open-Meteo global numerical weather models","retrieved_at":utc_now(),"resolution_degrees":30,"points":points,"note":"Coarse global model samples. Particle paths interpolate between samples for visualization; not direct anemometer observations."}
+        for chunk, rows in zip(chunks, batches):
+            for (lat, lon), row in zip(chunk, rows):
+                current = row.get("current") or {}
+                speed, direction = current.get("wind_speed_10m"), current.get("wind_direction_10m")
+                if speed is not None and direction is not None:
+                    points.append({
+                        "lat":lat,"lon":lon,"speed_kmh":speed,"direction_deg":direction,
+                        "gust_kmh":current.get("wind_gusts_10m"),"cloud_cover_pct":current.get("cloud_cover"),
+                        "humidity_pct":current.get("relative_humidity_2m"),"precipitation_mm":current.get("precipitation")
+                    })
+        return {
+            "source":"Open-Meteo global numerical weather models","retrieved_at":utc_now(),
+            "resolution_degrees":15,"points":points,
+            "note":"15-degree coarse global model samples. Animated particles interpolate between model samples; this is not a high-resolution operational analysis or direct station observation."
+        }
     except (httpx.HTTPError, ValueError) as exc:
         raise HTTPException(status_code=502, detail=f"Global wind model unavailable: {exc.__class__.__name__}") from exc
 
