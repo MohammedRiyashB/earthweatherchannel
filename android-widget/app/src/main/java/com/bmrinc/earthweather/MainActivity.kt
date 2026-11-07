@@ -6,6 +6,9 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
+import android.net.Uri
+import android.webkit.WebView
+import android.webkit.WebViewClient
 import android.os.Build
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -38,6 +41,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -60,6 +64,10 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 private val Ink = Color(0xFF172630)
 private val Sky = Color(0xFF087FA3)
@@ -664,18 +672,84 @@ private fun CitiesScreen(
 
 @Composable
 private fun RadarScreen(state: DashboardState, place: WeatherPlace?, modifier: Modifier) {
+    val frames = state.radar?.frames.orEmpty()
+    var frameIndex by remember(frames.size) { mutableIntStateOf((frames.size - 1).coerceAtLeast(0)) }
+    var playing by remember(frames.size) { mutableStateOf(false) }
+    val selectedFrame = frames.getOrNull(frameIndex)
+    LaunchedEffect(playing, frameIndex, frames.size) {
+        if (playing && frames.size > 1) {
+            delay(700)
+            frameIndex = (frameIndex + 1) % frames.size
+        }
+    }
     Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp)) {
         ScreenTitle("Rain & radar", place?.name ?: "Weather monitoring")
-        Card(shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFF0D2736))) {
-            Column(Modifier.fillMaxWidth().padding(20.dp)) {
-                Text("RADAR HISTORY", color = Color(0xFF6BD4E7), fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.4.sp)
-                Spacer(Modifier.height(14.dp))
-                Text((state.radar?.frames ?: 0).toString(), color = Color.White, fontSize = 48.sp, fontWeight = FontWeight.Light)
-                Text("past radar frames available", color = Color.White.copy(alpha = .76f), fontSize = 12.sp)
-                Text(state.radar?.note ?: "Loading radar metadata…", color = Color.White.copy(alpha = .68f), fontSize = 10.sp, lineHeight = 16.sp, modifier = Modifier.padding(top = 12.dp))
+        if (selectedFrame != null && place != null && !state.radar?.host.isNullOrBlank()) {
+            Card(shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFF0D2736))) {
+                Column(Modifier.fillMaxWidth().padding(12.dp)) {
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text("HISTORICAL PRECIPITATION RADAR", color = Color(0xFF6BD4E7), fontSize = 9.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                            Text(formatRadarTime(selectedFrame.time), color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 5.dp))
+                        }
+                        Text("${frameIndex + 1}/" + frames.size, color = Color.White.copy(alpha = .75f), fontSize = 11.sp)
+                    }
+                    Spacer(Modifier.height(10.dp))
+                    AndroidView(
+                        modifier = Modifier.fillMaxWidth().height(270.dp),
+                        factory = { context ->
+                            WebView(context).apply {
+                                settings.javaScriptEnabled = true
+                                settings.domStorageEnabled = false
+                                settings.allowFileAccess = false
+                                settings.allowContentAccess = false
+                                settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_NEVER_ALLOW
+                                webViewClient = object : WebViewClient() {
+                                    override fun shouldOverrideUrlLoading(view: WebView?, url: String?): Boolean = true
+                                }
+                                tag = ""
+                            }
+                        },
+                        update = { webView ->
+                            val pathKey = selectedFrame.path
+                            if (webView.tag != pathKey) {
+                                webView.tag = pathKey
+                                val html = radarMapHtml(
+                                    state.radar?.host.orEmpty(), selectedFrame.path,
+                                    place.latitude, place.longitude
+                                )
+                                webView.loadDataWithBaseURL("https://earthweatherchannel.web.app/", html, "text/html", "UTF-8", null)
+                            }
+                        }
+                    )
+                    Spacer(Modifier.height(9.dp))
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        TextButton(onClick = { frameIndex = (frameIndex - 1).coerceAtLeast(0); playing = false }, enabled = frameIndex > 0) { Text("‹ Previous", color = Color.White) }
+                        Spacer(Modifier.weight(1f))
+                        TextButton(onClick = { playing = !playing }, enabled = frames.size > 1) {
+                            Text(if (playing) "Ⅱ Pause" else "▶ Play", color = Color(0xFF8EDCF0))
+                        }
+                        Spacer(Modifier.weight(1f))
+                        TextButton(onClick = { frameIndex = (frameIndex + 1).coerceAtMost(frames.lastIndex); playing = false }, enabled = frameIndex < frames.lastIndex) { Text("Next ›", color = Color.White) }
+                    }
+                    Slider(
+                        value = frameIndex.toFloat(),
+                        onValueChange = { frameIndex = it.toInt().coerceIn(0, frames.lastIndex); playing = false },
+                        valueRange = 0f..frames.lastIndex.coerceAtLeast(0).toFloat(),
+                        steps = (frames.size - 2).coerceAtLeast(0),
+                        enabled = frames.size > 1
+                    )
+                    Text("RainViewer past radar frames · OpenStreetMap base map", color = Color.White.copy(alpha = .65f), fontSize = 9.sp)
+                }
             }
+        } else {
+            InfoCard(
+                "Radar frames unavailable",
+                state.radar?.note ?: "The radar metadata is loading. Radar coverage depends on the provider and location."
+            )
         }
-        Spacer(Modifier.height(20.dp)); SectionHeader("RAIN FORECAST", "Next 24 hours")
+        Spacer(Modifier.height(20.dp))
+        SectionHeader("RAIN FORECAST", "Next 24 hours")
         if (state.hourly.isEmpty()) InfoCard("Rain forecast unavailable", "No hourly precipitation values were returned.")
         else state.hourly.take(24).forEach { point ->
             Row(Modifier.fillMaxWidth().padding(vertical = 9.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -685,10 +759,49 @@ private fun RadarScreen(state: DashboardState, place: WeatherPlace?, modifier: M
             }
             Divider(color = Line, thickness = .7.dp)
         }
-        Spacer(Modifier.height(18.dp)); SectionHeader("ACTIVE WEATHER ALERTS", "Provider coverage")
+        Spacer(Modifier.height(18.dp))
+        SectionHeader("ACTIVE WEATHER ALERTS", "Provider coverage")
         AlertsCard(state.alerts, state.alertCoverage)
-        Text("RainViewer provides historical radar frames here, not guaranteed live nowcasting. Transparent areas can mean missing coverage, not necessarily clear weather.", color = Muted, fontSize = 10.sp, lineHeight = 15.sp, modifier = Modifier.padding(vertical = 18.dp))
+        Text(
+            "Radar shows historical frames only, not a future-rain nowcast. Transparent areas may indicate missing radar coverage, not guaranteed clear weather. Official warning coverage depends on the connected national provider.",
+            color = Muted, fontSize = 10.sp, lineHeight = 15.sp, modifier = Modifier.padding(vertical = 18.dp)
+        )
     }
+}
+
+private fun formatRadarTime(epochSeconds: Long): String = runCatching {
+    Instant.ofEpochSecond(epochSeconds).atZone(ZoneId.systemDefault())
+        .format(DateTimeFormatter.ofPattern("dd MMM · HH:mm", Locale.getDefault()))
+}.getOrDefault("Radar frame")
+
+private fun radarMapHtml(host: String, path: String, latitude: Double, longitude: Double): String {
+    val uri = runCatching { Uri.parse(host) }.getOrNull()
+    val validHost = uri?.host?.lowercase(Locale.ROOT)
+    if (uri?.scheme != "https" || validHost == null ||
+        !(validHost == "rainviewer.com" || validHost.endsWith(".rainviewer.com"))) {
+        return "<html><body style='background:#0d2736;color:white;font-family:sans-serif;padding:24px'>Radar tile host is unavailable.</body></html>"
+    }
+    val safePath = path.filter { it.isLetterOrDigit() || it == '/' || it == '-' || it == '_' || it == '.' }
+    if (!safePath.startsWith("/")) {
+        return "<html><body style='background:#0d2736;color:white;font-family:sans-serif;padding:24px'>Radar frame path is invalid.</body></html>"
+    }
+    val radarTiles = host.trimEnd('/') + safePath.trimEnd('/') + "/256/{z}/{x}/{y}/2/1_1.png"
+    val lat = latitude.coerceIn(-85.0, 85.0)
+    val lon = longitude.coerceIn(-180.0, 180.0)
+    return """
+<!doctype html>
+<html><head><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>html,body,#map{height:100%;width:100%;margin:0;background:#142c3a} .leaflet-control-attribution{font-size:9px!important}</style>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+</head><body><div id="map"></div><script>
+const map=L.map('map',{zoomControl:true,attributionControl:true}).setView([$lat,$lon],7);
+L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:18,attribution:'© OpenStreetMap contributors'}).addTo(map);
+L.tileLayer('$radarTiles',{opacity:0.68,tileSize:256,attribution:'Radar © RainViewer'}).addTo(map);
+L.circleMarker([$lat,$lon],{radius:6,color:'#ffffff',weight:2,fillColor:'#087fa3',fillOpacity:1}).addTo(map);
+setTimeout(()=>map.invalidateSize(),300);
+</script></body></html>
+""".trimIndent()
 }
 
 @Composable
