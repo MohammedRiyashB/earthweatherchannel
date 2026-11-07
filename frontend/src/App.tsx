@@ -3,7 +3,7 @@ import { auth, firebaseReady, googleProvider } from "./firebase";
 import { onAuthStateChanged, signInWithPopup, signOut, type User } from "firebase/auth";
 
 const API=import.meta.env.VITE_API_BASE_URL||"https://earthweather-api.onrender.com";
-type Current={time?:string;temperature_2m?:number;relative_humidity_2m?:number;apparent_temperature?:number;precipitation?:number;cloud_cover?:number;pressure_msl?:number;wind_speed_10m?:number;wind_direction_10m?:number;weather_code?:number;source?:string;source_url?:string};
+type Current={time?:string|number;is_day?:number;temperature_2m?:number;relative_humidity_2m?:number;apparent_temperature?:number;precipitation?:number;cloud_cover?:number;pressure_msl?:number;wind_speed_10m?:number;wind_direction_10m?:number;weather_code?:number;source?:string;source_url?:string};
 type Place={name:string;region:string;lat:number;lon:number;country?:string;country_code?:string;state?:string;district?:string;accuracy?:number;source?: "gps"|"search";current?:Current;loading?:boolean;error?:boolean};
 type Storm={id:string;title:string;description?:string;link?:string;coordinates?:{lat:number;lon:number;date?:string}[]};
 type Story={title:string;url:string;source:string;published_at?:string;language?:string;image?:string;description?:string};
@@ -29,6 +29,28 @@ const weatherScene=(c?:number,cloud?:number)=>{
  if((cloud??0)>=85||c===3)return "scene-overcast";
  if((cloud??0)>=25||c===1||c===2)return "scene-partly";
  return "scene-clear";
+};
+const cloudDensity=(cloud?:number)=>cloud==null?"cloud-medium":cloud>=85?"cloud-heavy":cloud>=65?"cloud-dense":cloud>=30?"cloud-medium":cloud>=10?"cloud-light":"cloud-clear";
+const solarPhase=(lat:number,lon:number,time?:string|number,isDay?:number)=>{
+ let instant:Date;
+ if(typeof time==="number")instant=new Date(time<1e12?time*1000:time);
+ else if(typeof time==="string"&&time.trim()){
+  const raw=time.trim().replace(" ","T");
+  instant=new Date(/(?:Z|[+-]\\d{2}:?\\d{2})$/.test(raw)?raw:`${raw}Z`);
+ }else instant=new Date();
+ if(Number.isNaN(instant.getTime()))return isDay===0?"phase-night":isDay===1?"phase-day":"phase-day";
+ const day=Math.floor((Date.UTC(instant.getUTCFullYear(),instant.getUTCMonth(),instant.getUTCDate())-Date.UTC(instant.getUTCFullYear(),0,0))/86400000);
+ const hour=instant.getUTCHours()+instant.getUTCMinutes()/60+instant.getUTCSeconds()/3600;
+ const gamma=2*Math.PI/365*(day-1+(hour-12)/24);
+ const equation=229.18*(0.000075+0.001868*Math.cos(gamma)-0.032077*Math.sin(gamma)-0.014615*Math.cos(2*gamma)-0.040849*Math.sin(2*gamma));
+ const declination=0.006918-0.399912*Math.cos(gamma)+0.070257*Math.sin(gamma)-0.006758*Math.cos(2*gamma)+0.000907*Math.sin(2*gamma)-0.002697*Math.cos(3*gamma)+0.00148*Math.sin(3*gamma);
+ const solarMinutes=((hour*60+equation+4*lon)%1440+1440)%1440;
+ const hourAngle=solarMinutes/4-180;
+ const latitude=lat*Math.PI/180;
+ const elevation=Math.asin(Math.sin(latitude)*Math.sin(declination)+Math.cos(latitude)*Math.cos(declination)*Math.cos(hourAngle))*180/Math.PI;
+ if(elevation<-6)return "phase-night";
+ if(elevation<9)return hourAngle<0?"phase-dawn":"phase-dusk";
+ return "phase-day";
 };
 const icon=(c?:number)=>c===0?"☀":c===1?"🌤":c===2?"⛅":c===3?"☁":c!=null&&[45,48].includes(c)?"🌫":c!=null&&[95,96,99].includes(c)?"⛈":c!=null&&[71,73,75,77,85,86].includes(c)?"❄":c!=null&&[51,53,55,56,57,61,63,65,66,67,80,81,82].includes(c)?"🌧":"—";
 const stamp=(s?:string)=>{if(!s)return "—";const d=new Date(s);return Number.isNaN(d.getTime())?"Recently indexed":d.toLocaleString(undefined,{dateStyle:"medium",timeStyle:"short"});};
@@ -412,7 +434,7 @@ const [section,setSection]=useState("Weather Report");const [page,setPage]=useSt
  const nationalCities=cities.filter(city=>city.region.endsWith("· National"));
  const regionalCities=cities.filter(city=>city.region.endsWith("· Regional reference"));
  const internationalCities=cities.filter(city=>city.region.endsWith("· Nearby international"));
- const renderCityCards=(items:Place[])=>items.map(c=><article className={`city-card weather-scene ${weatherScene(c.current?.weather_code,c.current?.cloud_cover)}`} key={c.name}><span className="weather-sky-art" aria-hidden="true"><i/><i/><i/></span><div className="city-top"><div><small>{c.region}</small><h3>{c.name}</h3></div><span className="weather-icon">{icon(c.current?.weather_code)}</span></div>{c.loading?<div className="city-loading">Loading report…</div>:c.error?<div className="city-loading">Report temporarily unavailable</div>:<><div className="city-temp">{Math.round(c.current?.temperature_2m??0)}<sup>°C</sup></div><div className="city-condition">{weatherLabel(c.current?.weather_code)}</div><div className="city-stats"><span>Humidity <b>{c.current?.relative_humidity_2m??"—"}%</b></span><span>Wind <b>{formatMetric(c.current?.wind_speed_10m)} km/h</b></span><span>Cloud <b>{c.current?.cloud_cover??"—"}%</b></span></div><div className="city-observed">{modelTime(c.current?.time)}</div></>}</article>);
+ const renderCityCards=(items:Place[])=>items.map(c=><article className={`city-card weather-scene ${weatherScene(c.current?.weather_code,c.current?.cloud_cover)} ${solarPhase(c.lat,c.lon,c.current?.time,c.current?.is_day)} ${cloudDensity(c.current?.cloud_cover)}`} key={c.name}><span className="weather-sky-art" aria-hidden="true"><i/><i/><i/></span><div className="city-top"><div><small>{c.region}</small><h3>{c.name}</h3></div><span className="weather-icon">{icon(c.current?.weather_code)}</span></div>{c.loading?<div className="city-loading">Loading report…</div>:c.error?<div className="city-loading">Report temporarily unavailable</div>:<><div className="city-temp">{Math.round(c.current?.temperature_2m??0)}<sup>°C</sup></div><div className="city-condition">{weatherLabel(c.current?.weather_code)}</div><div className="city-stats"><span>Humidity <b>{c.current?.relative_humidity_2m??"—"}%</b></span><span>Wind <b>{formatMetric(c.current?.wind_speed_10m)} km/h</b></span><span>Cloud <b>{c.current?.cloud_cover??"—"}%</b></span></div><div className="city-observed">{modelTime(c.current?.time)}</div></>}</article>);
  const search=async()=>{if(!query.trim())return;const requestVersion=++locationRequestVersion.current;try{const r=await fetchBounded(`https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=1&q=${encodeURIComponent(query)}`,{headers:{"Accept-Language":"en"}},10000);const d=await r.json();if(requestVersion!==locationRequestVersion.current)return;if(!d.length)throw new Error("No matching place found");const address=d[0].address||{};const country=address.country||d[0].display_name.split(",").map((part:string)=>part.trim()).filter(Boolean).pop();const state=address.state||address.region;const district=address.state_district||address.county||address.municipality;const p:Place={name:d[0].name||query,region:[state,country].filter(Boolean).join(", ")||d[0].display_name,source:"search",country,country_code:address.country_code?.toUpperCase(),state,district,lat:Number(d[0].lat),lon:Number(d[0].lon)};const w=await fetchBounded(`${API}/api/weather?latitude=${p.lat}&longitude=${p.lon}`,{},14000);if(requestVersion!==locationRequestVersion.current)return;if(!w.ok)throw new Error("Weather feed unavailable");const wd=await w.json();if(requestVersion!==locationRequestVersion.current)return;const selected={...p,current:wd.current||{}};setLocal(selected);writeCache("local",selected);setVisitorLocation(p);writeCache("visitor-location",p);setIsSearchLocation(true);setLocationStatus("ready");setLocationMessage("");setNotice("");}catch(e){if(requestVersion!==locationRequestVersion.current)return;setNotice(e instanceof Error?e.message:"Search failed.");}};
  const signIn=async()=>{if(!auth)return;try{await signInWithPopup(auth,googleProvider)}catch{setNotice("Google sign-in could not be completed.")}};
  const countryTab=visitorLocation?.country||"Country";
@@ -431,7 +453,7 @@ const [section,setSection]=useState("Weather Report");const [page,setPage]=useSt
      <div><span className="eyebrow">{isSearchLocation ? "SELECTED CITY" : "WEATHER NEAR YOU"}</span><h2>{isSearchLocation && local ? `Weather in ${local.name}` : "Your current location"}</h2><p>{isSearchLocation ? "Showing weather for the city you searched" : "Automatically detected using your device location"}</p></div>
     </div>
     {local&&locationStatus==="ready"?<>
-     <div className={`local-weather-place weather-scene ${weatherScene(local.current?.weather_code,local.current?.cloud_cover)}`}><span className="weather-sky-art" aria-hidden="true"><i/><i/><i/></span>
+     <div className={`local-weather-place weather-scene ${weatherScene(local.current?.weather_code,local.current?.cloud_cover)} ${solarPhase(local.lat,local.lon,local.current?.time,local.current?.is_day)} ${cloudDensity(local.current?.cloud_cover)}`}><span className="weather-sky-art" aria-hidden="true"><i/><i/><i/></span>
       <div><h3>{local.name}</h3><p>{local.region}</p></div>
       <div className="local-temperature"><span>{icon(local.current?.weather_code)}</span><strong>{local.current?.temperature_2m!=null?Math.round(local.current.temperature_2m)+"°C":"—"}</strong><small>{weatherLabel(local.current?.weather_code)}</small></div>
      </div>
