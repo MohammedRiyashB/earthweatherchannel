@@ -341,37 +341,15 @@ const [section,setSection]=useState("Weather Report");const [page,setPage]=useSt
      <button onClick={()=>{setPage("privacy");window.scrollTo({top:0,behavior:"smooth"})}}>Privacy Policy</button>
     </div>
    </nav>
-   <section className="footer-providers" aria-label="Platforms and data sources">
-    <div className="footer-providers-heading">
-     <span className="eyebrow">PLATFORMS &amp; DATA SOURCES</span>
-     <p>Services used for weather data, maps, satellite imagery and site infrastructure.</p>
-    </div>
-    <div className="provider-logo-row provider-logo-row-four">
-     <a className="provider-logo-card" href="https://www.google.com/" target="_blank" rel="noreferrer" aria-label="Google — account sign-in">
-      <img src="/provider-logos/google.svg" alt="" /><strong>Google</strong><small>Account sign-in</small>
-     </a>
-     <a className="provider-logo-card" href="https://firebase.google.com/" target="_blank" rel="noreferrer" aria-label="Firebase — hosting and authentication">
-      <img src="/provider-logos/firebase.svg" alt="" /><strong>Firebase</strong><small>Hosting &amp; auth</small>
-     </a>
-     <a className="provider-logo-card" href="https://open-meteo.com/" target="_blank" rel="noreferrer" aria-label="Open-Meteo — weather model data">
-      <img src="/provider-logos/open-meteo.svg" alt="" /><strong>Open-Meteo</strong><small>Weather models</small>
-     </a>
-     <a className="provider-logo-card" href="https://www.openstreetmap.org/" target="_blank" rel="noreferrer" aria-label="OpenStreetMap — map data">
-      <img src="/provider-logos/openstreetmap.svg" alt="" /><strong>OpenStreetMap</strong><small>Map data</small>
-     </a>
-    </div>
-    <div className="provider-logo-row provider-logo-row-three">
-     <a className="provider-logo-card" href="https://www.nasa.gov/" target="_blank" rel="noreferrer" aria-label="NASA — satellite imagery and event data">
-      <img src="/provider-logos/nasa.svg" alt="" /><strong>NASA</strong><small>Satellite &amp; event data</small>
-     </a>
-     <a className="provider-logo-card" href="https://www.rainviewer.com/" target="_blank" rel="noreferrer" aria-label="RainViewer — radar imagery">
-      <img src="/provider-logos/rainviewer.svg" alt="" /><strong>RainViewer</strong><small>Radar imagery</small>
-     </a>
-     <a className="provider-logo-card" href="https://www.noaa.gov/" target="_blank" rel="noreferrer" aria-label="NOAA — United States weather alerts">
-      <img src="/provider-logos/noaa.svg" alt="" /><strong>NOAA</strong><small>US weather alerts</small>
-     </a>
-    </div>
-   </section>
+   <nav className="footer-provider-wall" aria-label="Related service websites">
+    <a href="https://www.google.com/" target="_blank" rel="noreferrer" aria-label="Google"><img src="/provider-logos/google.svg" alt="" /><span>Google</span></a>
+    <a href="https://firebase.google.com/" target="_blank" rel="noreferrer" aria-label="Firebase"><img src="/provider-logos/firebase.svg" alt="" /><span>Firebase</span></a>
+    <a href="https://open-meteo.com/" target="_blank" rel="noreferrer" aria-label="Open-Meteo"><img src="/provider-logos/open-meteo.svg" alt="" /><span>Open-Meteo</span></a>
+    <a href="https://www.openstreetmap.org/" target="_blank" rel="noreferrer" aria-label="OpenStreetMap"><img src="/provider-logos/openstreetmap.svg" alt="" /><span>OpenStreetMap</span></a>
+    <a href="https://www.nasa.gov/" target="_blank" rel="noreferrer" aria-label="NASA"><img src="/provider-logos/nasa.svg" alt="" /><span>NASA</span></a>
+    <a href="https://www.rainviewer.com/" target="_blank" rel="noreferrer" aria-label="RainViewer"><img src="/provider-logos/rainviewer.svg" alt="" /><span>RainViewer</span></a>
+    <a href="https://www.noaa.gov/" target="_blank" rel="noreferrer" aria-label="NOAA"><img src="/provider-logos/noaa.svg" alt="" /><span>NOAA</span></a>
+   </nav>
    <div className="footer-copyright">© {new Date().getFullYear()} Earth Weather Channel. All rights reserved. <strong>BMR INC.</strong></div>
   </footer>
  </div>;
