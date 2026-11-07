@@ -11,8 +11,9 @@ services:
       - key: EARTH_WEATHER_USER_AGENT
         value: "EARTH-WEATHER/0.1 (replace-with-your-monitored-contact)"
 
-  - type: static
+  - type: web
     name: earth-weather-web
+    runtime: static
     rootDir: frontend
     buildCommand: npm install && npm run build
     staticPublishPath: dist
@@ -21,4 +22,4 @@ services:
         fromService:
           type: web
           name: earth-weather-api
-          property: host
+          envVarKey: RENDER_EXTERNAL_URL
