@@ -238,3 +238,74 @@
 .provider-logo-row-four .provider-logo-card:nth-child(3) img{width:52px;height:38px;max-width:88%}
 .provider-logo-row-three .provider-logo-card img{width:48px;height:38px;max-width:84%}
 @media(max-width:380px){.provider-logo-row-four .provider-logo-card:nth-child(3) img{width:45px;height:34px}.provider-logo-row-three .provider-logo-card img{width:42px;height:34px}}
+
+
+/* Minimal monochrome provider wordmark strip — replaces the old source cards. */
+.footer-provider-wall{
+  display:grid;
+  grid-template-columns:repeat(4,minmax(0,1fr));
+  align-items:center;
+  justify-items:center;
+  gap:22px 34px;
+  width:100%;
+  margin:26px 0 22px;
+  padding:24px 0;
+  border-top:1px solid rgba(255,255,255,.13);
+  border-bottom:1px solid rgba(255,255,255,.13);
+}
+.footer-provider-wall a{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:9px;
+  min-width:0;
+  min-height:42px;
+  padding:0;
+  border:0;
+  border-radius:0;
+  background:transparent;
+  box-shadow:none;
+  color:#aebbc4;
+  text-decoration:none;
+  opacity:.72;
+  filter:grayscale(1);
+  transition:opacity .18s ease;
+}
+.footer-provider-wall a:hover,
+.footer-provider-wall a:focus-visible{
+  opacity:1;
+  outline:none;
+}
+.footer-provider-wall img{
+  display:block;
+  width:31px;
+  height:31px;
+  max-width:40px;
+  object-fit:contain;
+  filter:grayscale(1) brightness(0) invert(.72);
+  opacity:.9;
+}
+.footer-provider-wall span{
+  display:block;
+  color:#aebbc4;
+  font-family:Manrope,'DM Sans',Arial,sans-serif;
+  font-size:clamp(11px,1.15vw,15px);
+  font-weight:800;
+  line-height:1.15;
+  letter-spacing:-.25px;
+  white-space:nowrap;
+}
+@media(max-width:620px){
+  .footer-provider-wall{
+    grid-template-columns:repeat(2,minmax(0,1fr));
+    gap:18px 14px;
+    margin:20px 0 18px;
+    padding:20px 0;
+  }
+  .footer-provider-wall a{gap:7px;min-height:36px}
+  .footer-provider-wall img{width:26px;height:26px}
+  .footer-provider-wall span{font-size:11px}
+}
+@media(prefers-reduced-motion:reduce){
+  .footer-provider-wall a{transition:none}
+}
