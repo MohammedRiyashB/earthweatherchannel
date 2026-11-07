@@ -4,12 +4,12 @@ import * as Cesium from "cesium";
 type Weather = {
   latitude: number; longitude: number; timezone?: string;
   current?: { time: string; temperature_2m?: number; relative_humidity_2m?: number; apparent_temperature?: number; precipitation?: number; cloud_cover?: number; pressure_msl?: number; wind_speed_10m?: number; wind_direction_10m?: number; wind_gusts_10m?: number; weather_code?: number };
-  hourly?: { time: string[]; precipitation_probability?: number[]; precipitation?: number[]; temperature_2m?: number[]; wind_speed_10m?: number[] };
+  hourly?: HourlyFields;
 };
 type Source = { id: string; name: string; kind: string; coverage: string; status: string; update: string; note: string };
 type RadarFrame = { time: number; path: string };
 type WindPoint = {lat:number;lon:number;speed_kmh:number;direction_deg:number;gust_kmh?:number;cloud_cover_pct?:number;humidity_pct?:number;precipitation_mm?:number};
-type Atmosphere = {hourly?: Record<string, (string|number|null)[]>; note?:string; source?:string};
+type Atmosphere = {hourly?: HourlyFields; note?:string; source?:string};
 type CycloneEvent = {id:string;title:string;description?:string;link?:string;coordinates:{lat:number;lon:number;date?:string}[]};
 type HealthCheck = {id:string;status:string;latency_ms?:number;http_status?:number;error?:string};
 type Particle = {lat:number;lon:number;trail:Cesium.Cartesian3[];point:Cesium.Entity;line:Cesium.Entity;speed:number;direction:number};
@@ -222,12 +222,12 @@ export default function App() {
 
   const current=weather?.current;
   const codeLabel=(code?:number)=>code==null?"—":[0].includes(code)?"Clear":[1,2,3].includes(code)?"Partly cloudy":[45,48].includes(code)?"Fog":[51,53,55,56,57].includes(code)?"Drizzle":[61,63,65,66,67,80,81,82].includes(code)?"Rain":[95,96,99].includes(code)?"Thunderstorm":"Variable";
-  const hourly=atmosphere?.hourly||weather?.hourly||{};
-  const times=(hourly.time||[]) as string[];
-  const rain=(hourly.precipitation_probability||[]) as number[];
-  const precip=(hourly.precipitation||[]) as number[];
-  const evap=(hourly.evapotranspiration||[]) as number[];
-  const humidity=(hourly.relative_humidity_2m||[]) as number[];
+  const hourly=atmosphere?.hourly||weather?.hourly||({time:[]} as HourlyFields);
+  const times=hourly.time||[];
+  const rain=hourly.precipitation_probability||[];
+  const precip=hourly.precipitation||[];
+  const evap=hourly.evapotranspiration||[];
+  const humidity=hourly.relative_humidity_2m||[];
   return <main className="app-shell">
     <header className="topbar">
       <a className="brand" href="#"><span className="brand-mark">◎</span><span>EARTH <b>WEATHER</b><small>GLOBAL INTELLIGENCE SYSTEM</small></span></a>
