@@ -233,3 +233,8 @@
  .provider-logo-card strong{font-size:8px}
  .provider-logo-card small{font-size:7px}
 }
+
+/* Keep wide partner marks legible in the compact four-column row. */
+.provider-logo-row-four .provider-logo-card:nth-child(3) img{width:52px;height:38px;max-width:88%}
+.provider-logo-row-three .provider-logo-card img{width:48px;height:38px;max-width:84%}
+@media(max-width:380px){.provider-logo-row-four .provider-logo-card:nth-child(3) img{width:45px;height:34px}.provider-logo-row-three .provider-logo-card img{width:42px;height:34px}}
