@@ -34,6 +34,19 @@ A global weather intelligence explorer built around a CesiumJS 3D globe, NASA sa
 
 **Source health:** A green/online status means the endpoint responded to a lightweight probe. It does not prove data freshness, scientific accuracy, full geographic coverage or service-level availability.
 
+## Firebase integration
+
+The frontend supports Firebase Google Authentication, Firestore user profile / last-location sync, Realtime Database live weather sync, and Analytics where browser support is available.
+
+1. Copy `frontend/.env.example` to `frontend/.env` and fill the Firebase web app values from Firebase Console → Project settings → Your apps.
+2. In Firebase Authentication, enable the **Google** provider and add your deployed website domain to Authorized domains.
+3. Create a Cloud Firestore database and a Realtime Database in the same Firebase project.
+4. Publish `firestore.rules` in Firestore Rules and `database.rules.json` in Realtime Database Rules. These rules restrict each signed-in user to their own `/users/{uid}` data.
+5. Enable Google Analytics for the Firebase project if you want web analytics. Analytics initializes only when supported by the browser.
+6. For Render, add the same `VITE_FIREBASE_*` variables to the `earth-weather-web` static service environment and redeploy. Vite variables are embedded into the public browser bundle; Firebase web config is not a server secret. Restrict the Firebase API key to the required web APIs and configure Firebase security rules.
+
+Google sign-in uses a popup, which requires popups to be allowed by the browser. Once signed in, the app stores the user's last selected coordinates/current model conditions in their private Firestore user document and Realtime Database live-weather node. Location is only used after browser geolocation permission is granted.
+
 ## Stack
 
 - Frontend: React, TypeScript, Vite, CesiumJS
