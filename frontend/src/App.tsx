@@ -165,7 +165,8 @@ const [section,setSection]=useState("Weather Report");const [page,setPage]=useSt
   if(!local)return;
   const {lat,lon,name,region}=local;
   const refreshLocal=async()=>{try{const r=await fetch(`${API}/api/weather?latitude=${lat}&longitude=${lon}`,{cache:"no-store"});if(!r.ok)return;const d=await r.json();setLocal(prev=>{const next=prev?{...prev,name,region,lat,lon,current:d.current||prev.current}:prev;if(next)writeCache("local",next);return next;});}catch{/* retain the last good location report */}};
-  void refreshLocal();\n  const id=window.setInterval(()=>void refreshLocal(),60*1000);
+  void refreshLocal();
+  const id=window.setInterval(()=>void refreshLocal(),60*1000);
   return()=>window.clearInterval(id);
  },[local?.lat,local?.lon,local?.name,local?.region]);
 
