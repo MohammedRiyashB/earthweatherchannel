@@ -6,6 +6,7 @@ type BrandItem = {
   href: string;
   kind: "weather" | "imagery" | "events" | "radar" | "alerts" | "news" | "maps" | "development";
   monogram: string;
+  iconUrl?: string;
 };
 
 const ROW_ONE: BrandItem[] = [
@@ -21,13 +22,13 @@ const ROW_TWO: BrandItem[] = [
   { name: "NASA Earth Science", role: "Global science news feed", href: "https://science.nasa.gov/", kind: "news", monogram: "NASA" },
   { name: "NOAA", role: "Weather news · U.S. alerts", href: "https://www.noaa.gov/", kind: "news", monogram: "NOAA" },
   { name: "OpenStreetMap", role: "Maps & place search", href: "https://www.openstreetmap.org/", kind: "maps", monogram: "OSM" },
-  { name: "OpenAI · ChatGPT", role: "AI-assisted development", href: "https://openai.com/brand/", kind: "development", monogram: "AI" },
+  { name: "OpenAI · ChatGPT", role: "AI-assisted development", href: "https://openai.com/brand/", kind: "development", monogram: "AI", iconUrl: "https://openai.com/favicon.svg" },
 ];
 
 function BrandTile({ item, decorative = false }: { item: BrandItem; decorative?: boolean }) {
   return (
     <a className={`source-brand-tile source-brand-${item.kind}`} href={item.href} target="_blank" rel="noreferrer" tabIndex={decorative ? -1 : undefined}>
-      <span className="source-brand-monogram" aria-hidden="true">{item.monogram}</span>
+      <span className="source-brand-monogram" aria-hidden="true">{item.iconUrl ? <img src={item.iconUrl} alt="" /> : item.monogram}</span>
       <span className="source-brand-copy">
         <strong>{item.name}</strong>
         <small>{item.role}</small>
