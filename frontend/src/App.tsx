@@ -45,7 +45,7 @@ export default function App(){
  const [indiaNews,setIndiaNews]=useState<Story[]>([]);const [worldNews,setWorldNews]=useState<Story[]>([]);
  const [newsRegion,setNewsRegion]=useState<"india"|"world">("india");
  const [updated,setUpdated]=useState("");const [clock,setClock]=useState(new Date());const [busy,setBusy]=useState(false);const [query,setQuery]=useState("");
- const [searchResult,setSearchResult]=useState<Place|null>(null);const [section,setSection]=useState("Top Stories");
+ const [searchResult,setSearchResult]=useState<Place|null>(null);const [section,setSection]=useState("Weather Report");const [isSearchLocation,setIsSearchLocation]=useState(false);
  const [user,setUser]=useState<User|null>(null);const [notice,setNotice]=useState("");
  const [local,setLocal]=useState<Place|null>(null);
  const [locationStatus,setLocationStatus]=useState<"locating"|"ready"|"denied"|"error">("locating");
@@ -70,7 +70,7 @@ export default function App(){
     const placeData=placeResponse.ok?await placeResponse.json():null;
     const name=placeData?.name||"Your nearby area";
     const region=placeData?.region||"GPS location";
-    setLocal({name,region,lat,lon,current:weatherData.current||{}});
+    setLocal({name,region,lat,lon,current:weatherData.current||{}});\n    setIsSearchLocation(false);\n    setSearchResult(null);
     setLocationStatus("ready");setLocationMessage("");
    }catch(error){
     setLocationStatus("error");setLocationMessage(error instanceof Error?error.message:"Could not load your local weather.");
@@ -108,13 +108,13 @@ export default function App(){
  const active=cities.filter(c=>c.current);
  const hottest=useMemo(()=>[...active].sort((a,b)=>(b.current?.temperature_2m??-100)-(a.current?.temperature_2m??-100))[0],[active]);
  const headlines=newsRegion==="india"?indiaNews:worldNews;
- const search=async()=>{if(!query.trim())return;try{const r=await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(query)}`,{headers:{"Accept-Language":"en"}});const d=await r.json();if(!d.length)throw new Error("No matching place found");const p={name:d[0].name||query,region:d[0].display_name,lat:Number(d[0].lat),lon:Number(d[0].lon)};const w=await fetch(`${API}/api/weather?latitude=${p.lat}&longitude=${p.lon}`);if(!w.ok)throw new Error("Weather feed unavailable");const wd=await w.json();setSearchResult({...p,current:wd.current});setNotice("");}catch(e){setNotice(e instanceof Error?e.message:"Search failed.");}};
+ const search=async()=>{if(!query.trim())return;try{const r=await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(query)}`,{headers:{"Accept-Language":"en"}});const d=await r.json();if(!d.length)throw new Error("No matching place found");const p={name:d[0].name||query,region:d[0].display_name,lat:Number(d[0].lat),lon:Number(d[0].lon)};const w=await fetch(`${API}/api/weather?latitude=${p.lat}&longitude=${p.lon}`);if(!w.ok)throw new Error("Weather feed unavailable");const wd=await w.json();setLocal({...p,current:wd.current||{}});setIsSearchLocation(true);setSearchResult(null);setLocationStatus("ready");setLocationMessage("");setNotice("");}catch(e){setNotice(e instanceof Error?e.message:"Search failed.");}};
  const useMyLocation=()=>detectLocalWeather();
  const signIn=async()=>{if(!auth)return;try{await signInWithPopup(auth,googleProvider)}catch{setNotice("Google sign-in could not be completed.")}};
  return <div className="news-site">
   <div className="breaking-strip"><div className="breaking-label">WEATHER BULLETIN</div><div className="ticker"><span>GLOBAL WEATHER DESK</span><i>•</i><span>LIVE MODEL UPDATES</span><i>•</i><span>INDIA & WORLD WEATHER HEADLINES</span><i>•</i><span>WEATHER CHECK EVERY 60 SECONDS</span></div><div className="utc-clock">{clock.toLocaleTimeString([], {hour:"2-digit",minute:"2-digit",second:"2-digit"})} LOCAL</div></div>
-  <header className="masthead"><div className="brand-lockup"><img className="brand-wordmark" src="https://raw.githubusercontent.com/MohammedRiyashB/earthweatherchannel/main/logo.png" alt="EARTH WEATHER" width="1200" height="220" /></div><div className="masthead-center"><span className="on-air"><b/> LIVE WEATHER DESK</span><small>Global reports · Forecasts · Weather headlines</small></div><div className="masthead-actions"><button onClick={useMyLocation}>◎ My weather</button>{user?<button onClick={()=>void signOut(auth!)}>{user.displayName||"Account"}</button>:<button onClick={()=>void signIn()}>Sign in</button>}</div></header>
-  <nav className="news-nav">{["Top Stories","World","Asia","India","Americas","Europe","Africa","Oceania","Satellite","Forecast"].map(x=><button className={section===x?"active":""} key={x} onClick={()=>{setSection(x);if(x==="India"||x==="Asia")setNewsRegion("india");else if(x!=="Top Stories")setNewsRegion("world")}}>{x}</button>)}</nav>
+  <header className="masthead"><div className="brand-lockup"><img className="brand-wordmark" src="https://raw.githubusercontent.com/MohammedRiyashB/earthweatherchannel/main/logo.png" alt="EARTH WEATHER" width="1200" height="220" /></div><div className="masthead-center"><span className="on-air"><b/> LIVE WEATHER DESK</span><small>Global reports · Forecasts · Weather headlines</small></div><div className="masthead-actions">{user?<button onClick={()=>void signOut(auth!)}>{user.displayName||"Account"}</button>:<button onClick={()=>void signIn()}>Sign in</button>}</div></header>
+  <nav className="news-nav">{["Weather Report","World","Asia","India","Americas","Europe","Africa","Oceania","Satellite","Forecast"].map(x=><button className={section===x?"active":""} key={x} onClick={()=>{setSection(x);if(x==="India"||x==="Asia")setNewsRegion("india");else if(x!=="Weather Report")setNewsRegion("world")}}>{x}</button>)}</nav>
   <main className="news-main">
    {searchResult&&<section className="search-result"><div><small>SELECTED LOCATION</small><h2>{searchResult!.name}</h2><p>{(searchResult||local)!.region}</p></div><strong>{Math.round((searchResult||local)!.current?.temperature_2m??0)}°C</strong><span>{weatherLabel((searchResult||local)!.current?.weather_code)}</span><button onClick={()=>{setSearchResult(null);setLocal(null)}}>×</button></section>}
    {notice&&<div className="notice">{notice}</div>}
@@ -127,7 +127,7 @@ export default function App(){
     </div>
     {local&&locationStatus==="ready"?<>
      <div className={`local-weather-place weather-scene ${weatherScene(local.current?.weather_code,local.current?.cloud_cover)}`}><span className="weather-sky-art" aria-hidden="true"><i/><i/><i/></span>
-      <div><h3>{local.name}</h3><p>{local.region}</p><span className="local-live-indicator"><i/> LOCATION DETECTED</span></div>
+      <div><h3>{local.name}</h3><p>{local.region}</p></div>
       <div className="local-temperature"><span>{icon(local.current?.weather_code)}</span><strong>{local.current?.temperature_2m!=null?Math.round(local.current.temperature_2m)+"°C":"—"}</strong><small>{weatherLabel(local.current?.weather_code)}</small></div>
      </div>
      <div className="local-weather-stats">
