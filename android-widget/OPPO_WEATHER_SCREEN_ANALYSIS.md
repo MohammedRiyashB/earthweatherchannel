@@ -98,3 +98,14 @@ Commit: `2631335594ac805eeef8553e37993f195fb8ef1f`
 ## 6. Release integrity
 
 The existing PR #19 remains the review target. The redesign commit is on its feature branch and does not alter `main` until the PR is merged. A successful GitHub Actions Android build and a real-device installation test are required before a new APK should be described as ready.
+
+
+## 7. Follow-up implementation after the initial redesign
+
+- Corrected the Manage Cities back arrow to return to the weather dashboard rather than request GPS again.
+- Added a dashboard radar shortcut so the radar page remains reachable after removing the generic bottom navigation.
+- Implemented real unit pickers for temperature, wind (km/h, m/s, mph), pressure (hPa, mmHg, inHg) and visibility (km, mi). Wind and pressure values are converted for display; visibility is taken from the forecast's hourly visibility field and converted from metres to the selected unit.
+- Rain-alert detail panel now exposes the existing opt-in reminder switch alongside its threshold and time-window controls.
+- Replaced the former one-per-day morning notification with two local-time briefings: today's outlook in the morning and tomorrow's outlook at 18:00. The setting can still choose the morning hour. WorkManager delivery is best-effort and can be delayed by Android.
+- Added an optional ongoing weather notification with a low-priority, silent, periodic update worker. It refreshes no faster than the WorkManager 15-minute minimum and may be delayed by Android; it is not second-by-second real-time streaming.
+- These updates remain on `feat/earth-weather-native-app` and PR #19 is not merged. The newly added backend routes remain unavailable to the production Render deployment until merge/deploy.
