@@ -243,7 +243,7 @@ const [section,setSection]=useState("Weather Report");const [page,setPage]=useSt
     
    </section>
   </main>
-  </main>:<main className="news-main info-page">
+  :<main className="news-main info-page">
    <div className="info-page-brand"><img src="https://raw.githubusercontent.com/MohammedRiyashB/earthweatherchannel/main/logo.png" alt="EARTH WEATHER" /></div>
    {page==="about"?<article className="info-card">
     <span className="eyebrow">ABOUT EARTH WEATHER</span>
