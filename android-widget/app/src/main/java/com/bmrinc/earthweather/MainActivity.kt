@@ -10,6 +10,7 @@ import android.os.Build
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -30,6 +31,10 @@ import androidx.compose.ui.draw.offset
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.text.font.FontWeight
@@ -420,17 +425,93 @@ private fun WeatherScreen(state: DashboardState, place: WeatherPlace?, modifier:
 
 @Composable
 private fun ForecastScreen(state: DashboardState, place: WeatherPlace?, modifier: Modifier, celsius: Boolean) {
+    var showChart by remember { mutableStateOf(false) }
     Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp)) {
         ScreenTitle("Forecast", place?.name ?: "Selected location")
         SectionHeader("HOURLY FORECAST", "48 hours")
         HourlyStrip(state.hourly.take(48), celsius)
         Spacer(Modifier.height(22.dp))
         SectionHeader("15-DAY FORECAST", "Daily outlook")
-        state.daily.forEachIndexed { index, day ->
+        Row(horizontalArrangement = Arrangement.spacedBy(7.dp), modifier = Modifier.padding(bottom = 10.dp)) {
+            FilterChip(selected = !showChart, onClick = { showChart = false }, label = { Text("List") })
+            FilterChip(selected = showChart, onClick = { showChart = true }, label = { Text("Temperature chart") })
+        }
+        if (showChart) ForecastTemperatureChart(state.daily, celsius)
+        else state.daily.forEachIndexed { index, day ->
             DailyRow(day, index, celsius)
             Divider(color = Line, thickness = .7.dp)
         }
         Text("Forecasts are model guidance and can change as new runs arrive.", color = Muted, fontSize = 10.sp, modifier = Modifier.padding(vertical = 20.dp))
+    }
+}
+
+@Composable
+private fun ForecastTemperatureChart(days: List<DailyPoint>, celsius: Boolean) {
+    val valid = days.filter { it.high.isFinite() && it.low.isFinite() }
+    if (valid.size < 2) {
+        InfoCard("Temperature chart unavailable", "Not enough daily high/low forecast points were returned.")
+        return
+    }
+    val highColor = Color(0xFFE27A46)
+    val lowColor = Color(0xFF319CC8)
+    val minValue = valid.minOf { it.low }
+    val maxValue = valid.maxOf { it.high }
+    val range = (maxValue - minValue).coerceAtLeast(1.0)
+    Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(20.dp)) {
+        Column(Modifier.fillMaxWidth().padding(14.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(18.dp), modifier = Modifier.padding(bottom = 12.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(8.dp).background(highColor, CircleShape))
+                    Spacer(Modifier.width(6.dp)); Text("High", color = Muted, fontSize = 10.sp)
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(8.dp).background(lowColor, CircleShape))
+                    Spacer(Modifier.width(6.dp)); Text("Low", color = Muted, fontSize = 10.sp)
+                }
+            }
+            Canvas(Modifier.fillMaxWidth().height(170.dp)) {
+                val pad = 14f
+                val chartHeight = size.height - pad * 2
+                val xStep = (size.width - pad * 2) / (valid.size - 1).coerceAtLeast(1)
+                fun position(index: Int, value: Double): Offset {
+                    val ratio = ((value - minValue) / range).toFloat()
+                    return Offset(pad + xStep * index, size.height - pad - ratio * chartHeight)
+                }
+                val highPath = Path()
+                val lowPath = Path()
+                valid.forEachIndexed { index, day ->
+                    val highPoint = position(index, day.high)
+                    val lowPoint = position(index, day.low)
+                    if (index == 0) {
+                        highPath.moveTo(highPoint.x, highPoint.y)
+                        lowPath.moveTo(lowPoint.x, lowPoint.y)
+                    } else {
+                        highPath.lineTo(highPoint.x, highPoint.y)
+                        lowPath.lineTo(lowPoint.x, lowPoint.y)
+                    }
+                }
+                for (guide in 0..3) {
+                    val y = pad + chartHeight * guide / 3f
+                    drawLine(Line, Offset(pad, y), Offset(size.width - pad, y), strokeWidth = 1f)
+                }
+                drawPath(highPath, highColor, style = Stroke(width = 4f, cap = StrokeCap.Round))
+                drawPath(lowPath, lowColor, style = Stroke(width = 4f, cap = StrokeCap.Round))
+                valid.forEachIndexed { index, day ->
+                    drawCircle(highColor, radius = 4f, center = position(index, day.high))
+                    drawCircle(lowColor, radius = 4f, center = position(index, day.low))
+                }
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text(valid.first().date.takeLast(5), color = Muted, fontSize = 9.sp)
+                Text(valid[(valid.size / 2)].date.takeLast(5), color = Muted, fontSize = 9.sp)
+                Text(valid.last().date.takeLast(5), color = Muted, fontSize = 9.sp)
+            }
+            Text(
+                "High " + displayTemp(maxValue, celsius) + "°  ·  Low " + displayTemp(minValue, celsius) + "°",
+                color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 11.sp,
+                modifier = Modifier.padding(top = 10.dp)
+            )
+        }
     }
 }
 
