@@ -119,11 +119,31 @@ const [section,setSection]=useState("Weather Report");const [isSearchLocation,se
  };
 
  useEffect(()=>{if(locationStarted.current)return;locationStarted.current=true;detectLocalWeather()},[]);
- const refreshWeather=async()=>{
+ const refreshWeather=async(origin:Place)=>{
   setBusy(true);
-  const rows=await Promise.all(CITIES.map(async p=>{try{const r=await fetch(`${API}/api/weather?latitude=${p.lat}&longitude=${p.lon}`,{cache:"no-store"});if(!r.ok)throw new Error();const d=await r.json();return {...p,current:d.current||{},loading:false}}catch{return {...p,loading:false,error:true}}}));
-  setCities(rows);setUpdated(new Date().toISOString());setBusy(false);
+  try{
+   const country=origin.region.split(",").map(part=>part.trim()).filter(Boolean).pop()||"Unknown";
+   const url=`${API}/api/weather/featured?latitude=${origin.lat}&longitude=${origin.lon}&country=${encodeURIComponent(country)}`;
+   const response=await fetch(url,{cache:"no-store"});
+   if(!response.ok)throw new Error(`Featured weather API returned HTTP ${response.status}`);
+   const payload=await response.json();
+   if(!Array.isArray(payload.reports)||payload.reports.length===0)throw new Error("No featured city reports returned");
+   const rows:Place[]=payload.reports.map((item:any)=>({
+    name:item.name,region:item.scope==="national"?`${item.country} · National`:`${item.country} · Nearby international`,
+    lat:item.lat,lon:item.lon,current:item.current||{},loading:false,error:!item.current
+   }));
+   setCities(rows);setUpdated(payload.retrieved_at||new Date().toISOString());
+  }catch{
+   // Keep the previous successful city set visible if the personalized refresh fails.
+   setCities(previous=>previous.map(city=>({...city,loading:false,error:!city.current})));
+  }finally{setBusy(false);}
  };
+ useEffect(()=>{
+  if(!local)return;
+  void refreshWeather(local);
+  const id=window.setInterval(()=>void refreshWeather(local),5*60*1000);
+  return()=>window.clearInterval(id);
+ },[local?.lat,local?.lon,local?.name,local?.region]);
  const refreshFeeds=async()=>{
   try{
    const [c,india,world]=await Promise.all([fetch(`${API}/api/cyclones`,{cache:"no-store"}),fetch(`${API}/api/weather-news?region=india&limit=30`,{cache:"no-store"}),fetch(`${API}/api/weather-news?region=world&limit=30`,{cache:"no-store"})]);
@@ -131,7 +151,7 @@ const [section,setSection]=useState("Weather Report");const [isSearchLocation,se
    if(india.ok){const d=await india.json();setIndiaNews(d.articles||[]);}if(world.ok){const d=await world.json();setWorldNews(d.articles||[]);}
   }catch{setNotice("Some live weather or headline feeds are temporarily unavailable.");}
  };
- useEffect(()=>{void refreshWeather();void refreshFeeds();const weatherId=window.setInterval(()=>void refreshWeather(),60*1000);const newsId=window.setInterval(()=>void refreshFeeds(),5*60*1000);const clockId=window.setInterval(()=>setClock(new Date()),1000);return()=>{window.clearInterval(weatherId);window.clearInterval(newsId);window.clearInterval(clockId)}},[]);
+ useEffect(()=>{void refreshFeeds();const newsId=window.setInterval(()=>void refreshFeeds(),5*60*1000);const clockId=window.setInterval(()=>setClock(new Date()),1000);return()=>{window.clearInterval(newsId);window.clearInterval(clockId)}},[]);
 
  useEffect(()=>{
   if(!local)return;
