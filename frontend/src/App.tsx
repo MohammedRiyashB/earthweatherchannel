@@ -78,11 +78,13 @@ const [section,setSection]=useState("Weather Report");const [page,setPage]=useSt
    const provisional:Place={
     name:sameArea&&local?local.name:"Nearby location",
     region:sameArea&&local?local.region:"GPS coordinates · resolving town or village",
-    lat,lon,accuracy,current:sameArea?local?.current:undefined,
+    lat,lon,accuracy,source:"gps",current:sameArea?local?.current:undefined,
     loading:!sameArea||!local?.current,error:false,
    };
    setLocal(provisional);writeCache("local",provisional);
-   setIsSearchLocation(false);setLocationStatus("ready");
+   setIsSearchLocation(false);
+   if(!sameArea){setVisitorLocation(null);try{localStorage.removeItem(CACHE_PREFIX+"visitor-location");}catch{/* storage may be unavailable */}}
+   setLocationStatus("ready");
    setLocationMessage("Updating weather for your detected coordinates…");
    const controller=new AbortController();
    const timeout=window.setTimeout(()=>controller.abort(),10000);
