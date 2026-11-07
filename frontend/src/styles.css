@@ -384,3 +384,40 @@
   .weather-search-top button{min-width:88px;padding:0 14px}
   .local-weather-foot{font-size:9px}
 }
+
+
+/* Compact the time-to-logo gap in the mobile masthead. */
+.masthead{
+  min-height:0;
+  height:auto;
+  padding:5px max(18px,calc((100% - 1280px)/2)) 8px;
+  gap:2px;
+  justify-content:center;
+}
+.masthead-clock{
+  min-height:12px;
+  height:12px;
+  padding:0;
+  margin:0;
+  font-size:9px;
+  line-height:12px;
+  letter-spacing:.25px;
+}
+.masthead-row{min-height:48px}
+@media(max-width:620px){
+  .masthead{
+    min-height:0;
+    height:auto;
+    padding:4px 10px 7px;
+    gap:1px;
+  }
+  .masthead-clock{
+    min-height:11px;
+    height:11px;
+    font-size:9px;
+    line-height:11px;
+    padding:0;
+    margin:0;
+  }
+  .masthead-row{min-height:46px}
+}
