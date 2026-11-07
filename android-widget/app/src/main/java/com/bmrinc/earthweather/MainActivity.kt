@@ -454,7 +454,7 @@ class MainActivity : ComponentActivity() {
         if (!enabled) {
             morningBriefingEnabled = false
             getSharedPreferences("earth_weather_app", MODE_PRIVATE).edit().putBoolean("morning_briefing_enabled", false).apply()
-            WorkManager.getInstance(this).cancelUniqueWork("earth-weather-morning-briefing")
+            MorningBriefingWorker.cancel(this)
             return
         }
         if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
