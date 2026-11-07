@@ -3,9 +3,10 @@ from typing import Any
 import asyncio
 import os
 import logging
+from collections import OrderedDict
 
 import httpx
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Response
 from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI(
@@ -422,10 +423,13 @@ async def weather_bulk(
 
 @app.get("/api/weather")
 async def weather(
+    response: Response,
     latitude: float = Query(..., ge=-90, le=90),
     longitude: float = Query(..., ge=-180, le=180),
 ) -> dict[str, Any]:
     """Return fresh current conditions for the exact requested GPS coordinates."""
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+    response.headers["Pragma"] = "no-cache"
     params = _current_weather_params([latitude], [longitude])
     try:
         timeout = httpx.Timeout(8.0, connect=3.0, read=6.0, write=3.0, pool=3.0)
