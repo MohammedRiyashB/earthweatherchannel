@@ -60,6 +60,27 @@ async def health() -> dict[str, str]:
 async def sources() -> list[dict[str, str]]:
     return SOURCES
 
+SATELLITE_CATALOG = [
+    {"id":"nasa-gibs","provider":"NASA / EOSDIS GIBS","missions":["Terra MODIS","Aqua MODIS","Suomi-NPP VIIRS","NOAA-20 VIIRS","NOAA-21 VIIRS","GOES-East","GOES-West","DSCOVR EPIC"],"products":["true-colour imagery","clouds","fires","smoke","aerosols","snow and ice","sea surface temperature","vegetation","precipitation products"],"coverage":"Global or product-specific","access":"public WMTS/WMS; product and date dependent","status":"public","endpoint":"https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/","catalog":"https://www.earthdata.nasa.gov/data/tools/gibs","note":"More than 1,000 visualisation products; not every product is live or available at every location."},
+    {"id":"noaa-goes","provider":"NOAA GOES / NESDIS","missions":["GOES-16","GOES-18","GOES-19"],"products":["ABI imagery","GeoColor","cloud and moisture imagery","GLM lightning"],"coverage":"Americas and adjacent oceans; satellite-dependent","access":"Public NOAA distribution endpoints; product-specific","status":"public-product-dependent","endpoint":"https://www.goes.noaa.gov/"},
+    {"id":"eumetsat","provider":"EUMETSAT","missions":["Meteosat Second Generation","Meteosat Third Generation","Metop","Sentinel-3/4/5/6 mission products"],"products":["visible and infrared imagery","cloud products","atmospheric composition","ocean and land products"],"coverage":"Europe, Africa, Atlantic, Indian Ocean and product-specific global coverage","access":"EUMETSAT Data Store / EUMETView; account or service conditions may apply","status":"registration-or-product-dependent","endpoint":"https://data.eumetsat.int/"},
+    {"id":"copernicus-sentinel","provider":"Copernicus Data Space / ESA","missions":["Sentinel-1","Sentinel-2","Sentinel-3","Sentinel-5P"],"products":["SAR radar","optical imagery","land and ocean products","atmospheric composition"],"coverage":"Global archive; revisit and acquisition dependent","access":"STAC, OData, Sentinel Hub and OGC APIs; account/token may be required","status":"account-and-processing-dependent","endpoint":"https://dataspace.copernicus.eu/"},
+    {"id":"jma-himawari","provider":"Japan Meteorological Agency","missions":["Himawari-8","Himawari-9"],"products":["visible","infrared","water vapour imagery"],"coverage":"Asia-Pacific and western Pacific","access":"Public product portals and data services; redistribution terms apply","status":"product-dependent","endpoint":"https://www.data.jma.go.jp/mscweb/en/"},
+    {"id":"imd","provider":"India Meteorological Department","missions":["INSAT-3D","INSAT-3DR","INSAT-3DS"],"products":["weather imagery","cloud products","cyclone monitoring","official warnings"],"coverage":"India and surrounding region","access":"IMD API portal registration and product permissions","status":"registration-required","endpoint":"https://api.imd.gov.in/public/"},
+    {"id":"landsat","provider":"USGS / NASA Landsat","missions":["Landsat 8","Landsat 9"],"products":["multispectral land imagery","thermal imagery","surface reflectance"],"coverage":"Global archive; scene acquisition dependent","access":"USGS / NASA public data services; catalogue and download APIs","status":"public-archive","endpoint":"https://www.usgs.gov/landsat-missions"},
+    {"id":"commercial-earth-observation","provider":"Commercial satellite operators","missions":["Planet","Maxar","Airbus and other licensed constellations"],"products":["high-resolution optical and radar imagery"],"coverage":"Contract and collection dependent","access":"Commercial licence, API credentials and usage fees","status":"contract-required","endpoint":None}
+]
+
+@app.get("/api/satellites/catalog")
+async def satellite_catalog() -> dict[str, Any]:
+    """Catalog of satellite mission data services; availability and access requirements are explicit."""
+    return {
+        "retrieved_at": utc_now(),
+        "count": len(SATELLITE_CATALOG),
+        "providers": SATELLITE_CATALOG,
+        "note": "This is a provider and mission catalogue, not a claim that every satellite is connected to a live feed. Live access depends on each provider's published endpoint, product coverage, latency, licence and credentials."
+    }
+
 @app.get("/api/health/sources")
 async def source_health() -> dict[str, Any]:
     """Live lightweight probes. A successful HTTP response means reachable, not scientifically validated."""
