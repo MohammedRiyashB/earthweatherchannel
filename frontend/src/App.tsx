@@ -66,23 +66,31 @@ const [section,setSection]=useState("Weather Report");const [isSearchLocation,se
   navigator.geolocation.getCurrentPosition(async position=>{
    const lat=position.coords.latitude,lon=position.coords.longitude;
    try{
-    const [weatherResponse,placeResponse]=await Promise.all([
-     fetch(`${API}/api/weather?latitude=${lat}&longitude=${lon}`,{cache:"no-store"}),
-     fetch(`${API}/api/location/reverse?latitude=${lat}&longitude=${lon}`,{cache:"no-store"})
-    ]);
-    const placeData=placeResponse.ok?await placeResponse.json():null;
-    if(requestVersion!==locationRequestVersion.current)return;
-    const name=placeData?.name||"Your nearby area";
-    const region=placeData?.region||"GPS location";
-    const country=placeData?.country||undefined;
-    const visitor={name,region,lat,lon,country,country_code:placeData?.country_code||undefined};
-    if(country)setVisitorLocation(visitor);
-    if(!weatherResponse.ok)throw new Error("Local weather is temporarily unavailable.");
+    // Weather is the primary result. Reverse-geocoding is optional and must
+    // never hide a valid GPS weather response when the place-name service fails.
+    const weatherResponse=await fetch(`${API}/api/weather?latitude=${lat}&longitude=${lon}`,{cache:"no-store"});
+    if(!weatherResponse.ok)throw new Error(`Weather service returned HTTP ${weatherResponse.status}`);
     const weatherData=await weatherResponse.json();
-    setLocal({...visitor,current:weatherData.current||{}});
+    if(requestVersion!==locationRequestVersion.current)return;
+    const fallbackPlace:Place={name:"Your nearby area",region:"GPS coordinates",lat,lon,current:weatherData.current||{}};
+    setLocal(fallbackPlace);
     setIsSearchLocation(false);
     setLocationStatus("ready");setLocationMessage("");
+
+    try{
+     const placeResponse=await fetch(`${API}/api/location/reverse?latitude=${lat}&longitude=${lon}`,{cache:"no-store"});
+     if(placeResponse.ok){
+      const placeData=await placeResponse.json();
+      if(requestVersion!==locationRequestVersion.current)return;
+      const visitor:Place={name:placeData?.name||"Your nearby area",region:placeData?.region||placeData?.country||"GPS location",lat,lon,country:placeData?.country||undefined,country_code:placeData?.country_code||undefined};
+      setLocal({...visitor,current:weatherData.current||{}});
+      if(visitor.country)setVisitorLocation(visitor);
+     }
+    }catch{
+     // Keep the valid weather report and coordinates; place-name lookup can retry later.
+    }
    }catch(error){
+    if(requestVersion!==locationRequestVersion.current)return;
     setLocationStatus("error");setLocationMessage(error instanceof Error?error.message:"Could not load your local weather.");
    }
   },error=>{
@@ -90,7 +98,7 @@ const [section,setSection]=useState("Weather Report");const [isSearchLocation,se
    if(error.code===1){setLocationStatus("denied");setLocationMessage("Location permission is off. Allow location access to see weather for your current town or village.");}
    else if(error.code===3){setLocationStatus("error");setLocationMessage("Location request timed out. Please try again.");}
    else{setLocationStatus("error");setLocationMessage("Your current location could not be detected. Please try again.");}
-  },{enableHighAccuracy:true,timeout:20000,maximumAge:300000});
+  },{enableHighAccuracy:false,timeout:20000,maximumAge:0});
  };
 
  useEffect(()=>{if(locationStarted.current)return;locationStarted.current=true;detectLocalWeather()},[]);
