@@ -287,49 +287,63 @@ export default function App() {
   const precip=hourly.precipitation||[];
   const evap=hourly.evapotranspiration||[];
   const humidity=hourly.relative_humidity_2m||[];
-  return <main className="map-app">
-    <div className="map-canvas" ref={globeHost}/>
-    <header className="map-top">
-      <div className="search-pill"><span className="search-pin">◉</span>
-        <input value={searchText} onChange={e=>setSearchText(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")void searchPlace();}} placeholder="Search places or weather" aria-label="Search places"/>
-        <button className="search-action" onClick={()=>void searchPlace()} disabled={searchBusy}>{searchBusy?"…":"⌕"}</button>
-        <button className="profile-avatar" onClick={()=>firebaseUser?setActiveTab("profile"):void handleGoogleSignIn()} aria-label="Account">{firebaseUser?.photoURL?<img src={firebaseUser.photoURL} alt="Profile"/>:"●"}</button>
-      </div>
-      <div className="category-strip">
-        <button className={selectedSatellite==="VIIRS"?"chosen":""} onClick={()=>setSelectedSatellite("VIIRS")}>◉ Satellite</button>
-        <button className={selectedSatellite==="Rain Radar"?"chosen":""} onClick={()=>setSelectedSatellite("Rain Radar")}>▧ Radar</button>
-        <button className={windOn?"chosen":""} onClick={()=>setWindOn(v=>!v)}>≋ Wind</button>
-        <button className={cloudOn?"chosen":""} onClick={()=>setCloudOn(v=>!v)}>☁ Clouds</button>
-        <button onClick={()=>setPanel("overview")}>⚡ Storms</button>
-      </div>
+  const [workspace,setWorkspace]=useState<"explore"|"projects"|"settings"|"layers"|"measure"|"help">("explore");
+  const [theme,setTheme]=useState<"dark"|"light">("dark");
+  const [showMenu,setShowMenu]=useState(false);
+  const [projectName,setProjectName]=useState("Untitled project");
+  const [projects,setProjects]=useState<string[]>(["Weather monitoring","Saved places"]);
+  const [measureMode,setMeasureMode]=useState<"distance"|"area">("distance");
+  const [showLabels,setShowLabels]=useState(true);
+  const [showBorders,setShowBorders]=useState(true);
+  const [showRoads,setShowRoads]=useState(false);
+  const [show3D,setShow3D]=useState(true);
+  const [unit,setUnit]=useState("Metric");
+  const fileInput=useRef<HTMLInputElement>(null);
+  const openWorkspace=(next:typeof workspace)=>{setWorkspace(next);setShowMenu(false);};
+  const addProject=()=>{const name=window.prompt("Project name");if(name?.trim()){setProjects(v=>[...v,name.trim()]);setProjectName(name.trim());setWorkspace("projects");}};
+  const downloadKml=()=>{const kml='<?xml version="1.0" encoding="UTF-8"?><kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>'+projectName+'</name></Document></kml>';const blob=new Blob([kml],{type:"application/vnd.google-earth.kml+xml"});const url=URL.createObjectURL(blob);const a=document.createElement("a");a.href=url;a.download=projectName.replace(/[^a-z0-9]+/gi,"-")+".kml";a.click();URL.revokeObjectURL(url);};
+  const importKml=(file?:File)=>{if(!file)return;const reader=new FileReader();reader.onload=()=>{setMessage("Imported file: "+file.name+". KML/KMZ parsing and rendering will be connected next.");};reader.readAsArrayBuffer(file);};
+  return <main className={`earth-shell ${theme}`}>
+    <div className="earth-map" ref={globeHost}/>
+    <header className="earth-header">
+      <button className="earth-brand" onClick={()=>openWorkspace("explore")}><span className="earth-logo">◉</span><span>Google Earth<small>EARTH WEATHER</small></span></button>
+      <div className="earth-search"><span>⌕</span><input value={searchText} onChange={e=>setSearchText(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")void searchPlace();}} placeholder="Search Google Earth"/><button onClick={()=>void searchPlace()} disabled={searchBusy}>{searchBusy?"…":"Search"}</button></div>
+      <div className="earth-header-actions"><button onClick={()=>void handleGoogleSignIn()}>{firebaseUser?.displayName||"Sign in"}</button><button className="avatar" onClick={()=>setShowMenu(v=>!v)}>{firebaseUser?.photoURL?<img src={firebaseUser.photoURL} alt=""/>:"●"}</button></div>
     </header>
-    <div className="map-weather-chip" onClick={()=>setActiveTab("weather")}><span className="live-dot"/><div><b>{fmt(current?.temperature_2m,"°")} C · {codeLabel(current?.weather_code)}</b><small>{place} · {busy?"Updating":"Live conditions"}</small></div></div>
-    <div className="map-tools">
-      <button onClick={()=>locate()} aria-label="My location" title="My location">◎</button>
-      <button onClick={()=>viewer.current?.camera.setView({orientation:{heading:0,pitch:-Math.PI/2,roll:0}})} aria-label="Compass" title="Reset compass">🧭</button>
-      <button onClick={()=>setShowLayers(v=>!v)} aria-label="Map layers" title="Map layers">▱</button>
-      <button onClick={saveCurrentPlace} aria-label="Save place" title="Save place">☆</button>
+    <div className="earth-menubar">
+      {["File","Edit","View","Add","Tools","Help"].map((m,i)=><button key={m} onClick={()=>i===0?setShowMenu(v=>!v):i===2?openWorkspace("layers"):i===3?openWorkspace("measure"):i===4?openWorkspace("measure"):openWorkspace("help")}>{m}</button>)}
+      <span className="earth-location">{place}</span>
     </div>
-    {showLayers&&<div className="layers-card"><b>MAP LAYERS</b>
-      <label><input type="checkbox" checked={layerOn} onChange={e=>setLayerOn(e.target.checked)}/> Satellite imagery</label>
-      <label><input type="checkbox" checked={windOn} onChange={e=>setWindOn(e.target.checked)}/> Wind flow</label>
-      <label><input type="checkbox" checked={cloudOn} onChange={e=>setCloudOn(e.target.checked)}/> Cloud cover</label>
-      <label><input type="checkbox" checked={rainOn} onChange={e=>setRainOn(e.target.checked)}/> Rain field</label>
-      <label><input type="checkbox" checked={selectedSatellite==="Rain Radar"} onChange={e=>setSelectedSatellite(e.target.checked?"Rain Radar":"VIIRS")}/> Rain radar</label>
-    </div>}
-    {selectedSatellite==="VIIRS"&&<div className="map-time-card"><div><b>Satellite history</b><span>{dateUTC(historyOffset)}</span></div><input type="range" min="1" max="7" value={historyOffset} onChange={e=>{setHistoryPlaying(false);setHistoryOffset(Number(e.target.value));}}/><button onClick={()=>setHistoryPlaying(v=>!v)}>{historyPlaying?"Pause":"Play 7-day loop"}</button></div>}
-    {selectedSatellite==="Rain Radar"&&<div className="map-time-card"><div><b>Rain radar</b><span>{radarFrames[radarIndex]?new Date(radarFrames[radarIndex].time*1000).toLocaleTimeString():"Loading"}</span></div><input type="range" min="0" max={Math.max(0,radarFrames.length-1)} value={radarIndex} disabled={!radarFrames.length} onChange={e=>setRadarIndex(Number(e.target.value))}/></div>}
-    <div className="map-attribution">EARTH WEATHER · NASA / NOAA · Esri</div>
-    {activeTab!=="explore"&&<section className="bottom-sheet"><button className="sheet-close" onClick={()=>setActiveTab("explore")}>×</button>
-      {activeTab==="saved"?<><h2>Saved places</h2>{savedPlaces.length?savedPlaces.map(p=><button className="saved-place" key={p} onClick={()=>{setSearchText(p);setActiveTab("explore");}}>{p}</button>):<p>No saved places yet. Tap ☆ to save your current location.</p>}</>:
-      activeTab==="profile"?<><h2>Your account</h2>{firebaseUser?<><p>{firebaseUser.displayName||firebaseUser.email}</p><p className="sync-state">{cloudSync}</p><button className="sheet-button" onClick={()=>void handleSignOut()}>Sign out</button></>:<><p>Sign in to sync your weather and saved places.</p><button className="sheet-button" onClick={()=>void handleGoogleSignIn()} disabled={authBusy||!firebaseReady}>Continue with Google</button></>}</>:
-      <><h2>Local weather</h2><div className="sheet-temperature">{fmt(current?.temperature_2m,"°")}C</div><p>{codeLabel(current?.weather_code)} · {place}</p><div className="sheet-metrics"><span>Feels like <b>{fmt(current?.apparent_temperature,"°C")}</b></span><span>Humidity <b>{fmt(current?.relative_humidity_2m,"%")}</b></span><span>Wind <b>{fmt(current?.wind_speed_10m," km/h")}</b></span><span>Pressure <b>{fmt(current?.pressure_msl," hPa")}</b></span></div><p>{message}</p></>}
-    </section>}
-    <nav className="map-bottom-nav">
-      <button className={activeTab==="explore"?"active":""} onClick={()=>setActiveTab("explore")}><span>⌖</span>Explore</button>
-      <button className={activeTab==="saved"?"active":""} onClick={()=>setActiveTab("saved")}><span>▱</span>Saved</button>
-      <button className={activeTab==="profile"?"active":""} onClick={()=>setActiveTab("profile")}><span>☻</span>Profile</button>
-    </nav>
+    <aside className="earth-sidebar">
+      <div className="earth-sidebar-tabs">
+        <button className={workspace==="explore"?"sel":""} onClick={()=>openWorkspace("explore")}>Explore</button>
+        <button className={workspace==="projects"?"sel":""} onClick={()=>openWorkspace("projects")}>Projects</button>
+      </div>
+      {workspace==="explore"&&<div className="earth-side-content">
+        <h3>Explore</h3><button className="earth-row" onClick={()=>locate()}>◎ <span>I'm Feeling Lucky / My location</span></button>
+        <button className="earth-row" onClick={()=>setSelectedSatellite("VIIRS")}>◉ <span>Satellite imagery</span></button>
+        <button className="earth-row" onClick={()=>setSelectedSatellite("Rain Radar")}>▧ <span>Weather radar</span></button>
+        <button className="earth-row" onClick={()=>openWorkspace("layers")}>▤ <span>Map style and layers</span></button>
+        <button className="earth-row" onClick={()=>openWorkspace("measure")}>⌁ <span>Measure distance and area</span></button>
+        <div className="earth-side-section">MAP DATA</div>
+        <label className="earth-check"><input type="checkbox" checked={layerOn} onChange={e=>setLayerOn(e.target.checked)}/> Satellite imagery</label>
+        <label className="earth-check"><input type="checkbox" checked={windOn} onChange={e=>setWindOn(e.target.checked)}/> Wind animation</label>
+        <label className="earth-check"><input type="checkbox" checked={cloudOn} onChange={e=>setCloudOn(e.target.checked)}/> Cloud cover</label>
+        <label className="earth-check"><input type="checkbox" checked={rainOn} onChange={e=>setRainOn(e.target.checked)}/> Precipitation</label>
+        <label className="earth-check"><input type="checkbox" checked={showBorders} onChange={e=>setShowBorders(e.target.checked)}/> Borders and labels</label>
+      </div>}
+      {workspace==="projects"&&<div className="earth-side-content"><div className="earth-side-title"><h3>Projects</h3><button onClick={addProject}>＋ New</button></div><p className="earth-muted">Create maps and organise places.</p>{projects.map(p=><button className="earth-project" key={p} onClick={()=>setProjectName(p)}>▱ <span>{p}<small>Saved project</small></span><b>⋮</b></button>)}<button className="earth-row" onClick={()=>fileInput.current?.click()}>⇧ <span>Import KML or KMZ</span></button><input ref={fileInput} hidden type="file" accept=".kml,.kmz,.geojson,.json" onChange={e=>importKml(e.target.files?.[0])}/><button className="earth-row" onClick={downloadKml}>⇩ <span>Export current project as KML</span></button></div>}
+      {workspace==="layers"&&<div className="earth-side-content"><h3>Map style</h3><p className="earth-muted">Choose what appears on the map.</p><label className="earth-check"><input type="checkbox" checked={layerOn} onChange={e=>setLayerOn(e.target.checked)}/> Satellite</label><label className="earth-check"><input type="checkbox" checked={showLabels} onChange={e=>setShowLabels(e.target.checked)}/> Labels</label><label className="earth-check"><input type="checkbox" checked={showBorders} onChange={e=>setShowBorders(e.target.checked)}/> Borders</label><label className="earth-check"><input type="checkbox" checked={showRoads} onChange={e=>setShowRoads(e.target.checked)}/> Roads</label><label className="earth-check"><input type="checkbox" checked={show3D} onChange={e=>setShow3D(e.target.checked)}/> 3D buildings and terrain</label><div className="earth-side-section">WEATHER OVERLAYS</div><label className="earth-check"><input type="checkbox" checked={windOn} onChange={e=>setWindOn(e.target.checked)}/> Wind</label><label className="earth-check"><input type="checkbox" checked={cloudOn} onChange={e=>setCloudOn(e.target.checked)}/> Clouds</label><label className="earth-check"><input type="checkbox" checked={rainOn} onChange={e=>setRainOn(e.target.checked)}/> Rain</label></div>}
+      {workspace==="measure"&&<div className="earth-side-content"><h3>Measure</h3><p className="earth-muted">Measure distance or area on the globe.</p><div className="earth-switch"><button className={measureMode==="distance"?"sel":""} onClick={()=>setMeasureMode("distance")}>Distance</button><button className={measureMode==="area"?"sel":""} onClick={()=>setMeasureMode("area")}>Area</button></div><p className="earth-muted">Click points on the globe to create a measurement. Measurement drawing is the next interaction layer to wire.</p><button className="earth-primary" onClick={()=>setMessage("Measurement tool selected: "+measureMode)}>Start measuring</button></div>}
+      {workspace==="settings"&&<div className="earth-side-content"><h3>Settings</h3><div className="earth-side-section">DISPLAY</div><label className="earth-setting">Theme<select value={theme} onChange={e=>setTheme(e.target.value as "dark"|"light")}><option value="dark">Dark</option><option value="light">Light</option></select></label><div className="earth-side-section">MEASUREMENTS</div><label className="earth-setting">Units<select value={unit} onChange={e=>setUnit(e.target.value)}><option>Metric</option><option>Imperial</option></select></label><div className="earth-side-section">ACCOUNT</div><p className="earth-muted">{firebaseUser?.email||"Not signed in"}</p><p className="earth-muted">Cloud sync: {cloudSync}</p><button className="earth-row" onClick={()=>firebaseUser?void handleSignOut():void handleGoogleSignIn()}><span>{firebaseUser?"Sign out":"Sign in with Google"}</span></button></div>}
+      {workspace==="help"&&<div className="earth-side-content"><h3>Help</h3><p className="earth-muted">Navigate the globe with your mouse or touch. Search for a place, select a layer, or open Projects to manage your maps.</p><button className="earth-row" onClick={()=>openWorkspace("settings")}>⚙ <span>Settings</span></button></div>}
+      <div className="earth-sidebar-footer"><span>EARTH WEATHER</span><button onClick={()=>openWorkspace("settings")}>⚙ Settings</button></div>
+    </aside>
+    <div className="earth-map-controls"><button title="My location" onClick={()=>locate()}>◎</button><button title="North up" onClick={()=>viewer.current?.camera.setView({orientation:{heading:0,pitch:-Math.PI/2,roll:0}})}>🧭</button><button title="2D / 3D" onClick={()=>viewer.current?.scene.morphTo2D(1)}>2D</button><button title="Zoom in" onClick={()=>viewer.current?.camera.zoomIn(400000)}>＋</button><button title="Zoom out" onClick={()=>viewer.current?.camera.zoomOut(400000)}>−</button></div>
+    <div className="earth-weather-card"><span className="live-dot"/><div><b>{fmt(current?.temperature_2m,"°")}C · {codeLabel(current?.weather_code)}</b><small>{place} · {busy?"Updating":"Live weather"}</small></div></div>
+    <div className="earth-timeline"><div><b>{selectedSatellite==="Rain Radar"?"Weather radar":"Historical imagery"}</b><span>{selectedSatellite==="Rain Radar"?(radarFrames[radarIndex]?new Date(radarFrames[radarIndex].time*1000).toLocaleTimeString():"Loading"):dateUTC(historyOffset)}</span></div><input type="range" min="1" max="7" value={selectedSatellite==="Rain Radar"?Math.max(1,radarIndex+1):historyOffset} onChange={e=>selectedSatellite==="Rain Radar"?setRadarIndex(Number(e.target.value)-1):setHistoryOffset(Number(e.target.value))}/><button onClick={()=>selectedSatellite==="Rain Radar"?setSelectedSatellite("VIIRS"):setHistoryPlaying(v=>!v)}>{historyPlaying?"Pause":"Play timeline"}</button></div>
+    {showMenu&&<div className="earth-menu"><button onClick={addProject}>New project</button><button onClick={()=>fileInput.current?.click()}>Import KML/KMZ</button><button onClick={downloadKml}>Export KML</button><button onClick={()=>openWorkspace("settings")}>Settings</button><button onClick={()=>openWorkspace("help")}>Help</button></div>}
+    <div className="earth-status">{message}</div>
   </main>;
 }
 function Metric({label,value,icon}:{label:string;value:string;icon:string}){return <div className="metric"><span className="metric-icon">{icon}</span><div><small>{label}</small><b>{value}</b></div></div>;}
