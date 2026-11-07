@@ -769,7 +769,7 @@ async def air_quality(
     }
     customer_key = os.getenv("OPEN_METEO_API_KEY")
     if customer_key:
-        endpoint = os.getenv("OPEN_METEO_CUSTOMER_AIR_QUALITY_URL", "https://customer-api.open-meteo.com/v1/air-quality")
+        endpoint = os.getenv("OPEN_METEO_CUSTOMER_AIR_QUALITY_URL", "https://customer-air-quality-api.open-meteo.com/v1/air-quality")
         params["apikey"] = customer_key
     try:
         result = await asyncio.wait_for(app.state.weather_http.get(endpoint, params=params), timeout=18.0)
