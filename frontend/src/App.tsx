@@ -290,7 +290,7 @@ const [section,setSection]=useState("Weather Report");const page:"home"|SitePage
     if(active&&!places.length)setSearchError("No matching places found. Try another city or region.");
    }catch(error){if(active)setSearchError(error instanceof Error?error.message:"Location search failed.");}
    finally{if(active)setSearchLoading(false);}
-  },550);
+  },1000);
   return()=>{active=false;window.clearTimeout(timer);};
  },[query,searchOpen]);
  useEffect(()=>{
