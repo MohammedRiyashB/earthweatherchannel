@@ -163,23 +163,26 @@ async def weather(
     longitude: float = Query(..., ge=-180, le=180),
 ) -> dict[str, Any]:
     cache_key = (round(latitude, 3), round(longitude, 3))
+    now = asyncio.get_running_loop().time()
     async with _weather_cache_lock:
-        now = asyncio.get_running_loop().time()
         cached = _weather_cache.get(cache_key)
-        if cached and cached[0] > now:
-            return cached[1]
-        params = _meteo_params([latitude], [longitude])
-        params["current"] = "temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,cloud_cover,pressure_msl,wind_speed_10m,wind_direction_10m,wind_gusts_10m,weather_code"
-        try:
-            async with httpx.AsyncClient(timeout=35.0, follow_redirects=True) as client:
-                data = await _fetch_open_meteo_current(client, params)
-            data["source"] = {"name":"Open-Meteo","type":"numerical weather-model output","retrieved_at":utc_now()}
+    if cached and cached[0] > now:
+        return cached[1]
+
+    params = _meteo_params([latitude], [longitude])
+    params["current"] = "temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,cloud_cover,pressure_msl,wind_speed_10m,wind_direction_10m,wind_gusts_10m,weather_code"
+    try:
+        # Do not hold the shared cache lock during network I/O: different cities must load concurrently.
+        async with httpx.AsyncClient(timeout=35.0, follow_redirects=True) as client:
+            data = await _fetch_open_meteo_current(client, params)
+        data["source"] = {"name":"Open-Meteo","type":"numerical weather-model output","retrieved_at":utc_now()}
+        async with _weather_cache_lock:
             _weather_cache[cache_key] = (asyncio.get_running_loop().time() + 45, data)
-            return data
-        except HTTPException:
-            raise
-        except (httpx.HTTPError, ValueError) as exc:
-            raise HTTPException(status_code=502, detail=f"Weather provider unavailable: {exc.__class__.__name__}") from exc
+        return data
+    except HTTPException:
+        raise
+    except (httpx.HTTPError, ValueError) as exc:
+        raise HTTPException(status_code=502, detail=f"Weather provider unavailable: {exc.__class__.__name__}") from exc
 
 
 # Public Nominatim reverse-geocoding: one request at a time, cached by nearby coordinates.
