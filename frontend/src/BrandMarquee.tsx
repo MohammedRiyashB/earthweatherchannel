@@ -84,19 +84,11 @@ export default function BrandMarquee() {
   }, []);
 
   return (
-    <section className="source-brand-showcase" aria-labelledby="source-brand-title">
-      <div className="source-brand-heading">
-        <span className="eyebrow">DATA SOURCES & DEVELOPMENT CREDITS</span>
-        <h2 id="source-brand-title">The technology behind the forecast</h2>
-        <p>Weather data, satellite imagery, public information and tools used to build and operate EARTH WEATHER.</p>
-      </div>
+    <section className="source-brand-showcase" aria-label="Weather data sources and development tools">
       <div className="source-brand-motion">
         <BrandRail items={ROW_ONE} direction="left" active={active} />
         <BrandRail items={ROW_TWO} direction="right" active={active} />
       </div>
-      <p className="source-brand-note">
-        Names and marks identify services and sources used by this independent project; they do not imply sponsorship, endorsement or a formal partnership. Government agencies are identified by name rather than official emblems. ChatGPT is credited for AI-assisted development only, not as a weather-data provider.
-      </p>
     </section>
   );
 }
