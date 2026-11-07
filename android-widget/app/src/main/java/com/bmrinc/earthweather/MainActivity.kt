@@ -379,7 +379,7 @@ private fun WeatherScreen(state: DashboardState, place: WeatherPlace?, modifier:
             TextButton(onClick = { onTab("Cities") }) { Text("Change") }
         }
         Column(Modifier.fillMaxWidth().background(
-            Brush.linearGradient(listOf(Color(0xFF06435F), Color(0xFF087FA3), Color(0xFF63B8C5))),
+            Brush.linearGradient(weatherGradient(current?.weatherCode ?: -1, current?.isDay ?: true)),
             RoundedCornerShape(28.dp)
         ).padding(22.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Top) {
@@ -405,6 +405,9 @@ private fun WeatherScreen(state: DashboardState, place: WeatherPlace?, modifier:
         if (state.loading) LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 12.dp), color = Sky)
         if (state.error.isNotBlank()) Text(state.error, color = Orange, fontSize = 10.sp, modifier = Modifier.padding(top = 10.dp))
         Spacer(Modifier.height(20.dp))
+        SectionHeader("WEATHER DETAILS", "Current conditions")
+        WeatherDetailsCard(current, celsius)
+        Spacer(Modifier.height(20.dp))
         SectionHeader("HOURLY FORECAST", "Next 24 hours")
         HourlyStrip(state.hourly.take(24), celsius)
         Spacer(Modifier.height(20.dp))
@@ -413,6 +416,9 @@ private fun WeatherScreen(state: DashboardState, place: WeatherPlace?, modifier:
         Spacer(Modifier.height(20.dp))
         SectionHeader("AIR QUALITY", "Model estimate")
         AirQualityCard(state.air)
+        Spacer(Modifier.height(20.dp))
+        SectionHeader("DAILY LIFE INDICES", "Weather guidance")
+        LifeIndexCard(state)
         Spacer(Modifier.height(20.dp))
         SectionHeader("SUN & DAYLIGHT", "Today")
         SunriseCard(state.daily.firstOrNull())
@@ -874,6 +880,83 @@ private fun WeatherIcon(code: Int, size: Dp, modifier: Modifier = Modifier) {
         contentDescription = weatherDescription(code).first,
         modifier = modifier.size(size)
     )
+}
+
+
+private fun weatherGradient(code: Int, isDay: Boolean): List<Color> = when {
+    code in listOf(95, 96, 99) -> listOf(Color(0xFF273849), Color(0xFF41546B), Color(0xFF172737))
+    code in listOf(51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 80, 81, 82) -> listOf(Color(0xFF123D5A), Color(0xFF236B8E), Color(0xFF122E48))
+    code in listOf(71, 73, 75, 77, 85, 86) -> listOf(Color(0xFF5A91B2), Color(0xFF8CBED2), Color(0xFF426F90))
+    code in listOf(45, 48) -> listOf(Color(0xFF536B7B), Color(0xFF8096A4), Color(0xFF3A5364))
+    code == 0 && !isDay -> listOf(Color(0xFF111B37), Color(0xFF243E66), Color(0xFF101D35))
+    code == 0 -> listOf(Color(0xFF0B6894), Color(0xFF26A7C4), Color(0xFFF0B66B))
+    else -> listOf(Color(0xFF06435F), Color(0xFF087FA3), Color(0xFF63B8C5))
+}
+
+@Composable
+private fun WeatherDetailsCard(current: CurrentConditions?, celsius: Boolean) {
+    Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(19.dp)) {
+        Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+            TinyMetric("FEELS LIKE", displayTemp(current?.feelsLike ?: Double.NaN, celsius) + if (celsius) "°C" else "°F", "🌡️")
+            TinyMetric("PRESSURE", current?.pressure?.let { formatValue(it) + " hPa" } ?: "—", "◉")
+            TinyMetric("CLOUD COVER", current?.cloud?.takeIf { it >= 0 }?.let { it.toString() + "%" } ?: "—", "☁️")
+        }
+    }
+}
+
+@Composable
+private fun LifeIndexCard(state: DashboardState) {
+    val current = state.current
+    val nextHours = state.hourly.take(6)
+    val rainChance = nextHours.maxOfOrNull { it.precipitationProbability.coerceAtLeast(0) } ?: -1
+    val uv = state.daily.firstOrNull()?.uvMax ?: state.air?.uv ?: Double.NaN
+    val temperature = current?.temperature ?: Double.NaN
+    val wind = current?.windKmh ?: Double.NaN
+    val umbrella = when {
+        rainChance >= 60 -> "Umbrella recommended"
+        rainChance in 30..59 -> "Keep an umbrella nearby"
+        rainChance >= 0 -> "Low rain probability"
+        else -> "Rain outlook unavailable"
+    }
+    val outdoor = when {
+        rainChance >= 70 -> "Rain likely soon"
+        temperature.isFinite() && temperature >= 35 -> "Hot conditions"
+        temperature.isFinite() && temperature <= 12 -> "Cool conditions"
+        wind.isFinite() && wind >= 35 -> "Windy conditions"
+        temperature.isFinite() -> "Generally suitable"
+        else -> "Not enough data"
+    }
+    val uvText = when {
+        uv.isNaN() -> "Unavailable"
+        uv < 3 -> "Low"
+        uv < 6 -> "Moderate"
+        uv < 8 -> "High"
+        uv < 11 -> "Very high"
+        else -> "Extreme"
+    }
+    Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(19.dp)) {
+        Column(Modifier.fillMaxWidth().padding(16.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                LifeIndexItem("OUTDOOR", outdoor, "🚶")
+                LifeIndexItem("RAIN GEAR", umbrella, "☂️")
+            }
+            Divider(color = Line, modifier = Modifier.padding(vertical = 12.dp))
+            LifeIndexItem("UV EXPOSURE", uvText + " · " + formatValue(uv, 1), "☀️")
+            Text("Simple guidance derived from forecast values; not an official health or safety warning.", color = Muted, fontSize = 9.sp, lineHeight = 13.sp, modifier = Modifier.padding(top = 10.dp))
+        }
+    }
+}
+
+@Composable
+private fun LifeIndexItem(label: String, value: String, icon: String) {
+    Column(Modifier.widthIn(max = 190.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(icon, fontSize = 16.sp)
+            Spacer(Modifier.width(6.dp))
+            Text(label, color = Muted, fontSize = 8.sp, fontWeight = FontWeight.Bold, letterSpacing = .7.sp)
+        }
+        Text(value, color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
+    }
 }
 
 private fun displayTemp(value: Double, celsius: Boolean): String {
