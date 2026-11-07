@@ -50,6 +50,8 @@ import com.bmrinc.earthweatherwidget.WeatherAlertWorker
 import com.bmrinc.earthweatherwidget.WeatherWidgetWorker
 import java.util.concurrent.TimeUnit
 import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.Priority
+import com.google.android.gms.tasks.CancellationTokenSource
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
@@ -201,8 +203,20 @@ class MainActivity : ComponentActivity() {
         try {
             LocationServices.getFusedLocationProviderClient(this).lastLocation
                 .addOnSuccessListener { location ->
-                    if (location == null) restoreSavedOrShowLocationError()
-                    else lifecycleScope.launch {
+                    if (location == null) {
+                        try {
+                            LocationServices.getFusedLocationProviderClient(this)
+                                .getCurrentLocation(Priority.PRIORITY_BALANCED_POWER_ACCURACY, CancellationTokenSource().token)
+                                .addOnSuccessListener { fresh ->
+                                    if (fresh == null) restoreSavedOrShowLocationError()
+                                    else lifecycleScope.launch {
+                                        val place = runCatching { EarthWeatherApi.reverse(fresh.latitude, fresh.longitude) }
+                                            .getOrElse { WeatherPlace("Current location", "GPS location", fresh.latitude, fresh.longitude) }
+                                        choosePlace(place)
+                                    }
+                                }.addOnFailureListener { restoreSavedOrShowLocationError() }
+                        } catch (_: SecurityException) { restoreSavedOrShowLocationError() }
+                    } else lifecycleScope.launch {
                         val place = runCatching { EarthWeatherApi.reverse(location.latitude, location.longitude) }
                             .getOrElse { WeatherPlace("Current location", "GPS location", location.latitude, location.longitude) }
                         choosePlace(place)
@@ -361,6 +375,12 @@ private fun EarthWeatherApp(
 
 @Composable
 private fun WeatherScreen(state: DashboardState, place: WeatherPlace?, modifier: Modifier, celsius: Boolean, onRefresh: () -> Unit, onTab: (String) -> Unit) {
+    LaunchedEffect(place?.latitude, place?.longitude) {
+        while (true) {
+            delay(10 * 60 * 1000L)
+            onRefresh()
+        }
+    }
     val current = state.current
     val description = weatherDescription(current?.weatherCode ?: -1)
     Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp)) {
