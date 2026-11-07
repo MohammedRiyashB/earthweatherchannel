@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 from typing import Any
+import os
 import httpx
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -18,7 +19,10 @@ SOURCES = [
     {"id":"open-meteo","name":"Open-Meteo","kind":"weather model API","coverage":"Global","status":"connected","update":"Model-dependent; typically updated several times daily","note":"Provides model-based current conditions and forecasts; not a direct satellite observation."},
     {"id":"osm","name":"OpenStreetMap","kind":"map basemap","coverage":"Global","status":"connected","update":"Community maintained","note":"Attribution required. Standard public tile servers have a usage policy and are not an unlimited production CDN."},
     {"id":"noaa-nws","name":"NOAA / NWS API","kind":"official forecasts and alerts","coverage":"United States","status":"available-us-only","update":"Operational API","note":"Official US weather forecasts, observations and alerts; not a global alert feed."},
-    {"id":"noaa-goes","name":"NOAA GOES satellite products","kind":"satellite imagery","coverage":"Americas and adjacent oceans","status":"catalog-only","update":"Product / scan dependent","note":"Integration requires selecting specific ABI products, projection, file format and an imagery-serving pipeline."},
+    {"id":"goes-east-gibs","name":"NOAA GOES-East ABI GeoColor via NASA GIBS","kind":"satellite imagery","coverage":"Americas and adjacent oceans","status":"connected","update":"Near-real-time; scan / processing dependent","note":"Selectable imagery layer in the globe. This is a GIBS visualization, not a raw GOES data ingest pipeline."},
+    {"id":"goes-west-gibs","name":"NOAA GOES-West ABI GeoColor via NASA GIBS","kind":"satellite imagery","coverage":"Americas and adjacent oceans","status":"connected","update":"Near-real-time; scan / processing dependent","note":"Selectable imagery layer in the globe. This is a GIBS visualization, not a raw GOES data ingest pipeline."},
+    {"id":"noaa-goes-aws","name":"NOAA GOES open data on AWS","kind":"raw satellite data archive","coverage":"Americas and adjacent oceans","status":"catalog-only","update":"New files as available","note":"Public raw ABI files require a separate NetCDF / projection / reprojection and tile-serving pipeline."},
+    {"id":"nasa-gpm","name":"NASA GPM precipitation products","kind":"precipitation satellite data","coverage":"Global / product-dependent","status":"catalog-only","update":"Product-dependent","note":"GIBS exposes precipitation-related products; a dedicated precipitation layer and time-step selector is a next integration."},
     {"id":"eumetsat","name":"EUMETSAT Meteosat / MTG","kind":"satellite imagery","coverage":"Europe, Africa and adjacent regions","status":"catalog-only","update":"Product / access dependent","note":"Some products require registration, authentication or specific redistribution permissions."},
     {"id":"jma-himawari","name":"JMA Himawari","kind":"satellite imagery","coverage":"Asia-Pacific","status":"catalog-only","update":"Product / scan dependent","note":"Needs a dedicated imagery adapter and source-specific terms review."},
     {"id":"isro-insat","name":"ISRO INSAT","kind":"satellite imagery","coverage":"Indian region","status":"catalog-only","update":"Product / access dependent","note":"Add only through verified official public feeds and permitted use."},
@@ -65,7 +69,7 @@ async def alerts(
     # NWS API is United States-only. Do not imply global coverage.
     if not (24 <= latitude <= 50 and -125 <= longitude <= -66):
         return {"source":"NOAA/NWS","coverage":"United States only","features":[],"message":"NWS alerts are not available for this location."}
-    headers = {"User-Agent":"EARTH-WEATHER/0.1 (contact: configure-a-real-contact-before-production)"}
+    headers = {"User-Agent": os.getenv("EARTH_WEATHER_USER_AGENT", "EARTH-WEATHER/0.1 (set EARTH_WEATHER_USER_AGENT to a monitored contact before production)") }
     try:
         async with httpx.AsyncClient(timeout=15.0, headers=headers) as client:
             response = await client.get("https://api.weather.gov/alerts/active", params={"point":f"{latitude},{longitude}"})
