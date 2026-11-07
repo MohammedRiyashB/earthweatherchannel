@@ -13,12 +13,20 @@ app = FastAPI(
     version="0.2.0",
     description="Global atmospheric model fields, satellite metadata, cyclone events and source health.",
 )
+_cors_origins = [
+    origin.strip().rstrip("/")
+    for origin in os.getenv(
+        "CORS_ORIGINS",
+        "https://earthweatherchannel.web.app,https://earthweatherchannel.firebaseapp.com",
+    ).split(",")
+    if origin.strip()
+]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Set CORS_ORIGINS to comma-separated production origins.
+    allow_origins=_cors_origins,
     allow_credentials=False,
     allow_methods=["GET"],
-    allow_headers=["*"],
+    allow_headers=["Accept", "Content-Type"],
 )
 
 from app.cache_middleware import PublicResponseCacheMiddleware
@@ -143,7 +151,7 @@ async def _request_current_chunk(
                 response = await client.get(
                     OPEN_METEO,
                     params=params,
-                    headers={"User-Agent": "EARTH-WEATHER/1.0 (+https://earthweatherchannel.web.app)", "Accept": "application/json"},
+                    headers={"User-Agent": os.getenv("EARTH_WEATHER_USER_AGENT", "EARTH-WEATHER/1.0 (+https://earthweatherchannel.web.app)"), "Accept": "application/json"},
                 )
             response.raise_for_status()
             payload = response.json()
