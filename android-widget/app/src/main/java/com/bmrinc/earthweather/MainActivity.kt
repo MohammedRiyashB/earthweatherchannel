@@ -42,6 +42,7 @@ import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import com.bmrinc.earthweatherwidget.WeatherAlertWorker
+import com.bmrinc.earthweatherwidget.WeatherWidgetWorker
 import java.util.concurrent.TimeUnit
 import com.google.android.gms.location.LocationServices
 import kotlinx.coroutines.async
@@ -168,6 +169,7 @@ class MainActivity : ComponentActivity() {
             .putString("lat", place.latitude.toString())
             .putString("lon", place.longitude.toString())
             .putString("city", place.name).apply()
+        WeatherWidgetWorker.enqueueNow(this)
     }
 
     private fun persistSavedCities() {
