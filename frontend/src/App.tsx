@@ -544,6 +544,7 @@ const [section,setSection]=useState("Weather Report");const page:"home"|SitePage
   if(!locationPickerOpen)return;
   const term=query.trim();
   if(term.length<2){setLocationSearchResults([]);setLocationSearching(false);setLocationSearchError("");return;}
+  setLocationSearchResults([]);setLocationSearching(true);setLocationSearchError("");
   const timer=window.setTimeout(()=>{void search();},750);
   return()=>{window.clearTimeout(timer);locationSearchVersion.current++;};
  },[locationPickerOpen,query]);
