@@ -174,6 +174,35 @@ FEATURED_CITIES: list[dict[str, Any]] = [
     {"name":"Johannesburg","country":"South Africa","lat":-26.2041,"lon":28.0473},
     {"name":"São Paulo","country":"Brazil","lat":-23.5505,"lon":-46.6333},
     {"name":"Rio de Janeiro","country":"Brazil","lat":-22.9068,"lon":-43.1729},
+    {"name":"Madrid","country":"Spain","lat":40.4168,"lon":-3.7038},
+    {"name":"Barcelona","country":"Spain","lat":41.3874,"lon":2.1686},
+    {"name":"Rome","country":"Italy","lat":41.9028,"lon":12.4964},
+    {"name":"Milan","country":"Italy","lat":45.4642,"lon":9.1900},
+    {"name":"Amsterdam","country":"Netherlands","lat":52.3676,"lon":4.9041},
+    {"name":"Stockholm","country":"Sweden","lat":59.3293,"lon":18.0686},
+    {"name":"Moscow","country":"Russia","lat":55.7558,"lon":37.6173},
+    {"name":"Istanbul","country":"Türkiye","lat":41.0082,"lon":28.9784},
+    {"name":"Ankara","country":"Türkiye","lat":39.9334,"lon":32.8597},
+    {"name":"Mexico City","country":"Mexico","lat":19.4326,"lon":-99.1332},
+    {"name":"Monterrey","country":"Mexico","lat":25.6866,"lon":-100.3161},
+    {"name":"Buenos Aires","country":"Argentina","lat":-34.6037,"lon":-58.3816},
+    {"name":"Santiago","country":"Chile","lat":-33.4489,"lon":-70.6693},
+    {"name":"Lima","country":"Peru","lat":-12.0464,"lon":-77.0428},
+    {"name":"Cairo","country":"Egypt","lat":30.0444,"lon":31.2357},
+    {"name":"Nairobi","country":"Kenya","lat":-1.2921,"lon":36.8219},
+    {"name":"Lagos","country":"Nigeria","lat":6.5244,"lon":3.3792},
+    {"name":"Accra","country":"Ghana","lat":5.6037,"lon":-0.1870},
+    {"name":"Seoul","country":"South Korea","lat":37.5665,"lon":126.9780},
+    {"name":"Manila","country":"Philippines","lat":14.5995,"lon":120.9842},
+    {"name":"Hanoi","country":"Vietnam","lat":21.0278,"lon":105.8342},
+    {"name":"Ho Chi Minh City","country":"Vietnam","lat":10.8231,"lon":106.6297},
+    {"name":"Dhaka","country":"Bangladesh","lat":23.8103,"lon":90.4125},
+    {"name":"Kathmandu","country":"Nepal","lat":27.7172,"lon":85.3240},
+    {"name":"Karachi","country":"Pakistan","lat":24.8607,"lon":67.0011},
+    {"name":"Lahore","country":"Pakistan","lat":31.5204,"lon":74.3587},
+    {"name":"Auckland","country":"New Zealand","lat":-36.8509,"lon":174.7645},
+    {"name":"Warsaw","country":"Poland","lat":52.2297,"lon":21.0122},
+    {"name":"Athens","country":"Greece","lat":37.9838,"lon":23.7275},
 ]
 COUNTRY_ALIASES = {
     "usa":"United States","us":"United States","united states of america":"United States",
@@ -193,15 +222,27 @@ async def featured_weather(
 ) -> dict[str, Any]:
     """Return four major cities in the visitor's country and four nearby international cities."""
     normalized = COUNTRY_ALIASES.get(country.strip().lower(), country.strip())
-    national = [item for item in FEATURED_CITIES if item["country"].lower() == normalized.lower()]
-    if len(national) > 4:
-        national = sorted(national, key=lambda item: _distance_km(latitude, longitude, item["lat"], item["lon"]))[:4]
-    international: list[dict[str, Any]] = []
-    seen_countries = {normalized.lower()}
+    national = sorted(
+        (item for item in FEATURED_CITIES if item["country"].lower() == normalized.lower()),
+        key=lambda item: _distance_km(latitude, longitude, item["lat"], item["lon"]),
+    )[:4]
+    regional: list[dict[str, Any]] = []
+    if not national:
+        # When the visitor's country is not yet in our curated city catalogue,
+        # show honest nearby regional reference cities instead of mislabelling them national.
+        regional = sorted(
+            FEATURED_CITIES,
+            key=lambda item: _distance_km(latitude, longitude, item["lat"], item["lon"]),
+        )[:4]
+
+    excluded_countries = {normalized.lower()}
+    excluded_countries.update(item["country"].lower() for item in regional)
     candidates = sorted(
-        (item for item in FEATURED_CITIES if item["country"].lower() != normalized.lower()),
+        (item for item in FEATURED_CITIES if item["country"].lower() not in excluded_countries),
         key=lambda item: _distance_km(latitude, longitude, item["lat"], item["lon"]),
     )
+    international: list[dict[str, Any]] = []
+    seen_countries = set(excluded_countries)
     for item in candidates:
         key = item["country"].lower()
         if key in seen_countries:
@@ -210,17 +251,7 @@ async def featured_weather(
         seen_countries.add(key)
         if len(international) == 4:
             break
-    selected = national + international
-    if len(national) < 4:
-        # Unknown/sparsely represented country: use the four closest known reference cities
-        # as the national/regional group rather than returning an empty weather panel.
-        selected_nearby = sorted(
-            FEATURED_CITIES,
-            key=lambda item: _distance_km(latitude, longitude, item["lat"], item["lon"]),
-        )[:4]
-        national = selected_nearby
-        international = [item for item in candidates if item not in national][:4]
-        selected = national + international
+    selected = national + regional + international
     params = _meteo_params([item["lat"] for item in selected], [item["lon"] for item in selected])
     params["current"] = "temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,cloud_cover,pressure_msl,wind_speed_10m,wind_direction_10m,wind_gusts_10m,weather_code"
     try:
@@ -230,18 +261,19 @@ async def featured_weather(
         if len(rows) != len(selected):
             raise HTTPException(status_code=502, detail="Weather provider returned an incomplete featured-city batch")
         national_count = len(national)
+        regional_count = len(regional)
         reports = []
         for index, (place, row) in enumerate(zip(selected, rows)):
-            reports.append({
-                **place,
-                "scope": "national" if index < national_count else "international",
-                "current": row.get("current") or {},
-            })
+            scope = "national" if index < national_count else (
+                "regional" if index < national_count + regional_count else "international"
+            )
+            reports.append({**place, "scope": scope, "current": row.get("current") or {}})
         return {
             "visitor_country": normalized,
             "visitor_location": {"latitude": latitude, "longitude": longitude},
             "national": reports[:national_count],
-            "international": reports[national_count:],
+            "regional": reports[national_count:national_count + regional_count],
+            "international": reports[national_count + regional_count:],
             "reports": reports,
             "source": "Open-Meteo global numerical weather model",
             "retrieved_at": utc_now(),
