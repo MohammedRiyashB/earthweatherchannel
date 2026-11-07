@@ -166,28 +166,35 @@ async def _fetch_open_meteo_current(client: httpx.AsyncClient, params: dict[str,
         else:
             pending_indices.append(index)
 
-    # Keep upstream query strings small. Open-Meteo supports multi-location
-    # requests, but modest batches are more resilient to proxy/URL/provider limits.
+    # Keep upstream query strings small, but run independent chunks concurrently.
+    # Sequential 35-second waits multiplied by many cities caused cards to remain
+    # in "Loading report…" for minutes when the upstream provider was slow.
     chunks = [pending_indices[i:i + 4] for i in range(0, len(pending_indices), 4)]
-    for chunk in chunks:
+
+    async def load_chunk(chunk: list[int]) -> tuple[list[int], list[dict[str, Any]] | None]:
         chunk_lats = [latitudes[i] for i in chunk]
         chunk_lons = [longitudes[i] for i in chunk]
         try:
             rows = await _request_current_chunk(client, chunk_lats, chunk_lons)
+            return chunk, rows
+        except RuntimeError:
+            # Retry individual coordinates so one bad upstream batch cannot
+            # prevent otherwise healthy cities from receiving a report.
+            rows: list[dict[str, Any] | None] = []
+            for index in chunk:
+                try:
+                    single = await _request_current_chunk(client, [latitudes[index]], [longitudes[index]])
+                    rows.append(single[0])
+                except RuntimeError:
+                    cached = _current_provider_cache.get((round(latitudes[index], 3), round(longitudes[index], 3)))
+                    rows.append(cached[1] if cached and now - cached[0] <= _CURRENT_STALE_TTL else None)
+            return chunk, rows  # type: ignore[return-value]
+
+    loaded_chunks = await asyncio.gather(*(load_chunk(chunk) for chunk in chunks))
+    for chunk, rows in loaded_chunks:
+        if rows is not None:
             for index, row in zip(chunk, rows):
                 results[index] = row
-        except RuntimeError:
-            # A failed multi-city batch should not take down every city card.
-            # Retry each city independently, then use a bounded stale fallback.
-            for index in chunk:
-                lat, lon = latitudes[index], longitudes[index]
-                try:
-                    rows = await _request_current_chunk(client, [lat], [lon])
-                    results[index] = rows[0]
-                except RuntimeError:
-                    cached = _current_provider_cache.get((round(lat, 3), round(lon, 3)))
-                    if cached and now - cached[0] <= _CURRENT_STALE_TTL:
-                        results[index] = cached[1]
 
     if all(row is None for row in results):
         raise HTTPException(status_code=502, detail="Weather provider is temporarily unavailable; no recent cached report exists")
@@ -329,7 +336,7 @@ async def featured_weather(
     selected = national + regional + international
     params = _current_weather_params([item["lat"] for item in selected], [item["lon"] for item in selected])
     try:
-        async with httpx.AsyncClient(timeout=35.0, follow_redirects=True) as client:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(12.0, connect=5.0), follow_redirects=True) as client:
             payload = await _fetch_open_meteo_current(client, params)
         rows = payload if isinstance(payload, list) else [payload]
         if len(rows) != len(selected):
