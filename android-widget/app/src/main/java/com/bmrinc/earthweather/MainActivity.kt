@@ -139,7 +139,7 @@ class MainActivity : ComponentActivity() {
                 )
             }
         }
-        requestLocation()
+        selectedPlace?.let { loadWeather(it) } ?: requestLocation()
         if (notificationsEnabled) scheduleAlertChecks()
         if (rainRemindersEnabled) scheduleRainReminders()
     }
