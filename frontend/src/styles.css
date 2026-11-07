@@ -870,3 +870,49 @@
   .weather-scene .weather-sky-art::after,
   .weather-scene .weather-sky-art i{animation:none!important;will-change:auto!important}
 }
+
+
+/* Compact side-by-side footer navigation */
+.news-footer{padding:42px 28px 28px}
+.footer-heading{margin-bottom:24px}
+.footer-navigation{
+ display:grid;
+ grid-template-columns:repeat(2,minmax(0,1fr));
+ gap:26px 34px;
+ align-items:start;
+}
+.footer-group{display:flex;flex-direction:column;align-items:flex-start;gap:10px;min-width:0}
+.footer-group h3{
+ margin:0 0 4px;
+ color:#fff;
+ font-size:13px;
+ font-weight:800;
+ letter-spacing:.12em;
+ text-transform:uppercase;
+}
+.footer-group button,.footer-group span{
+ display:block;
+ padding:0;
+ border:0;
+ background:none;
+ color:#b7cbd5;
+ font:inherit;
+ font-size:14px;
+ line-height:1.45;
+ text-align:left;
+ text-decoration:none;
+}
+.footer-group button{cursor:pointer}
+.footer-group button:hover{color:#fff}
+.footer-group span{cursor:default}
+.footer-copyright{margin-top:28px}
+@media(min-width:900px){
+ .footer-navigation{grid-template-columns:repeat(3,minmax(0,1fr));gap:30px 42px}
+}
+@media(max-width:420px){
+ .news-footer{padding:34px 20px 24px}
+ .footer-navigation{gap:24px 18px}
+ .footer-group{gap:9px}
+ .footer-group h3{font-size:12px}
+ .footer-group button,.footer-group span{font-size:13px}
+}
