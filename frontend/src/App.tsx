@@ -17,6 +17,40 @@ const CITIES:Place[]=[
 {name:"São Paulo",region:"Brazil",lat:-23.5505,lon:-46.6333},{name:"Erode",region:"Tamil Nadu, India",lat:11.341,lon:77.7172}
 ];
 
+const catalogCity=(name:string,country:string,country_code:string,state:string,lat:number,lon:number):Place=>({name,region:[state,country].filter(Boolean).join(", "),country,country_code,state,lat,lon,source:"search"});
+const INDIA_TOP_CITIES:Place[]=[
+ catalogCity("New Delhi","India","IN","Delhi",28.6139,77.2090),
+ catalogCity("Kolkata","India","IN","West Bengal",22.5726,88.3639),
+ catalogCity("Mumbai","India","IN","Maharashtra",19.0760,72.8777),
+ catalogCity("Chennai","India","IN","Tamil Nadu",13.0827,80.2707),
+ catalogCity("Lucknow","India","IN","Uttar Pradesh",26.8467,80.9462)
+];
+const COUNTRY_TOP_CITIES:Record<string,Place[]>={
+ IN:INDIA_TOP_CITIES,
+ US:[catalogCity("New York","United States","US","New York",40.7128,-74.0060),catalogCity("Los Angeles","United States","US","California",34.0522,-118.2437),catalogCity("Chicago","United States","US","Illinois",41.8781,-87.6298),catalogCity("Houston","United States","US","Texas",29.7604,-95.3698),catalogCity("Miami","United States","US","Florida",25.7617,-80.1918)],
+ GB:[catalogCity("London","United Kingdom","GB","England",51.5072,-0.1276),catalogCity("Manchester","United Kingdom","GB","England",53.4808,-2.2426),catalogCity("Birmingham","United Kingdom","GB","England",52.4862,-1.8904),catalogCity("Glasgow","United Kingdom","GB","Scotland",55.8642,-4.2518),catalogCity("Edinburgh","United Kingdom","GB","Scotland",55.9533,-3.1883)],
+ AE:[catalogCity("Dubai","United Arab Emirates","AE","Dubai",25.2048,55.2708),catalogCity("Abu Dhabi","United Arab Emirates","AE","Abu Dhabi",24.4539,54.3773),catalogCity("Sharjah","United Arab Emirates","AE","Sharjah",25.3463,55.4209),catalogCity("Ajman","United Arab Emirates","AE","Ajman",25.4052,55.5136),catalogCity("Al Ain","United Arab Emirates","AE","Abu Dhabi",24.1917,55.7606)],
+ AU:[catalogCity("Sydney","Australia","AU","New South Wales",-33.8688,151.2093),catalogCity("Melbourne","Australia","AU","Victoria",-37.8136,144.9631),catalogCity("Brisbane","Australia","AU","Queensland",-27.4698,153.0251),catalogCity("Perth","Australia","AU","Western Australia",-31.9505,115.8605),catalogCity("Adelaide","Australia","AU","South Australia",-34.9285,138.6007)],
+ JP:[catalogCity("Tokyo","Japan","JP","Tokyo",35.6762,139.6503),catalogCity("Osaka","Japan","JP","Osaka",34.6937,135.5023),catalogCity("Kyoto","Japan","JP","Kyoto",35.0116,135.7681),catalogCity("Yokohama","Japan","JP","Kanagawa",35.4437,139.6380),catalogCity("Sapporo","Japan","JP","Hokkaido",43.0618,141.3545)],
+ SG:[catalogCity("Singapore","Singapore","SG","Singapore",1.3521,103.8198)],
+ FR:[catalogCity("Paris","France","FR","Île-de-France",48.8566,2.3522),catalogCity("Marseille","France","FR","Provence-Alpes-Côte dAzur",43.2965,5.3698),catalogCity("Lyon","France","FR","Auvergne-Rhône-Alpes",45.7640,4.8357),catalogCity("Toulouse","France","FR","Occitanie",43.6047,1.4442),catalogCity("Nice","France","FR","Provence-Alpes-Côte dAzur",43.7102,7.2620)],
+ DE:[catalogCity("Berlin","Germany","DE","Berlin",52.5200,13.4050),catalogCity("Hamburg","Germany","DE","Hamburg",53.5511,9.9937),catalogCity("Munich","Germany","DE","Bavaria",48.1351,11.5820),catalogCity("Cologne","Germany","DE","North Rhine-Westphalia",50.9375,6.9603),catalogCity("Frankfurt","Germany","DE","Hesse",50.1109,8.6821)],
+ CA:[catalogCity("Toronto","Canada","CA","Ontario",43.6532,-79.3832),catalogCity("Vancouver","Canada","CA","British Columbia",49.2827,-123.1207),catalogCity("Montreal","Canada","CA","Quebec",45.5019,-73.5674),catalogCity("Calgary","Canada","CA","Alberta",51.0447,-114.0719),catalogCity("Ottawa","Canada","CA","Ontario",45.4215,-75.6972)]
+};
+const WORLD_TOP_CITIES:Place[]=[
+ catalogCity("New York","United States","US","New York",40.7128,-74.0060),catalogCity("Paris","France","FR","Île-de-France",48.8566,2.3522),catalogCity("London","United Kingdom","GB","England",51.5072,-0.1276),catalogCity("Tokyo","Japan","JP","Tokyo",35.6762,139.6503),
+ catalogCity("Rome","Italy","IT","Lazio",41.9028,12.4964),catalogCity("Dubai","United Arab Emirates","AE","Dubai",25.2048,55.2708),catalogCity("Moscow","Russia","RU","Moscow",55.7558,37.6173),catalogCity("Sydney","Australia","AU","New South Wales",-33.8688,151.2093),
+ catalogCity("Singapore","Singapore","SG","Singapore",1.3521,103.8198),catalogCity("Beijing","China","CN","Beijing",39.9042,116.4074),catalogCity("Athens","Greece","GR","Attica",37.9838,23.7275)
+];
+const placeFromGeocoder=(item:any,fallback:string):Place=>{
+ const address=item?.address||{};
+ const country=address.country||item?.display_name?.split(",").map((part:string)=>part.trim()).filter(Boolean).pop();
+ const state=address.state||address.region||address.province;
+ const district=address.state_district||address.county||address.municipality;
+ const name=address.city||address.town||address.village||address.municipality||address.hamlet||address.suburb||item?.name||fallback;
+ return {name,region:[state,country].filter(Boolean).join(", ")||item?.display_name||fallback,source:"search",country,country_code:address.country_code?.toUpperCase(),state,district,lat:Number(item?.lat),lon:Number(item?.lon)};
+};
+
 const CACHE_PREFIX="earth-weather-v2:";
 function readCache<T>(key:string,fallback:T):T{try{const raw=localStorage.getItem(CACHE_PREFIX+key);if(!raw)return fallback;const parsed=JSON.parse(raw);return parsed?.value??fallback;}catch{return fallback;}}
 function writeCache<T>(key:string,value:T){try{localStorage.setItem(CACHE_PREFIX+key,JSON.stringify({value,savedAt:Date.now()}));}catch{/* storage may be unavailable or full */}}
@@ -197,6 +231,11 @@ export default function App(){
  const [cities,setCities]=useState<Place[]>(()=>readCache<Place[]>("cities",CITIES.map(x=>({...x,loading:true}))));
  const [storms,setStorms]=useState<Storm[]>(()=>readCache<Storm[]>("storms",[]));
   const [updated,setUpdated]=useState<string>(()=>readCache<string>("cities-updated",""));const [busy,setBusy]=useState(false);const [query,setQuery]=useState("");
+const [searchOpen,setSearchOpen]=useState(false);
+ const [searchResults,setSearchResults]=useState<Place[]>([]);
+ const [searchLoading,setSearchLoading]=useState(false);
+ const [searchError,setSearchError]=useState("");
+ const [selectingLocation,setSelectingLocation]=useState(false);
 const [section,setSection]=useState("Weather Report");const page:"home"|SitePageId=resolveSitePage(window.location.pathname)??"home";const [isSearchLocation,setIsSearchLocation]=useState<boolean>(()=>readCache<Place|null>("local",null)?.source==="search");
  const [user,setUser]=useState<User|null>(null);const [notice,setNotice]=useState("");
  const [notificationsEnabled,setNotificationsEnabled]=useState(()=>{
@@ -227,6 +266,33 @@ const [section,setSection]=useState("Weather Report");const page:"home"|SitePage
   return()=>observer.disconnect();
  },[section,page,cities,local]);
  useEffect(()=>{if(!auth||!firebaseReady)return;return onAuthStateChanged(auth,setUser)},[]);
+ useEffect(()=>{
+  if(!searchOpen)return;
+  const previousOverflow=document.body.style.overflow;
+  document.body.style.overflow="hidden";
+  const onKeyDown=(event:KeyboardEvent)=>{if(event.key==="Escape"){setSearchOpen(false);setQuery("");setSearchResults([]);setSearchError("");}};
+  window.addEventListener("keydown",onKeyDown);
+  const focusTimer=window.setTimeout(()=>document.getElementById("earth-location-search")?.focus(),60);
+  return()=>{document.body.style.overflow=previousOverflow;window.removeEventListener("keydown",onKeyDown);window.clearTimeout(focusTimer);};
+ },[searchOpen]);
+ useEffect(()=>{
+  const term=query.trim();
+  if(!searchOpen||term.length<2){setSearchResults([]);setSearchLoading(false);setSearchError("");return;}
+  let active=true;
+  const timer=window.setTimeout(async()=>{
+   setSearchLoading(true);setSearchError("");
+   try{
+    const response=await fetchBounded("https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=6&q="+encodeURIComponent(term),{headers:{"Accept-Language":"en"}},10000);
+    if(!response.ok)throw new Error("Location search is temporarily unavailable.");
+    const rows=await response.json();
+    const places:Place[]=Array.isArray(rows)?rows.map((item:any)=>placeFromGeocoder(item,term)).filter((place:Place)=>Number.isFinite(place.lat)&&Number.isFinite(place.lon)):[];
+    if(active)setSearchResults(places);
+    if(active&&!places.length)setSearchError("No matching places found. Try another city or region.");
+   }catch(error){if(active)setSearchError(error instanceof Error?error.message:"Location search failed.");}
+   finally{if(active)setSearchLoading(false);}
+  },550);
+  return()=>{active=false;window.clearTimeout(timer);};
+ },[query,searchOpen]);
  useEffect(()=>{
   if(!("serviceWorker" in navigator))return;
   let active=true;
@@ -451,19 +517,58 @@ const [section,setSection]=useState("Weather Report");const page:"home"|SitePage
  const regionalCities=cities.filter(city=>city.region.endsWith("· Regional reference"));
  const internationalCities=cities.filter(city=>city.region.endsWith("· Nearby international"));
  const renderCityCards=(items:Place[])=>items.map(c=><article className={`city-card weather-scene ${weatherScene(c.current?.weather_code,c.current?.cloud_cover)} ${solarPhase(c.lat,c.lon,c.current?.time,c.current?.is_day)} ${cloudDensity(c.current?.cloud_cover)}`} key={c.name}><span className="weather-sky-art" aria-hidden="true"><i/><i/><i/></span><div className="city-top"><div><small>{c.region}</small><h3>{c.name}</h3></div><span className="weather-icon">{icon(c.current?.weather_code)}</span></div>{c.loading?<div className="city-loading">Loading report…</div>:c.error?<div className="city-loading">Report temporarily unavailable</div>:<><div className="city-temp">{Math.round(c.current?.temperature_2m??0)}<sup>°C</sup></div><div className="city-condition">{weatherLabel(c.current?.weather_code)}</div><div className="city-stats"><span>Humidity <b>{c.current?.relative_humidity_2m??"—"}%</b></span><span>Wind <b>{formatMetric(c.current?.wind_speed_10m)} km/h</b></span><span>Cloud <b>{c.current?.cloud_cover??"—"}%</b></span></div><div className="city-observed">{modelTime(c.current?.time)}</div></>}</article>);
- const search=async()=>{if(!query.trim())return;const requestVersion=++locationRequestVersion.current;try{const r=await fetchBounded(`https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=1&q=${encodeURIComponent(query)}`,{headers:{"Accept-Language":"en"}},10000);const d=await r.json();if(requestVersion!==locationRequestVersion.current)return;if(!d.length)throw new Error("No matching place found");const address=d[0].address||{};const country=address.country||d[0].display_name.split(",").map((part:string)=>part.trim()).filter(Boolean).pop();const state=address.state||address.region;const district=address.state_district||address.county||address.municipality;const p:Place={name:d[0].name||query,region:[state,country].filter(Boolean).join(", ")||d[0].display_name,source:"search",country,country_code:address.country_code?.toUpperCase(),state,district,lat:Number(d[0].lat),lon:Number(d[0].lon)};const w=await fetchBounded(`${API}/api/weather?latitude=${p.lat}&longitude=${p.lon}`,{},14000);if(requestVersion!==locationRequestVersion.current)return;if(!w.ok)throw new Error("Weather feed unavailable");const wd=await w.json();if(requestVersion!==locationRequestVersion.current)return;const selected={...p,current:wd.current||{}};setLocal(selected);writeCache("local",selected);setVisitorLocation(p);writeCache("visitor-location",p);setIsSearchLocation(true);setLocationStatus("ready");setLocationMessage("");setNotice("");}catch(e){if(requestVersion!==locationRequestVersion.current)return;setNotice(e instanceof Error?e.message:"Search failed.");}};
+ const selectLocation=async(place:Place,source:"gps"|"search"="search")=>{
+  const requestVersion=++locationRequestVersion.current;
+  setSelectingLocation(true);setSearchLoading(false);setSearchError("");
+  try{
+   const response=await fetchBounded(API+"/api/weather?latitude="+place.lat+"&longitude="+place.lon,{},14000);
+   if(requestVersion!==locationRequestVersion.current)return;
+   if(!response.ok)throw new Error("Weather feed unavailable for this location.");
+   const data=await response.json();
+   if(requestVersion!==locationRequestVersion.current)return;
+   const selected:Place={...place,source,current:data.current||{},loading:false,error:!hasValidCurrent(data.current)};
+   setLocal(selected);writeCache("local",selected);
+   setIsSearchLocation(source==="search");
+   setLocationStatus("ready");setLocationMessage("");setNotice("");
+   if(source==="gps"&&selected.country){setVisitorLocation(selected);writeCache("visitor-location",selected);}
+   setSection("Weather Report");
+   setSearchOpen(false);setQuery("");setSearchResults([]);setSearchError("");
+   window.scrollTo({top:0,behavior:"smooth"});
+  }catch(error){if(requestVersion===locationRequestVersion.current)setSearchError(error instanceof Error?error.message:"Could not load weather for this place.");}
+  finally{if(requestVersion===locationRequestVersion.current)setSelectingLocation(false);}
+ };
+ const search=async()=>{
+  const term=query.trim();if(!term)return;
+  if(searchResults.length){await selectLocation(searchResults[0],"search");return;}
+  setSearchLoading(true);setSearchError("");
+  const requestVersion=++locationRequestVersion.current;
+  try{
+   const response=await fetchBounded("https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=1&q="+encodeURIComponent(term),{headers:{"Accept-Language":"en"}},10000);
+   if(requestVersion!==locationRequestVersion.current)return;
+   if(!response.ok)throw new Error("Location search is temporarily unavailable.");
+   const rows=await response.json();
+   if(!Array.isArray(rows)||!rows.length)throw new Error("No matching place found. Try another city or region.");
+   await selectLocation(placeFromGeocoder(rows[0],term),"search");
+  }catch(error){if(requestVersion===locationRequestVersion.current)setSearchError(error instanceof Error?error.message:"Location search failed.");}
+  finally{if(requestVersion===locationRequestVersion.current)setSearchLoading(false);}
+ };
+ const chooseCurrentLocation=()=>{
+  const current=visitorLocation||(local?.source==="gps"?local:null);
+  if(current&&Number.isFinite(current.lat)&&Number.isFinite(current.lon)&&current.name!=="Nearby location"){void selectLocation(current,"gps");return;}
+  setSearchOpen(false);setQuery("");setSearchResults([]);detectLocalWeather();
+ };
  const signIn=async()=>{if(!auth)return;try{await signInWithPopup(auth,googleProvider)}catch{setNotice("Google sign-in could not be completed.")}};
  const countryTab=visitorLocation?.country||"Country";
  const stateTab=visitorLocation?.state||"State";
  const localTab=visitorLocation?.name?(visitorLocation?.district?`${visitorLocation.name} · ${visitorLocation.district}`:visitorLocation.name):(visitorLocation?.district||"Local");
  const newsTabs=[{key:"World",label:"World"},{key:"Country",label:countryTab},{key:"State",label:stateTab},{key:"Local",label:localTab}];
+ const currentPlace=visitorLocation||(local?.source==="gps"?local:null);
+ const localTopCities=COUNTRY_TOP_CITIES[currentPlace?.country_code||"IN"]||WORLD_TOP_CITIES.slice(0,5);
  return <div className="news-site">
-  <header className="masthead"><div className="masthead-row"><div className="brand-lockup"><img className="brand-wordmark" src="/logo.png" alt="EARTH WEATHER" width="1200" height="220" /></div><div className="masthead-actions">{user?<button onClick={()=>void signOut(auth!)}>{user.displayName||"Account"}</button>:<button onClick={()=>void signIn()}>Sign in</button>}</div></div></header>
+  <header className="masthead"><div className="masthead-row"><div className="brand-lockup"><img className="brand-wordmark" src="/logo.png" alt="EARTH WEATHER" width="1200" height="220" /></div><button type="button" className="masthead-search-button" aria-label="Search city or region" title="Search city or region" onClick={()=>{setQuery("");setSearchResults([]);setSearchError("");setSearchOpen(true);}}><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8"/><path d="m16 16 5 5"/></svg></button><div className="masthead-actions">{user?<button onClick={()=>void signOut(auth!)}>{user.displayName||"Account"}</button>:<button onClick={()=>void signIn()}>Sign in</button>}</div></div></header>
   <nav className="news-nav">{[{key:"Weather Report",label:"Weather Report"},...newsTabs,{key:"Satellite imagery",label:"Satellite imagery"},{key:"Satellite Report",label:"Satellite Report"}].map(item=><button className={section===item.key?"active":""} key={item.key} onClick={()=>setSection(item.key)}>{item.label}</button>)}</nav>
   {page==="home"?(section==="Satellite Report"?<SatelliteNumericalReport/>:section==="Satellite imagery"?<SatelliteDashboard/>:section!=="Weather Report"?<WeatherNewsPage section={section as "World"|"Country"|"State"|"Local"} location={visitorLocation}/>:<main className="news-main">
    {notice&&<div className="notice">{notice}</div>}
-   <form className="search-weather weather-search-top" onSubmit={e=>{e.preventDefault();void search()}}><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search city or region" aria-label="Search city or region"/><button type="submit">Search</button></form>
-
    <section className="local-weather-card" aria-live="polite">
     <div className="local-weather-heading">
      <div><span className="eyebrow">{isSearchLocation ? "SELECTED CITY" : "WEATHER NEAR YOU"}</span><h2>{isSearchLocation && local ? `Weather in ${local.name}` : "Your current location"}</h2><p>{isSearchLocation ? "Showing weather for the city you searched" : "Automatically detected using your device location"}</p></div>
@@ -520,5 +625,40 @@ const [section,setSection]=useState("Weather Report");const page:"home"|SitePage
    </nav>
    <div className="footer-copyright">© {new Date().getFullYear()} Earth Weather Channel. All rights reserved. <strong>BMR INC.</strong></div>
   </footer>
+  {searchOpen&&<div className="location-search-overlay" role="dialog" aria-modal="true" aria-label="Search for a city or region">
+   <div className="location-search-topbar">
+    <form className="location-search-form" onSubmit={event=>{event.preventDefault();void search();}}>
+     <svg className="location-search-glass" viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8"/><path d="m16 16 5 5"/></svg>
+     <input id="earth-location-search" type="search" value={query} onChange={event=>setQuery(event.target.value)} placeholder="Search" autoComplete="off" aria-label="Search city or region"/>
+     {query&&<button className="location-search-clear" type="button" onClick={()=>{setQuery("");setSearchResults([]);setSearchError("");}} aria-label="Clear search">×</button>}
+    </form>
+    <button className="location-search-cancel" type="button" onClick={()=>{setSearchOpen(false);setQuery("");setSearchResults([]);setSearchError("");}}>Cancel</button>
+   </div>
+   <div className="location-search-content">
+    {query.trim().length>=2?<section className="location-search-section location-search-results">
+     <h2>Search results</h2>
+     {searchLoading?<p className="location-search-message">Searching locations…</p>:searchResults.length?searchResults.map((place,index)=><button className="location-result-item" key={place.name+"-"+place.lat+"-"+index} type="button" disabled={selectingLocation} onClick={()=>void selectLocation(place,"search")}><span className="location-result-pin">⌖</span><span className="location-result-copy"><strong>{place.name}</strong><small>{place.region}</small></span><span className="location-result-arrow">›</span></button>):<p className="location-search-message">{searchError||"No matching places found."}</p>}
+     {searchError&&searchResults.length>0&&<p className="location-search-message location-search-error">{searchError}</p>}
+    </section>:<>
+     <section className="location-search-section">
+      <h2>Current city</h2>
+      <button className="location-current-city" type="button" onClick={chooseCurrentLocation} disabled={selectingLocation}>
+       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 10.2c0 5.1-8 11.2-8 11.2S4 15.3 4 10.2a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/></svg>
+       <span>{currentPlace?.name&&currentPlace.name!=="Nearby location"?currentPlace.name:locationStatus==="locating"?"Detecting current city…":"Use current location"}</span>
+      </button>
+      {!currentPlace&&<p className="location-search-hint">Allow device location to show your nearby city automatically.</p>}
+     </section>
+     <section className="location-search-section">
+      <h2>{"Top cities"+(currentPlace?.country?" · "+currentPlace.country:"")}</h2>
+      <div className="location-city-list">{localTopCities.map(place=><button className="location-city-chip" type="button" key={place.country_code+"-"+place.name} disabled={selectingLocation} onClick={()=>void selectLocation(place,"search")}>{place.name}</button>)}</div>
+     </section>
+     <section className="location-search-section">
+      <h2>Top cities - World</h2>
+      <div className="location-city-list">{WORLD_TOP_CITIES.map(place=><button className="location-city-chip" type="button" key={place.country_code+"-"+place.name} disabled={selectingLocation} onClick={()=>void selectLocation(place,"search")}>{place.name}</button>)}</div>
+     </section>
+    </>}
+    {selectingLocation&&<div className="location-selection-status" role="status">Loading weather for selected location…</div>}
+   </div>
+  </div>}
  </div>;
 }
