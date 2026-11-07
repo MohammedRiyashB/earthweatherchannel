@@ -43,7 +43,7 @@ data class AirQuality(
     }
 }
 data class WeatherAlert(val title: String, val severity: String, val description: String)
-data class RadarInfo(val generatedAt: String = "", val frames: Int = 0, val note: String = "")
+data class RadarFrame(val time: Long, val path: String)\ndata class RadarInfo(val host: String = "", val generatedAt: String = "", val frames: List<RadarFrame> = emptyList(), val note: String = "")
 
 object EarthWeatherApi {
     private fun get(path: String): JSONObject {
@@ -155,7 +155,19 @@ object EarthWeatherApi {
 
     suspend fun radar(): RadarInfo = withContext(Dispatchers.IO) {
         val root=get("/api/radar")
-        RadarInfo(generatedAt=root.text("generated"),frames=root.optJSONArray("frames")?.length() ?: 0,note=root.text("note"))
+        val rawFrames = root.optJSONArray("frames") ?: JSONArray()
+        val frames = (0 until rawFrames.length()).mapNotNull { index ->
+            val item = rawFrames.optJSONObject(index) ?: return@mapNotNull null
+            val time = item.optLong("time", 0L)
+            val path = item.optString("path", "")
+            if (time <= 0L || !path.startsWith("/")) null else RadarFrame(time, path)
+        }
+        RadarInfo(
+            host = root.text("host"),
+            generatedAt = root.text("generated"),
+            frames = frames,
+            note = root.text("note")
+        )
     }
 }
 
