@@ -116,3 +116,5 @@ The existing PR #19 remains the review target. The redesign commit is on its fea
 - Added independent permission/state persistence and Settings switch for weekly forecast notifications.
 - Forecast and Rain & Radar screens now have in-app back arrows to the weather dashboard.
 - Weekly digest, daily notifications and the ongoing notification remain subject to Android background scheduling and network availability; they are not guaranteed exact-time or live streaming services.
+
+- Expanded the animated sky engine into condition-specific scenes: clear/day sun glow, night star shimmer, drifting clouds, rain streaks, snowfall, fog layers and a lightning flash for thunderstorm codes. These are original Compose-drawn animations rather than extracted OPPO MP4 files.
