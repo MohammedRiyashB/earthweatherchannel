@@ -19,7 +19,7 @@ const CITIES:Place[]=[
 const weatherLabel=(c?:number)=>c==null?"Weather update":c===0?"Clear skies":[1,2,3].includes(c)?"Partly cloudy":[45,48].includes(c)?"Foggy":[51,53,55,56,57].includes(c)?"Drizzle":[61,63,65,66,67,80,81,82].includes(c)?"Rain":[71,73,75,77,85,86].includes(c)?"Snow":[95,96,99].includes(c)?"Thunderstorms":"Variable conditions";
 const icon=(c?:number)=>c===0?"☀":c!=null&&[1,2,3].includes(c)?"⛅":c!=null&&[45,48].includes(c)?"🌫":c!=null&&[95,96,99].includes(c)?"⛈":c!=null&&[71,73,75,77,85,86].includes(c)?"❄":"🌧";
 const stamp=(s?:string)=>{if(!s)return "—";const d=new Date(s);return Number.isNaN(d.getTime())?"Recently indexed":d.toLocaleString(undefined,{dateStyle:"medium",timeStyle:"short"});};
-const published=(s?:string)=>{if(!s)return "Recently indexed";let d=new Date(s);if(Number.isNaN(d.getTime())&&/^\\d{8}T\\d{6}Z?$/.test(s)){const x=s.replace(/Z$/,"");d=new Date(Date.UTC(Number(x.slice(0,4)),Number(x.slice(4,6))-1,Number(x.slice(6,8)),Number(x.slice(9,11)),Number(x.slice(11,13)),Number(x.slice(13,15)));}return Number.isNaN(d.getTime())?"Recently indexed":d.toLocaleString(undefined,{dateStyle:"medium",timeStyle:"short"});};
+const published=(s?:string)=>{if(!s)return "Recently indexed";let d=new Date(s);if(Number.isNaN(d.getTime())&&/^\d{8}T\d{6}Z?$/.test(s)){const x=s.replace(/Z$/,"");d=new Date(Date.UTC(Number(x.slice(0,4)),Number(x.slice(4,6))-1,Number(x.slice(6,8)),Number(x.slice(9,11)),Number(x.slice(11,13)),Number(x.slice(13,15)));}return Number.isNaN(d.getTime())?"Recently indexed":d.toLocaleString(undefined,{dateStyle:"medium",timeStyle:"short"});};
 export default function App(){
  const [cities,setCities]=useState<Place[]>(CITIES.map(x=>({...x,loading:true})));
  const [storms,setStorms]=useState<Storm[]>([]);
