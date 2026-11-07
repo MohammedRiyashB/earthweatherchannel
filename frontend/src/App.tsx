@@ -219,7 +219,7 @@ const [section,setSection]=useState("Weather Report");const [page,setPage]=useSt
  const signIn=async()=>{if(!auth)return;try{await signInWithPopup(auth,googleProvider)}catch{setNotice("Google sign-in could not be completed.")}};
  return <div className="news-site">
   <div className="breaking-strip"><div className="breaking-label">WEATHER BULLETIN</div><div className="ticker"><span>GLOBAL WEATHER DESK</span><i>•</i><span>LIVE MODEL UPDATES</span><i>•</i><span>INDIA & WORLD WEATHER HEADLINES</span><i>•</i><span>WEATHER CHECK EVERY 60 SECONDS</span></div><div className="utc-clock">{clock.toLocaleTimeString([], {hour:"2-digit",minute:"2-digit",second:"2-digit"})} LOCAL</div></div>
-  <header className="masthead"><div className="brand-lockup"><img className="brand-wordmark" src="https://raw.githubusercontent.com/MohammedRiyashB/earthweatherchannel/main/logo.png" alt="EARTH WEATHER" width="1200" height="220" /></div><div className="masthead-center"><span className="on-air"><b/> LIVE WEATHER DESK</span><small>Global reports · Forecasts · Weather headlines</small></div><div className="masthead-actions">{user?<button onClick={()=>void signOut(auth!)}>{user.displayName||"Account"}</button>:<button onClick={()=>void signIn()}>Sign in</button>}</div></header>
+  <header className="masthead"><div className="brand-lockup"><img className="brand-wordmark" src="/earth-weather-logo.svg" alt="EARTH WEATHER" width="1200" height="220" /></div><div className="masthead-center"><span className="on-air"><b/> LIVE WEATHER DESK</span><small>Global reports · Forecasts · Weather headlines</small></div><div className="masthead-actions">{user?<button onClick={()=>void signOut(auth!)}>{user.displayName||"Account"}</button>:<button onClick={()=>void signIn()}>Sign in</button>}</div></header>
   <nav className="news-nav">{["Weather Report","World","Asia","India","Americas","Europe","Africa","Oceania","Satellite","Forecast"].map(x=><button className={section===x?"active":""} key={x} onClick={()=>{setSection(x);if(x==="India"||x==="Asia")setNewsRegion("india");else if(x!=="Weather Report")setNewsRegion("world")}}>{x}</button>)}</nav>
   {page==="home"?<main className="news-main">
    {notice&&<div className="notice">{notice}</div>}
@@ -284,7 +284,7 @@ const [section,setSection]=useState("Weather Report");const [page,setPage]=useSt
    </section>
   </main>
   :<main className="news-main info-page">
-   <div className="info-page-brand"><img src="https://raw.githubusercontent.com/MohammedRiyashB/earthweatherchannel/main/logo.png" alt="EARTH WEATHER" /></div>
+   <div className="info-page-brand"><img src="/earth-weather-logo.svg" alt="EARTH WEATHER" /></div>
    {page==="about"?<article className="info-card">
     <span className="eyebrow">ABOUT EARTH WEATHER</span>
     <h1>Weather information for a connected world.</h1>
@@ -324,7 +324,7 @@ const [section,setSection]=useState("Weather Report");const [page,setPage]=useSt
   </main>}
   <footer className="news-footer">
    <div className="footer-heading">
-    <img className="footer-logo" src="https://raw.githubusercontent.com/MohammedRiyashB/earthweatherchannel/main/logo.png" alt="EARTH WEATHER logo" />
+    <img className="footer-logo" src="/earth-weather-logo.svg" alt="EARTH WEATHER logo" />
     <div className="footer-brand">EARTH WEATHER <span>GLOBAL WEATHER NEWSROOM</span></div>
    </div>
    <nav className="footer-navigation" aria-label="Footer navigation">
@@ -337,6 +337,37 @@ const [section,setSection]=useState("Weather Report");const [page,setPage]=useSt
      <button onClick={()=>{setPage("privacy");window.scrollTo({top:0,behavior:"smooth"})}}>Privacy Policy</button>
     </div>
    </nav>
+   <section className="footer-providers" aria-label="Platforms and data sources">
+    <div className="footer-providers-heading">
+     <span className="eyebrow">PLATFORMS &amp; DATA SOURCES</span>
+     <p>Services used for weather data, maps, satellite imagery and site infrastructure.</p>
+    </div>
+    <div className="provider-logo-row provider-logo-row-four">
+     <a className="provider-logo-card" href="https://www.google.com/" target="_blank" rel="noreferrer" aria-label="Google — account sign-in">
+      <img src="/provider-logos/google.svg" alt="" /><strong>Google</strong><small>Account sign-in</small>
+     </a>
+     <a className="provider-logo-card" href="https://firebase.google.com/" target="_blank" rel="noreferrer" aria-label="Firebase — hosting and authentication">
+      <img src="/provider-logos/firebase.svg" alt="" /><strong>Firebase</strong><small>Hosting &amp; auth</small>
+     </a>
+     <a className="provider-logo-card" href="https://open-meteo.com/" target="_blank" rel="noreferrer" aria-label="Open-Meteo — weather model data">
+      <img src="/provider-logos/open-meteo.svg" alt="" /><strong>Open-Meteo</strong><small>Weather models</small>
+     </a>
+     <a className="provider-logo-card" href="https://www.openstreetmap.org/" target="_blank" rel="noreferrer" aria-label="OpenStreetMap — map data">
+      <img src="/provider-logos/openstreetmap.svg" alt="" /><strong>OpenStreetMap</strong><small>Map data</small>
+     </a>
+    </div>
+    <div className="provider-logo-row provider-logo-row-three">
+     <a className="provider-logo-card" href="https://www.nasa.gov/" target="_blank" rel="noreferrer" aria-label="NASA — satellite imagery and event data">
+      <img src="/provider-logos/nasa.svg" alt="" /><strong>NASA</strong><small>Satellite &amp; event data</small>
+     </a>
+     <a className="provider-logo-card" href="https://www.rainviewer.com/" target="_blank" rel="noreferrer" aria-label="RainViewer — radar imagery">
+      <img src="/provider-logos/rainviewer.svg" alt="" /><strong>RainViewer</strong><small>Radar imagery</small>
+     </a>
+     <a className="provider-logo-card" href="https://www.noaa.gov/" target="_blank" rel="noreferrer" aria-label="NOAA — United States weather alerts">
+      <img src="/provider-logos/noaa.svg" alt="" /><strong>NOAA</strong><small>US weather alerts</small>
+     </a>
+    </div>
+   </section>
    <div className="footer-copyright">© {new Date().getFullYear()} Earth Weather Channel. All rights reserved. <strong>BMR INC.</strong></div>
   </footer>
  </div>;
