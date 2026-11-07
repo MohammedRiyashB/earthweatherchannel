@@ -833,9 +833,18 @@ export function SitePageView({ slug }: { slug: SitePageId }) {
     }
     const previousDescription = description.content;
     description.content = page.lead.slice(0, 155);
+    let canonical = document.querySelector<HTMLLinkElement>('link[rel="canonical"]');
+    if (!canonical) {
+      canonical = document.createElement("link");
+      canonical.rel = "canonical";
+      document.head.appendChild(canonical);
+    }
+    const previousCanonical = canonical.href;
+    canonical.href = `https://earthweatherchannel.web.app${SITE_PATHS[slug]}`;
     return () => {
       document.title = previousTitle;
       description!.content = previousDescription;
+      canonical!.href = previousCanonical;
     };
   }, [slug, page.title, page.lead]);
   return (
