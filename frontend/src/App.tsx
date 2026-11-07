@@ -60,6 +60,11 @@ export default function App() {
   const [cloudOn, setCloudOn] = useState(false);
   const [rainOn, setRainOn] = useState(false);
   const [panel, setPanel] = useState("overview");
+  const [searchText, setSearchText] = useState("");
+  const [searchBusy, setSearchBusy] = useState(false);
+  const [activeTab, setActiveTab] = useState("explore");
+  const [showLayers, setShowLayers] = useState(false);
+  const [savedPlaces, setSavedPlaces] = useState<string[]>([]);
   const satelliteLayer = useRef<Cesium.ImageryLayer | null>(null);
 
   useEffect(() => {
@@ -106,12 +111,12 @@ export default function App() {
     const token = import.meta.env.VITE_CESIUM_ION_TOKEN;
     if (token) Cesium.Ion.defaultAccessToken = token;
     const v = new Cesium.Viewer(globeHost.current, {
-      animation:false,timeline:false,geocoder:false,homeButton:true,sceneModePicker:false,
+      animation:false,timeline:false,geocoder:false,homeButton:false,sceneModePicker:false,
       navigationHelpButton:false,baseLayerPicker:false,fullscreenButton:false,infoBox:false,
       selectionIndicator:false,shouldAnimate:true,baseLayer:false,
       terrainProvider:new Cesium.EllipsoidTerrainProvider()
     });
-    v.imageryLayers.addImageryProvider(new Cesium.OpenStreetMapImageryProvider({url:"https://tile.openstreetmap.org/"}));
+    v.imageryLayers.addImageryProvider(new Cesium.UrlTemplateImageryProvider({url:"https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", credit:"Esri World Imagery"}));
     v.scene.globe.enableLighting = true;
     if (v.scene.skyAtmosphere) v.scene.skyAtmosphere.show = true;
     v.scene.globe.showGroundAtmosphere = true;
@@ -120,7 +125,7 @@ export default function App() {
       url:`https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/VIIRS_SNPP_CorrectedReflectance_TrueColor/default/${dateUTC(1)}/GoogleMapsCompatible_Level9/{z}/{y}/{x}.jpg`,
       maximumLevel:9,credit:"NASA GIBS / VIIRS SNPP"
     });
-    const layer=v.imageryLayers.addImageryProvider(nasa); layer.alpha=0.86; satelliteLayer.current=layer; viewer.current=v;
+    const layer=v.imageryLayers.addImageryProvider(nasa); layer.alpha=0.58; satelliteLayer.current=layer; viewer.current=v;
     return () => { particles.current=[];cloudEntities.current=[];cloudMotion.current=[];rainEntities.current=[];cycloneEntities.current=[];v.destroy();viewer.current=null;satelliteLayer.current=null; };
   }, []);
 
@@ -267,6 +272,13 @@ export default function App() {
     return()=>window.clearInterval(id);
   },[historyPlaying]);
 
+  const searchPlace = useCallback(async () => {
+    const q=searchText.trim(); if(!q)return;
+    setSearchBusy(true);
+    try { const response=await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(q)}`); if(!response.ok)throw new Error("Place search is unavailable"); const results=await response.json(); if(!results.length)throw new Error("No matching place found"); const p=results[0]; await loadWeather(Number(p.lat),Number(p.lon),p.display_name.split(",").slice(0,2).join(",")); }
+    catch(e){setMessage(e instanceof Error?e.message:"Could not search for that place.");} finally{setSearchBusy(false);}
+  },[searchText,loadWeather]);
+  const saveCurrentPlace=()=>{if(place!=="Global view")setSavedPlaces(v=>v.includes(place)?v:[...v,place]);};
   const current=weather?.current;
   const codeLabel=(code?:number)=>code==null?"—":[0].includes(code)?"Clear":[1,2,3].includes(code)?"Partly cloudy":[45,48].includes(code)?"Fog":[51,53,55,56,57].includes(code)?"Drizzle":[61,63,65,66,67,80,81,82].includes(code)?"Rain":[95,96,99].includes(code)?"Thunderstorm":"Variable";
   const hourly=atmosphere?.hourly||weather?.hourly||({time:[]} as HourlyFields);
@@ -275,76 +287,49 @@ export default function App() {
   const precip=hourly.precipitation||[];
   const evap=hourly.evapotranspiration||[];
   const humidity=hourly.relative_humidity_2m||[];
-  return <main className="app-shell">
-    <header className="topbar">
-      <a className="brand" href="#"><span className="brand-mark">◎</span><span>EARTH <b>WEATHER</b><small>GLOBAL INTELLIGENCE SYSTEM</small></span></a>
-      <div className="top-status"><span className="live-dot"/>{health.filter(h=>h.status==="online").length}/{health.length||4} DATA FEEDS ONLINE <b>LIVE CHECK</b></div>
-      <div className="account-controls">{firebaseUser ? <><span className="account-label" title={firebaseUser.email || ""}>{firebaseUser.displayName || firebaseUser.email || "SIGNED IN"}<small>{cloudSync}</small></span><button className="location-btn" onClick={handleSignOut}>SIGN OUT</button></> : <button className="location-btn" onClick={handleGoogleSignIn} disabled={authBusy || !firebaseReady}>{authBusy ? "CONNECTING…" : "CONTINUE WITH GOOGLE"}</button>}<button className="location-btn" onClick={locate} disabled={busy}>⌖ <span>{busy?"LOCATING…":"USE MY LOCATION"}</span></button></div>
-    </header>
-    <section className="workspace">
-      <div className="globe-wrap">
-        <div ref={globeHost} className="globe"/>
-        <div className="globe-overlay"><div className="eyebrow">PLANETARY MONITOR</div><div className="globe-title">Earth, in motion.</div><div className="globe-subtitle">Global model wind · cloud field · storm events · satellite observations</div></div>
-        <div className="globe-controls">
-          <select className="layer-select" aria-label="Satellite imagery layer" value={selectedSatellite} onChange={e=>setSelectedSatellite(e.target.value)}>
-            <option value="VIIRS">NASA VIIRS · GLOBAL</option><option value="GOES East">GOES · EAST</option><option value="GOES West">GOES · WEST</option><option value="GOES East IR">GOES · INFRARED</option><option value="Rain Radar">RAIN RADAR · PAST FRAMES</option>
-          </select>
-          <button className={layerOn?"active":""} onClick={()=>setLayerOn(v=>!v)}>◉ <span>IMAGERY</span></button>
-          <button className={windOn?"active":""} onClick={()=>setWindOn(v=>!v)}>≋ <span>WIND</span></button>
-          <button className={cloudOn?"active":""} onClick={()=>setCloudOn(v=>!v)}>☁ <span>CLOUD</span></button><button className={rainOn?"active":""} onClick={()=>setRainOn(v=>!v)}>☂ <span>RAIN</span></button>
-          <button onClick={()=>viewer.current?.camera.flyHome(2)}>◎ <span>GLOBAL</span></button>
-        </div>
-        {windOn&&<div className="layer-legend wind-legend">WIND FLOW · 10 m MODEL · 15° GRID</div>}
-        {cloudOn&&<div className="layer-legend cloud-legend">CLOUD COVER · MODEL FIELD · ADVECTED VISUAL LAYER</div>}
-        {selectedSatellite==="VIIRS"&&<div className="history-timeline">
-          <div><b>HISTORICAL SATELLITE PLAYBACK</b><span>{dateUTC(historyOffset)} · VIIRS DAILY</span></div>
-          <input aria-label="Satellite history day" type="range" min="1" max="7" value={historyOffset} onChange={e=>{setHistoryPlaying(false);setHistoryOffset(Number(e.target.value));}}/>
-          <button onClick={()=>setHistoryPlaying(v=>!v)}>{historyPlaying?"PAUSE":"PLAY 7-DAY LOOP"}</button>
-          <small>Daily global imagery; availability and acquisition time vary by product.</small>
-        </div>}
-        {selectedSatellite==="Rain Radar"&&<div className="radar-timeline"><div><b>PRECIPITATION RADAR</b><span>{radarFrames[radarIndex]?new Date(radarFrames[radarIndex].time*1000).toLocaleTimeString():"LOADING FRAMES"}</span></div><input aria-label="Radar time frame" type="range" min="0" max={Math.max(0,radarFrames.length-1)} value={radarIndex} disabled={!radarFrames.length} onChange={e=>setRadarIndex(Number(e.target.value))}/><small>Historical radar only · incomplete coverage · no free nowcast.</small></div>}
-        <div className="attribution">NASA GIBS / NOAA · Open-Meteo · NASA EONET · © OpenStreetMap</div>
+  return <main className="map-app">
+    <div className="map-canvas" ref={globeHost}/>
+    <header className="map-top">
+      <div className="search-pill"><span className="search-pin">◉</span>
+        <input value={searchText} onChange={e=>setSearchText(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")void searchPlace();}} placeholder="Search places or weather" aria-label="Search places"/>
+        <button className="search-action" onClick={()=>void searchPlace()} disabled={searchBusy}>{searchBusy?"…":"⌕"}</button>
+        <button className="profile-avatar" onClick={()=>firebaseUser?setActiveTab("profile"):void handleGoogleSignIn()} aria-label="Account">{firebaseUser?.photoURL?<img src={firebaseUser.photoURL} alt="Profile"/>:"●"}</button>
       </div>
-      <aside className="side-panel">
-        <div className="panel-head"><div><div className="eyebrow">LOCAL CONDITIONS</div><h1>{place}</h1></div><span className="refresh-indicator">{busy?"● SYNC":"● READY"}</span></div>
-        <p className="status-line">{message}</p>
-        <div className="current-weather"><div><div className="eyebrow">MODEL CURRENT</div><div className="temperature">{fmt(current?.temperature_2m,"°")}<span>C</span></div><div className="condition">{codeLabel(current?.weather_code)}</div></div><div className="weather-symbol">☁</div></div>
-        <div className="metric-grid">
-          <Metric label="FEELS LIKE" value={fmt(current?.apparent_temperature,"°C")} icon="◌"/><Metric label="HUMIDITY" value={fmt(current?.relative_humidity_2m,"%")} icon="◍"/>
-          <Metric label="WIND SPEED" value={fmt(current?.wind_speed_10m," km/h")} icon="≋"/><Metric label="CLOUD COVER" value={fmt(current?.cloud_cover,"%")} icon="☁"/>
-          <Metric label="PRESSURE" value={fmt(current?.pressure_msl," hPa")} icon="⌁"/><Metric label="PRECIPITATION" value={fmt(current?.precipitation," mm")} icon="♧"/>
-        </div>
-        <div className="tabs">
-          <button className={panel==="overview"?"selected":""} onClick={()=>setPanel("overview")}>OVERVIEW</button>
-          <button className={panel==="atmosphere"?"selected":""} onClick={()=>setPanel("atmosphere")}>ATMOSPHERE</button>
-          <button className={panel==="sources"?"selected":""} onClick={()=>setPanel("sources")}>SOURCES</button>
-        </div>
-        {panel==="overview"?<div className="forecast">
-          <div className="section-title">RAINFALL FORECAST <span>HOURLY MODEL</span></div>
-          {times.slice(0,8).map((t,i)=><div className="rain-row" key={t}><span>{new Date(t).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})}</span><div className="rain-track"><i style={{width:`${clamp(rain[i]||0,0,100)}%`}}/></div><b>{fmt(rain[i],"%")}</b><small>{(precip[i]||0).toFixed(1)} mm</small></div>)}
-          {!times.length&&<div className="empty-state">Allow location to load forecast fields.</div>}
-          <div className="section-title storm-heading">ACTIVE SEVERE-STORM EVENTS <span>NASA EONET · {cyclones.length}</span></div>
-          {cyclones.slice(0,4).map(e=><a className="storm-row" key={e.id} href={e.link||"#"} target="_blank" rel="noreferrer">{e.title}<span>↗</span></a>)}
-          {!cyclones.length&&<div className="empty-state compact">No active EONET severe-storm events returned.</div>}
-          <div className="data-note">Wind and rainfall are numerical weather-model outputs. EONET is curated event metadata, not a complete official cyclone warning feed.</div>
-        </div>:panel==="atmosphere"?<div className="forecast">
-          <div className="section-title">ATMOSPHERIC WATER CYCLE <span>MODEL FIELDS</span></div>
-          <Metric label="RELATIVE HUMIDITY" value={fmt(current?.relative_humidity_2m,"%")} icon="◍"/>
-          <Metric label="CLOUD WATER / COVER" value={fmt(current?.cloud_cover,"%")} icon="☁"/>
-          <Metric label="EVAPOTRANSPIRATION · NEXT HOUR" value={evap[0]!=null?`${Number(evap[0]).toFixed(2)} mm`:"—"} icon="↟"/>
-          <Metric label="DEW POINT" value={fmt((hourly.dew_point_2m?.[0] as number|undefined),"°C")} icon="◌"/>
-          <div className="section-title storm-heading">HUMIDITY TREND <span>HOURLY</span></div>
-          {times.slice(0,8).map((t,i)=><div className="rain-row" key={t}><span>{new Date(t).toLocaleTimeString([],{hour:"2-digit"})}</span><div className="rain-track humidity-track"><i style={{width:`${clamp(humidity[i]||0,0,100)}%`}}/></div><b>{fmt(humidity[i],"%")}</b></div>)}
-          <div className="data-note">{atmosphere?.note||"Evapotranspiration is a modeled surface water-flux estimate, not a direct measurement of atmospheric evaporation."}</div>
-        </div>:<div className="source-list">
-          <div className="section-title">LIVE SOURCE HEALTH <span>60-SECOND CHECK</span></div>
-          {sources.map(s=>{const h=health.find(x=>x.id===s.id);const status=h?.status||s.status;return <div className="source-row" key={s.id}><div><b>{s.name}</b><small>{s.coverage} · {h?.latency_ms!=null?`${h.latency_ms} ms`:s.update}</small><p>{s.note}</p></div><span className={status==="online"||status==="connected"?"source-status connected":"source-status"}>{status.toUpperCase()}</span></div>;})}
-          <div className="data-note">Health checks measure endpoint reachability, not freshness, accuracy or geographic coverage.</div>
-        </div>}
-        <footer className="panel-footer">{coords?`LAT ${coords.lat.toFixed(3)} / LON ${coords.lon.toFixed(3)}`:"GLOBAL MODE · LOCATION NOT SET"}<span>{current?.time?new Date(current.time).toLocaleString():"WAITING FOR DATA"}</span></footer>
-      </aside>
-    </section>
-    <footer className="bottom-bar"><span>EARTH WEATHER <b>0.2.0 ATMOSPHERE</b></span><span>OPEN-METEO · NASA GIBS · EONET</span><span>NOT FOR EMERGENCY USE</span></footer>
+      <div className="category-strip">
+        <button className={selectedSatellite==="VIIRS"?"chosen":""} onClick={()=>setSelectedSatellite("VIIRS")}>◉ Satellite</button>
+        <button className={selectedSatellite==="Rain Radar"?"chosen":""} onClick={()=>setSelectedSatellite("Rain Radar")}>▧ Radar</button>
+        <button className={windOn?"chosen":""} onClick={()=>setWindOn(v=>!v)}>≋ Wind</button>
+        <button className={cloudOn?"chosen":""} onClick={()=>setCloudOn(v=>!v)}>☁ Clouds</button>
+        <button onClick={()=>setPanel("overview")}>⚡ Storms</button>
+      </div>
+    </header>
+    <div className="map-weather-chip" onClick={()=>setActiveTab("weather")}><span className="live-dot"/><div><b>{fmt(current?.temperature_2m,"°")} C · {codeLabel(current?.weather_code)}</b><small>{place} · {busy?"Updating":"Live conditions"}</small></div></div>
+    <div className="map-tools">
+      <button onClick={()=>locate()} aria-label="My location" title="My location">◎</button>
+      <button onClick={()=>viewer.current?.camera.setView({orientation:{heading:0,pitch:-Math.PI/2,roll:0}})} aria-label="Compass" title="Reset compass">🧭</button>
+      <button onClick={()=>setShowLayers(v=>!v)} aria-label="Map layers" title="Map layers">▱</button>
+      <button onClick={saveCurrentPlace} aria-label="Save place" title="Save place">☆</button>
+    </div>
+    {showLayers&&<div className="layers-card"><b>MAP LAYERS</b>
+      <label><input type="checkbox" checked={layerOn} onChange={e=>setLayerOn(e.target.checked)}/> Satellite imagery</label>
+      <label><input type="checkbox" checked={windOn} onChange={e=>setWindOn(e.target.checked)}/> Wind flow</label>
+      <label><input type="checkbox" checked={cloudOn} onChange={e=>setCloudOn(e.target.checked)}/> Cloud cover</label>
+      <label><input type="checkbox" checked={rainOn} onChange={e=>setRainOn(e.target.checked)}/> Rain field</label>
+      <label><input type="checkbox" checked={selectedSatellite==="Rain Radar"} onChange={e=>setSelectedSatellite(e.target.checked?"Rain Radar":"VIIRS")}/> Rain radar</label>
+    </div>}
+    {selectedSatellite==="VIIRS"&&<div className="map-time-card"><div><b>Satellite history</b><span>{dateUTC(historyOffset)}</span></div><input type="range" min="1" max="7" value={historyOffset} onChange={e=>{setHistoryPlaying(false);setHistoryOffset(Number(e.target.value));}}/><button onClick={()=>setHistoryPlaying(v=>!v)}>{historyPlaying?"Pause":"Play 7-day loop"}</button></div>}
+    {selectedSatellite==="Rain Radar"&&<div className="map-time-card"><div><b>Rain radar</b><span>{radarFrames[radarIndex]?new Date(radarFrames[radarIndex].time*1000).toLocaleTimeString():"Loading"}</span></div><input type="range" min="0" max={Math.max(0,radarFrames.length-1)} value={radarIndex} disabled={!radarFrames.length} onChange={e=>setRadarIndex(Number(e.target.value))}/></div>}
+    <div className="map-attribution">EARTH WEATHER · NASA / NOAA · Esri</div>
+    {activeTab!=="explore"&&<section className="bottom-sheet"><button className="sheet-close" onClick={()=>setActiveTab("explore")}>×</button>
+      {activeTab==="saved"?<><h2>Saved places</h2>{savedPlaces.length?savedPlaces.map(p=><button className="saved-place" key={p} onClick={()=>{setSearchText(p);setActiveTab("explore");}}>{p}</button>):<p>No saved places yet. Tap ☆ to save your current location.</p>}</>:
+      activeTab==="profile"?<><h2>Your account</h2>{firebaseUser?<><p>{firebaseUser.displayName||firebaseUser.email}</p><p className="sync-state">{cloudSync}</p><button className="sheet-button" onClick={()=>void handleSignOut()}>Sign out</button></>:<><p>Sign in to sync your weather and saved places.</p><button className="sheet-button" onClick={()=>void handleGoogleSignIn()} disabled={authBusy||!firebaseReady}>Continue with Google</button></>}</>:
+      <><h2>Local weather</h2><div className="sheet-temperature">{fmt(current?.temperature_2m,"°")}C</div><p>{codeLabel(current?.weather_code)} · {place}</p><div className="sheet-metrics"><span>Feels like <b>{fmt(current?.apparent_temperature,"°C")}</b></span><span>Humidity <b>{fmt(current?.relative_humidity_2m,"%")}</b></span><span>Wind <b>{fmt(current?.wind_speed_10m," km/h")}</b></span><span>Pressure <b>{fmt(current?.pressure_msl," hPa")}</b></span></div><p>{message}</p></>}
+    </section>}
+    <nav className="map-bottom-nav">
+      <button className={activeTab==="explore"?"active":""} onClick={()=>setActiveTab("explore")}><span>⌖</span>Explore</button>
+      <button className={activeTab==="saved"?"active":""} onClick={()=>setActiveTab("saved")}><span>▱</span>Saved</button>
+      <button className={activeTab==="profile"?"active":""} onClick={()=>setActiveTab("profile")}><span>☻</span>Profile</button>
+    </nav>
   </main>;
 }
 function Metric({label,value,icon}:{label:string;value:string;icon:string}){return <div className="metric"><span className="metric-icon">{icon}</span><div><small>{label}</small><b>{value}</b></div></div>;}
