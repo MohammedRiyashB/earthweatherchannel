@@ -36,7 +36,7 @@ const solarPhase=(lat:number,lon:number,time?:string|number,isDay?:number)=>{
  if(typeof time==="number")instant=new Date(time<1e12?time*1000:time);
  else if(typeof time==="string"&&time.trim()){
   const raw=time.trim().replace(" ","T");
-  instant=new Date(/(?:Z|[+-]\\d{2}:?\\d{2})$/.test(raw)?raw:`${raw}Z`);
+  instant=new Date(/(?:Z|[+-]\d{2}:?\d{2})$/.test(raw)?raw:`${raw}Z`);
  }else instant=new Date();
  if(Number.isNaN(instant.getTime()))return isDay===0?"phase-night":isDay===1?"phase-day":"phase-day";
  const day=Math.floor((Date.UTC(instant.getUTCFullYear(),instant.getUTCMonth(),instant.getUTCDate())-Date.UTC(instant.getUTCFullYear(),0,0))/86400000);
@@ -59,7 +59,7 @@ const formatMetric=(value?:number)=>typeof value==="number"&&Number.isFinite(val
 const published=(value?:string)=>{
  if(!value)return "Recently indexed";
  let date=new Date(value);
- if(Number.isNaN(date.getTime()) && /^\\d{8}T\\d{6}Z?$/.test(value)){
+ if(Number.isNaN(date.getTime()) && /^\d{8}T\d{6}Z?$/.test(value)){
   const raw=value.replace(/Z$/,"");
   const year=Number(raw.slice(0,4)),month=Number(raw.slice(4,6))-1,day=Number(raw.slice(6,8));
   const hour=Number(raw.slice(9,11)),minute=Number(raw.slice(11,13)),second=Number(raw.slice(13,15));
