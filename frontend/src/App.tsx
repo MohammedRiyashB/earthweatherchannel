@@ -243,7 +243,7 @@ const [section,setSection]=useState("Weather Report");const [page,setPage]=useSt
       <div><span>Wind</span><strong>{local.current?.wind_speed_10m!=null?local.current.wind_speed_10m+" km/h":"—"}</strong></div>
       <div><span>Cloud cover</span><strong>{local.current?.cloud_cover!=null?local.current.cloud_cover+"%":"—"}</strong></div>
      </div>
-     <div className="local-weather-foot">Weather model time: {modelTime(local.current?.time)}{local.accuracy?` · GPS accuracy ±${local.accuracy>=1000?(local.accuracy/1000).toFixed(1)+" km":Math.round(local.accuracy)+" m"}`:""} · Place name: <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">© OpenStreetMap contributors</a>{locationMessage&&<p className="local-weather-foot">{locationMessage}</p>}
+     <div className="local-weather-foot">Weather model time: {modelTime(local.current?.time)}{local.accuracy?` · GPS accuracy ±${local.accuracy>=1000?(local.accuracy/1000).toFixed(1)+" km":Math.round(local.accuracy)+" m"}`:""} · Place name: <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">© OpenStreetMap contributors</a>
     </div>
     </>:<div className="local-weather-prompt"><span>{locationMessage}</span><button onClick={detectLocalWeather} disabled={locationStatus==="locating"}>{locationStatus==="denied"?"Try location again":"Retry location"}</button></div>}
    </section>
