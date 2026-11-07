@@ -7,6 +7,7 @@ type Weather = {
   hourly?: { time: string[]; precipitation_probability?: number[]; precipitation?: number[]; temperature_2m?: number[]; wind_speed_10m?: number[] };
 };
 type Source = { id: string; name: string; kind: string; coverage: string; status: string; update: string; note: string };
+type RadarFrame = { time: number; path: string };
 const API = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
 const fmt = (n?: number, suffix = "") => n == null ? "—" : `${Math.round(n)}${suffix}`;
 const dateUTC = (daysAgo = 1) => { const d = new Date(); d.setUTCDate(d.getUTCDate() - daysAgo); return d.toISOString().slice(0, 10); };
@@ -22,6 +23,9 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [layerOn, setLayerOn] = useState(true);
   const [selectedSatellite, setSelectedSatellite] = useState("VIIRS");
+  const [radarFrames, setRadarFrames] = useState<RadarFrame[]>([]);
+  const [radarHost, setRadarHost] = useState("");
+  const [radarIndex, setRadarIndex] = useState(0);
   const satelliteLayer = useRef<Cesium.ImageryLayer | null>(null);
   const [panel, setPanel] = useState("overview");
 
@@ -82,6 +86,26 @@ export default function App() {
   useEffect(() => { locate(); }, [locate]);
 
   useEffect(() => {
+    if (selectedSatellite !== "Rain Radar") return;
+    let active = true;
+    const refresh = async () => {
+      try {
+        const response = await fetch(`${API}/api/radar`);
+        if (!response.ok) throw new Error("Radar service unavailable");
+        const data = await response.json();
+        if (!active) return;
+        setRadarHost(data.host || "");
+        const frames = (data.frames || []) as RadarFrame[];
+        setRadarFrames(frames);
+        if (frames.length) setRadarIndex(frames.length - 1);
+      } catch { if (active) setMessage("Rain radar temporarily unavailable."); }
+    };
+    refresh();
+    const timer = window.setInterval(refresh, 5 * 60 * 1000);
+    return () => { active = false; window.clearInterval(timer); };
+  }, [selectedSatellite]);
+
+  useEffect(() => {
     const v = viewer.current;
     if (!v || !satelliteLayer.current) return;
     const configs: Record<string, {url:string; credit:string; max:number}> = {
@@ -90,7 +114,12 @@ export default function App() {
       "GOES West": { url: "https://gibs.earthdata.nasa.gov/wmts/epsg3857/nrt/GOES-West_ABI_GeoColor/default/default/GoogleMapsCompatible_Level9/{z}/{y}/{x}.jpg", credit: "NASA GIBS / NOAA GOES-West ABI GeoColor", max: 9 },
       "GOES East IR": { url: "https://gibs.earthdata.nasa.gov/wmts/epsg3857/nrt/GOES-East_ABI_Band13_Clean_Infrared/default/default/GoogleMapsCompatible_Level9/{z}/{y}/{x}.jpg", credit: "NASA GIBS / NOAA GOES-East ABI Band 13 IR", max: 9 }
     };
-    const cfg = configs[selectedSatellite];
+    let cfg = configs[selectedSatellite];
+    if (selectedSatellite === "Rain Radar") {
+      const frame = radarFrames[radarIndex];
+      if (!radarHost || !frame) return;
+      cfg = { url: `${radarHost}${frame.path}/256/{z}/{x}/{y}/2/1_0.png`, credit: "Weather radar © RainViewer", max: 7 };
+    }
     if (!cfg) return;
     const old = satelliteLayer.current;
     v.imageryLayers.remove(old, false);
@@ -99,7 +128,7 @@ export default function App() {
     next.alpha = 0.9;
     next.show = layerOn;
     satelliteLayer.current = next;
-  }, [selectedSatellite, layerOn]);
+  }, [selectedSatellite, layerOn, radarHost, radarFrames, radarIndex]);
 
   const toggleSatellite = () => setLayerOn(v => !v);
 
@@ -132,10 +161,11 @@ export default function App() {
           <div className="globe-subtitle">Satellite imagery · atmospheric models · official alerts</div>
         </div>
         <div className="globe-controls">
-          <select className="layer-select" aria-label="Satellite imagery layer" value={selectedSatellite} onChange={e => setSelectedSatellite(e.target.value)}><option value="VIIRS">NASA VIIRS · GLOBAL</option><option value="GOES East">GOES-19 · EAST</option><option value="GOES West">GOES-18 · WEST</option><option value="GOES East IR">GOES EAST · INFRARED</option></select><button className={layerOn ? "active" : ""} onClick={toggleSatellite}>◉ <span>{layerOn ? "LAYER ON" : "LAYER OFF"}</span></button>
+          <select className="layer-select" aria-label="Satellite imagery layer" value={selectedSatellite} onChange={e => setSelectedSatellite(e.target.value)}><option value="VIIRS">NASA VIIRS · GLOBAL</option><option value="GOES East">GOES-19 · EAST</option><option value="GOES West">GOES-18 · WEST</option><option value="GOES East IR">GOES EAST · INFRARED</option><option value="Rain Radar">RAIN RADAR · PAST 2H</option></select><button className={layerOn ? "active" : ""} onClick={toggleSatellite}>◉ <span>{layerOn ? "LAYER ON" : "LAYER OFF"}</span></button>
           <button onClick={() => viewer.current?.camera.flyHome(2)}>◎ <span>GLOBAL VIEW</span></button>
         </div>
-        <div className="attribution">Base map © OpenStreetMap contributors · Imagery © NASA GIBS / NOAA</div>
+        <div className="attribution">Base map © OpenStreetMap · NASA GIBS / NOAA · Weather radar © RainViewer</div>
+        {selectedSatellite === "Rain Radar" && <div className="radar-timeline"><div><b>PRECIPITATION RADAR</b><span>{radarFrames[radarIndex] ? new Date(radarFrames[radarIndex].time * 1000).toLocaleTimeString() : "LOADING FRAMES"}</span></div><input aria-label="Radar time frame" type="range" min="0" max={Math.max(0, radarFrames.length - 1)} value={radarIndex} disabled={!radarFrames.length} onChange={e => setRadarIndex(Number(e.target.value))}/><small>Historical radar only · ~10-minute frames · no free nowcast</small></div> }
       </div>
 
       <aside className="side-panel">
