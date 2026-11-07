@@ -89,8 +89,8 @@ Commit: `2631335594ac805eeef8553e37993f195fb8ef1f`
 ## 5. Known gaps before claiming feature parity
 
 - Trip weather notifications are shown as unavailable until trip destination/time and provider coverage are implemented.
-- Weekly forecast notification is shown as unavailable until a reliable weekly scheduling workflow is implemented.
-- Pollen, visibility and moonrise/moonset need regional/provider integration before displaying numerical readings.
+- Weekly forecast notification is now implemented as an opt-in Sunday 08:00 local-time digest with a 7-day summary; WorkManager may defer it.
+- Pollen and moonrise/moonset need regional/provider integration before displaying numerical readings. Visibility is now parsed from hourly forecast metres and converted to km/mi when present.
 - Background Canvas animation is an original substitute; it is not an extracted OPPO MP4.
 - The screenshots are visual references; physical-device layout, font scaling, notification behaviour and all touch targets still require testing on the user's Realme 14T 5G.
 - Backend provider licensing, attribution and India-specific official weather-warning coverage still need validation before public production release.
@@ -109,3 +109,10 @@ The existing PR #19 remains the review target. The redesign commit is on its fea
 - Replaced the former one-per-day morning notification with two local-time briefings: today's outlook in the morning and tomorrow's outlook at 18:00. The setting can still choose the morning hour. WorkManager delivery is best-effort and can be delayed by Android.
 - Added an optional ongoing weather notification with a low-priority, silent, periodic update worker. It refreshes no faster than the WorkManager 15-minute minimum and may be delayed by Android; it is not second-by-second real-time streaming.
 - These updates remain on `feat/earth-weather-native-app` and PR #19 is not merged. The newly added backend routes remain unavailable to the production Render deployment until merge/deploy.
+
+## 8. Weekly notification and navigation follow-up
+
+- Added an opt-in weekly digest worker. It fetches a 7-day forecast from the EARTH WEATHER backend and schedules a Sunday 08:00 local-time notification.
+- Added independent permission/state persistence and Settings switch for weekly forecast notifications.
+- Forecast and Rain & Radar screens now have in-app back arrows to the weather dashboard.
+- Weekly digest, daily notifications and the ongoing notification remain subject to Android background scheduling and network availability; they are not guaranteed exact-time or live streaming services.
