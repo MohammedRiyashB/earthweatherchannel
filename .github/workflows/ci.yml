@@ -26,3 +26,6 @@ jobs:
           python-version: "3.12"
       - run: pip install -r backend/requirements.txt
       - run: python -m compileall -q backend/app
+      - name: Run backend unit tests
+        working-directory: backend
+        run: python -m unittest discover -s tests -v
