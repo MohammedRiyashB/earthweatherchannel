@@ -65,7 +65,7 @@ EONET_EVENTS = "https://eonet.gsfc.nasa.gov/api/v3/events"
 RAINVIEWER = "https://api.rainviewer.com/public/weather-maps.json"
 NASA_GIBS_CAPABILITIES = "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/1.0.0/WMTSCapabilities.xml"
 SOURCES = [
-    {"id":"open-meteo","name":"Open-Meteo","kind":"live current weather model analysis","coverage":"Global","status":"primary-connected","update":"Provider model update cadence; current endpoint uses 15-minute model data where available","note":"Free API, no key required for non-commercial use. Temperature, humidity, wind, cloud and precipitation are explicitly model-analysis fields, not direct satellite observations. Attribution: CC BY 4.0."},
+    {"id":"open-meteo","name":"Open-Meteo","kind":"current weather, hourly and daily forecast model data","coverage":"Global","status":"primary-connected","update":"Provider model update cadence; current endpoint uses 15-minute model data where available","note":"Free API, no key required for non-commercial use. Temperature, humidity, wind, cloud and precipitation are explicitly model-analysis fields, not direct satellite observations. Attribution: CC BY 4.0."},
     {"id":"metnorway","name":"MET Norway Locationforecast","kind":"backup global weather-model analysis","coverage":"Global","status":"fallback-connected","update":"Model update cadence; forecast timeseries","note":"Used only if Open-Meteo is unavailable or rate-limited. Values are labelled with the actual provider; not direct satellite observations."},
     {"id":"nasa-gibs","name":"NASA GIBS / VIIRS / GOES imagery","kind":"satellite imagery","coverage":"Product-dependent global and geostationary regions","status":"connected","update":"Daily to near-real-time, product-dependent","note":"Imagery tiles are time/product dependent; not every layer is globally continuous or instantaneous."},
     {"id":"nasa-eonet","name":"NASA EONET severe-storm events","kind":"curated natural-event metadata","coverage":"Global curated events","status":"connected","update":"Near-real-time curation; not a complete cyclone warning feed","note":"Tracks/events appear only when curated and may not include every active tropical cyclone."},
@@ -682,6 +682,116 @@ async def weather(
         raise HTTPException(status_code=502, detail=f"Weather provider unavailable: {exc.__class__.__name__}") from exc
 
 
+
+@app.get("/api/forecast")
+async def weather_forecast(
+    response: Response,
+    latitude: float = Query(..., ge=-90, le=90),
+    longitude: float = Query(..., ge=-180, le=180),
+    days: int = Query(15, ge=1, le=16),
+) -> dict[str, Any]:
+    """Return hourly and daily forecast values from Open-Meteo for the selected coordinates."""
+    response.headers["Cache-Control"] = "public, max-age=300, stale-while-revalidate=600"
+    params = {
+        "latitude": latitude,
+        "longitude": longitude,
+        "forecast_days": days,
+        "timezone": "auto",
+        "wind_speed_unit": "kmh",
+        "temperature_unit": "celsius",
+        "precipitation_unit": "mm",
+        "current": "temperature_2m,relative_humidity_2m,apparent_temperature,is_day,precipitation,rain,weather_code,cloud_cover,pressure_msl,wind_speed_10m,wind_direction_10m",
+        "hourly": "temperature_2m,relative_humidity_2m,apparent_temperature,precipitation_probability,precipitation,rain,weather_code,cloud_cover,wind_speed_10m,uv_index,visibility",
+        "daily": "weather_code,temperature_2m_max,temperature_2m_min,apparent_temperature_max,apparent_temperature_min,sunrise,sunset,daylight_duration,sunshine_duration,uv_index_max,precipitation_sum,precipitation_probability_max,wind_speed_10m_max,wind_gusts_10m_max",
+    }
+    try:
+        client = app.state.weather_http
+        endpoint = os.getenv("OPEN_METEO_FORECAST_URL", OPEN_METEO_FORECAST)
+        request_params = dict(params)
+        customer_key = os.getenv("OPEN_METEO_API_KEY")
+        if customer_key:
+            endpoint = os.getenv("OPEN_METEO_CUSTOMER_FORECAST_URL", "https://customer-api.open-meteo.com/v1/forecast")
+            request_params["apikey"] = customer_key
+        result = await asyncio.wait_for(client.get(endpoint, params=request_params), timeout=22.0)
+        result.raise_for_status()
+        payload = result.json()
+        hourly_raw = payload.get("hourly") or {}
+        daily_raw = payload.get("daily") or {}
+        hourly_times = hourly_raw.get("time") or []
+        daily_times = daily_raw.get("time") or []
+        hourly_keys = [key for key, value in hourly_raw.items() if key != "time" and isinstance(value, list)]
+        daily_keys = [key for key, value in daily_raw.items() if key != "time" and isinstance(value, list)]
+        hourly = [
+            {"time": time, **{key: hourly_raw[key][index] for key in hourly_keys if index < len(hourly_raw[key])}}
+            for index, time in enumerate(hourly_times)
+        ]
+        daily = [
+            {"date": date, **{key: daily_raw[key][index] for key in daily_keys if index < len(daily_raw[key])}}
+            for index, date in enumerate(daily_times)
+        ]
+        return {
+            "current": payload.get("current") or {},
+            "hourly": hourly,
+            "daily": daily,
+            "timezone": payload.get("timezone"),
+            "timezone_abbreviation": payload.get("timezone_abbreviation"),
+            "utc_offset_seconds": payload.get("utc_offset_seconds"),
+            "current_units": payload.get("current_units") or {},
+            "hourly_units": payload.get("hourly_units") or {},
+            "daily_units": payload.get("daily_units") or {},
+            "source": {
+                "name": "Open-Meteo",
+                "type": "numerical weather model forecast",
+                "retrieved_at": utc_now(),
+                "licence_mode": "commercial-customer-endpoint" if customer_key else "evaluation-non-commercial-only",
+            },
+        }
+    except (httpx.HTTPError, asyncio.TimeoutError, ValueError, TypeError) as exc:
+        logger.warning("Forecast request failed: %s", exc.__class__.__name__)
+        raise HTTPException(status_code=502, detail=f"Forecast provider unavailable: {exc.__class__.__name__}") from exc
+
+
+@app.get("/api/air-quality")
+async def air_quality(
+    response: Response,
+    latitude: float = Query(..., ge=-90, le=90),
+    longitude: float = Query(..., ge=-180, le=180),
+) -> dict[str, Any]:
+    """Return current AQI and key pollutant concentrations for a location."""
+    response.headers["Cache-Control"] = "public, max-age=600, stale-while-revalidate=1200"
+    endpoint = os.getenv("OPEN_METEO_AIR_QUALITY_URL", "https://air-quality-api.open-meteo.com/v1/air-quality")
+    params = {
+        "latitude": latitude,
+        "longitude": longitude,
+        "timezone": "auto",
+        "current": "european_aqi,us_aqi,pm10,pm2_5,carbon_monoxide,nitrogen_dioxide,sulphur_dioxide,ozone,dust,uv_index",
+        "domains": "auto",
+    }
+    customer_key = os.getenv("OPEN_METEO_API_KEY")
+    if customer_key:
+        endpoint = os.getenv("OPEN_METEO_CUSTOMER_AIR_QUALITY_URL", "https://customer-air-quality-api.open-meteo.com/v1/air-quality")
+        params["apikey"] = customer_key
+    try:
+        result = await asyncio.wait_for(app.state.weather_http.get(endpoint, params=params), timeout=18.0)
+        result.raise_for_status()
+        payload = result.json()
+        return {
+            "current": payload.get("current") or {},
+            "current_units": payload.get("current_units") or {},
+            "timezone": payload.get("timezone"),
+            "source": {
+                "name": "Open-Meteo Air Quality",
+                "type": "modelled air-quality and pollutant estimates",
+                "retrieved_at": utc_now(),
+                "licence_mode": "commercial-customer-endpoint" if customer_key else "evaluation-non-commercial-only",
+                "note": "Model estimates, not a regulatory ground-station measurement. Use the local official AQI authority for health decisions.",
+            },
+        }
+    except (httpx.HTTPError, asyncio.TimeoutError, ValueError, TypeError) as exc:
+        logger.warning("Air-quality request failed: %s", exc.__class__.__name__)
+        raise HTTPException(status_code=502, detail=f"Air-quality provider unavailable: {exc.__class__.__name__}") from exc
+
+
 # Public Nominatim reverse-geocoding: one request at a time, cached by nearby coordinates.
 _reverse_location_cache: OrderedDict[tuple[float, float], tuple[float, dict[str, Any]]] = OrderedDict()
 _REVERSE_LOCATION_CACHE_MAX_ENTRIES = 2048
@@ -765,6 +875,83 @@ async def reverse_location(
         while len(_reverse_location_cache) > _REVERSE_LOCATION_CACHE_MAX_ENTRIES:
             _reverse_location_cache.popitem(last=False)
         return result
+
+
+# Public Nominatim location search with a process-local cache and request pacing.
+_location_search_cache: OrderedDict[str, tuple[float, list[dict[str, Any]]]] = OrderedDict()
+_location_search_lock = asyncio.Lock()
+_last_location_search_request = 0.0
+
+@app.get("/api/location/search")
+async def search_locations(
+    q: str = Query(..., min_length=2, max_length=100),
+    limit: int = Query(6, ge=1, le=10),
+) -> dict[str, Any]:
+    """Search cities, towns and villages; clients should call this backend route, not Nominatim directly."""
+    global _last_location_search_request
+    query = " ".join(q.split())
+    cache_key = query.casefold()
+    async with _location_search_lock:
+        cached = _location_search_cache.get(cache_key)
+        now = asyncio.get_running_loop().time()
+        if cached and cached[0] > now:
+            _location_search_cache.move_to_end(cache_key)
+            return {"query": query, "results": cached[1][:limit], "source": "OpenStreetMap Nominatim", "cached": True}
+        elapsed = now - _last_location_search_request
+        if elapsed < 1.1:
+            await asyncio.sleep(1.1 - elapsed)
+        params = {"format": "jsonv2", "addressdetails": 1, "limit": limit, "q": query}
+        headers = {
+            "User-Agent": "EARTH-WEATHER/1.0 (+https://earthweatherchannel.web.app)",
+            "Referer": "https://earthweatherchannel.web.app/",
+            "Accept-Language": "en",
+        }
+        _last_location_search_request = asyncio.get_running_loop().time()
+        try:
+            result = await app.state.weather_http.get(
+                "https://nominatim.openstreetmap.org/search", params=params, headers=headers
+            )
+            result.raise_for_status()
+            payload = result.json()
+        except (httpx.HTTPError, ValueError) as exc:
+            raise HTTPException(status_code=502, detail="Location search is temporarily unavailable") from exc
+        places: list[dict[str, Any]] = []
+        for item in payload if isinstance(payload, list) else []:
+            address = item.get("address") or {}
+            country = address.get("country")
+            state = address.get("state") or address.get("region") or address.get("province")
+            district = address.get("state_district") or address.get("county") or address.get("municipality")
+            name = (
+                item.get("name") or address.get("city") or address.get("town")
+                or address.get("village") or address.get("suburb") or district or query
+            )
+            try:
+                lat, lon = float(item["lat"]), float(item["lon"])
+            except (KeyError, TypeError, ValueError):
+                continue
+            places.append({
+                "name": name,
+                "region": ", ".join(part for part in (state, country) if part) or item.get("display_name"),
+                "latitude": lat,
+                "longitude": lon,
+                "country": country,
+                "country_code": (address.get("country_code") or "").upper() or None,
+                "state": state,
+                "district": district,
+            })
+        now = asyncio.get_running_loop().time()
+        _location_search_cache[cache_key] = (now + 6 * 60 * 60, places)
+        _location_search_cache.move_to_end(cache_key)
+        while len(_location_search_cache) > 512:
+            _location_search_cache.popitem(last=False)
+        return {
+            "query": query,
+            "results": places[:limit],
+            "source": "OpenStreetMap Nominatim",
+            "attribution": "© OpenStreetMap contributors",
+            "cached": False,
+        }
+
 
 @app.get("/api/wind-grid")
 async def wind_grid() -> dict[str, Any]:
