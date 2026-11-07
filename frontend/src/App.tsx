@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import * as Cesium from "cesium";
+import { auth, firestore, googleProvider, realtimeDb, enableAnalytics, firebaseReady } from "./firebase";
+import { onAuthStateChanged, signInWithPopup, signOut, type User } from "firebase/auth";
+import { doc, setDoc, serverTimestamp } from "firebase/firestore";
+import { onValue, ref, set } from "firebase/database";
 
 type HourlyFields = { time: string[]; [key: string]: (string | number | null)[] | undefined; precipitation_probability?: number[]; precipitation?: number[]; temperature_2m?: number[]; wind_speed_10m?: number[]; evapotranspiration?: number[]; relative_humidity_2m?: number[]; dew_point_2m?: number[] };
 type Weather = {
@@ -33,6 +37,9 @@ export default function App() {
   const rainEntities = useRef<Cesium.Entity[]>([]);
   const cycloneEntities = useRef<Cesium.Entity[]>([]);
   const [weather, setWeather] = useState<Weather | null>(null);
+  const [firebaseUser, setFirebaseUser] = useState<User | null>(null);
+  const [authBusy, setAuthBusy] = useState(false);
+  const [cloudSync, setCloudSync] = useState("NOT CONNECTED");
   const [atmosphere, setAtmosphere] = useState<Atmosphere | null>(null);
   const [sources, setSources] = useState<Source[]>([]);
   const [health, setHealth] = useState<HealthCheck[]>([]);
@@ -54,6 +61,45 @@ export default function App() {
   const [rainOn, setRainOn] = useState(false);
   const [panel, setPanel] = useState("overview");
   const satelliteLayer = useRef<Cesium.ImageryLayer | null>(null);
+
+  useEffect(() => {
+    if (!firebaseReady || !auth) return;
+    enableAnalytics();
+    return onAuthStateChanged(auth, setFirebaseUser);
+  }, []);
+
+  useEffect(() => {
+    if (!firebaseUser || !realtimeDb) { setCloudSync(firebaseReady ? "SIGN IN TO SYNC" : "CONFIG REQUIRED"); return; }
+    const liveRef = ref(realtimeDb, `users/${firebaseUser.uid}/liveWeather`);
+    return onValue(liveRef, snapshot => setCloudSync(snapshot.exists() ? "REALTIME SYNC" : "READY TO SYNC"), () => setCloudSync("DATABASE RULES CHECK"));
+  }, [firebaseUser]);
+
+  useEffect(() => {
+    if (!firebaseUser || !coords || !weather) return;
+    const payload = {
+      location: { latitude: coords.lat, longitude: coords.lon, label: place },
+      current: weather.current || {},
+      modelSource: "Open-Meteo",
+      updatedAt: Date.now()
+    };
+    if (realtimeDb) set(ref(realtimeDb, `users/${firebaseUser.uid}/liveWeather`), payload).catch(() => setCloudSync("DATABASE RULES CHECK"));
+    if (firestore) setDoc(doc(firestore, "users", firebaseUser.uid), {
+      email: firebaseUser.email || null,
+      displayName: firebaseUser.displayName || null,
+      lastLocation: payload.location,
+      lastWeather: payload.current,
+      updatedAt: serverTimestamp()
+    }, { merge: true }).catch(() => setCloudSync("FIRESTORE RULES CHECK"));
+  }, [firebaseUser, coords, weather, place]);
+
+  const handleGoogleSignIn = useCallback(async () => {
+    if (!auth) { setMessage("Firebase is not configured. Add the VITE_FIREBASE_* variables."); return; }
+    setAuthBusy(true);
+    try { await signInWithPopup(auth, googleProvider); }
+    catch (error) { setMessage(error instanceof Error ? error.message : "Google sign-in failed."); }
+    finally { setAuthBusy(false); }
+  }, []);
+  const handleSignOut = useCallback(async () => { if (!auth) return; try { await signOut(auth); } catch { setMessage("Could not sign out. Try again."); } }, []);
 
   useEffect(() => {
     if (!globeHost.current || viewer.current) return;
@@ -233,7 +279,7 @@ export default function App() {
     <header className="topbar">
       <a className="brand" href="#"><span className="brand-mark">◎</span><span>EARTH <b>WEATHER</b><small>GLOBAL INTELLIGENCE SYSTEM</small></span></a>
       <div className="top-status"><span className="live-dot"/>{health.filter(h=>h.status==="online").length}/{health.length||4} DATA FEEDS ONLINE <b>LIVE CHECK</b></div>
-      <button className="location-btn" onClick={locate} disabled={busy}>⌖ <span>{busy?"LOCATING…":"USE MY LOCATION"}</span></button>
+      <div className="account-controls">{firebaseUser ? <><span className="account-label" title={firebaseUser.email || ""}>{firebaseUser.displayName || firebaseUser.email || "SIGNED IN"}<small>{cloudSync}</small></span><button className="location-btn" onClick={handleSignOut}>SIGN OUT</button></> : <button className="location-btn" onClick={handleGoogleSignIn} disabled={authBusy || !firebaseReady}>{authBusy ? "CONNECTING…" : "CONTINUE WITH GOOGLE"}</button>}<button className="location-btn" onClick={locate} disabled={busy}>⌖ <span>{busy?"LOCATING…":"USE MY LOCATION"}</span></button></div>
     </header>
     <section className="workspace">
       <div className="globe-wrap">
