@@ -283,8 +283,18 @@ const [section,setSection]=useState("Weather Report");const [page,setPage]=useSt
    <button className="back-home" onClick={()=>{setPage("home");window.scrollTo({top:0,behavior:"smooth"})}}>← Back to Weather</button>
   </main>}
   <footer className="news-footer">
-   <div className="footer-column"><div className="footer-brand">EARTH WEATHER <span>GLOBAL WEATHER NEWSROOM</span></div><button onClick={()=>{setPage("about");window.scrollTo({top:0,behavior:"smooth"})}}>About</button><button onClick={()=>{setPage("about");window.scrollTo({top:0,behavior:"smooth"})}}>Our mission &amp; vision</button></div>
-   <div className="footer-legal"><button onClick={()=>{setPage("terms");window.scrollTo({top:0,behavior:"smooth"})}}>Terms and Conditions</button><button onClick={()=>{setPage("privacy");window.scrollTo({top:0,behavior:"smooth"})}}>Privacy Policy</button></div>
+   <div className="footer-column">
+    <img className="footer-logo" src="https://raw.githubusercontent.com/MohammedRiyashB/earthweatherchannel/main/logo.png" alt="EARTH WEATHER logo" />
+    <div className="footer-brand">EARTH WEATHER <span>GLOBAL WEATHER NEWSROOM</span></div>
+    <div className="footer-links">
+     <button onClick={()=>{setPage("about");window.scrollTo({top:0,behavior:"smooth"})}}>About</button>
+     <button onClick={()=>{setPage("about");window.scrollTo({top:0,behavior:"smooth"})}}>Our mission &amp; vision</button>
+    </div>
+   </div>
+   <div className="footer-legal">
+    <button onClick={()=>{setPage("terms");window.scrollTo({top:0,behavior:"smooth"})}}>Terms and Conditions</button>
+    <button onClick={()=>{setPage("privacy");window.scrollTo({top:0,behavior:"smooth"})}}>Privacy Policy</button>
+   </div>
    <div className="footer-copyright">© {new Date().getFullYear()} Earth Weather Channel. All rights reserved. <strong>BMR INC.</strong></div>
   </footer>
  </div>;
