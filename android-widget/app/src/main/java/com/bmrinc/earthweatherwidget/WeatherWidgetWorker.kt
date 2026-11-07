@@ -57,7 +57,7 @@ class WeatherWidgetWorker(context: Context, params: WorkerParameters) : Coroutin
    compactIds.forEach { id ->
     val view = RemoteViews(applicationContext.packageName, R.layout.weather_widget_compact)
     view.setTextViewText(R.id.compact_city, city)
-    view.setTextViewText(R.id.compact_temperature, if (temp == null) "--°" else temp.toInt().toString() + "°")
+    view.setTextViewText(R.id.compact_temperature, shownTemp)
     view.setTextViewText(R.id.compact_humidity, "💧 " + (humidity?.toInt()?.toString() ?: "--") + "%")
     view.setTextViewText(R.id.compact_condition, label)
     view.setImageViewResource(R.id.compact_icon, iconRes)
