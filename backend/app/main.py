@@ -119,6 +119,139 @@ async def _fetch_open_meteo_current(client: httpx.AsyncClient, params: dict[str,
                 await asyncio.sleep(0.4 * (attempt + 1))
     raise HTTPException(status_code=502, detail=f"Weather provider unavailable: {last_error.__class__.__name__ if last_error else 'UnknownError'}")
 
+
+# Small curated set of major-city reference points. The selected set is based on
+# the visitor's detected country and geographic proximity, not a fixed global list.
+FEATURED_CITIES: list[dict[str, Any]] = [
+    {"name":"New Delhi","country":"India","lat":28.6139,"lon":77.2090},
+    {"name":"Mumbai","country":"India","lat":19.0760,"lon":72.8777},
+    {"name":"Chennai","country":"India","lat":13.0827,"lon":80.2707},
+    {"name":"Kolkata","country":"India","lat":22.5726,"lon":88.3639},
+    {"name":"New York","country":"United States","lat":40.7128,"lon":-74.0060},
+    {"name":"Los Angeles","country":"United States","lat":34.0522,"lon":-118.2437},
+    {"name":"Chicago","country":"United States","lat":41.8781,"lon":-87.6298},
+    {"name":"Houston","country":"United States","lat":29.7604,"lon":-95.3698},
+    {"name":"London","country":"United Kingdom","lat":51.5072,"lon":-0.1276},
+    {"name":"Manchester","country":"United Kingdom","lat":53.4808,"lon":-2.2426},
+    {"name":"Edinburgh","country":"United Kingdom","lat":55.9533,"lon":-3.1883},
+    {"name":"Birmingham","country":"United Kingdom","lat":52.4862,"lon":-1.8904},
+    {"name":"Dubai","country":"United Arab Emirates","lat":25.2048,"lon":55.2708},
+    {"name":"Abu Dhabi","country":"United Arab Emirates","lat":24.4539,"lon":54.3773},
+    {"name":"Sharjah","country":"United Arab Emirates","lat":25.3463,"lon":55.4209},
+    {"name":"Al Ain","country":"United Arab Emirates","lat":24.1302,"lon":55.8023},
+    {"name":"Singapore","country":"Singapore","lat":1.3521,"lon":103.8198},
+    {"name":"Tokyo","country":"Japan","lat":35.6762,"lon":139.6503},
+    {"name":"Osaka","country":"Japan","lat":34.6937,"lon":135.5023},
+    {"name":"Sapporo","country":"Japan","lat":43.0618,"lon":141.3545},
+    {"name":"Fukuoka","country":"Japan","lat":33.5902,"lon":130.4017},
+    {"name":"Shanghai","country":"China","lat":31.2304,"lon":121.4737},
+    {"name":"Beijing","country":"China","lat":39.9042,"lon":116.4074},
+    {"name":"Shenzhen","country":"China","lat":22.5431,"lon":114.0579},
+    {"name":"Guangzhou","country":"China","lat":23.1291,"lon":113.2644},
+    {"name":"Sydney","country":"Australia","lat":-33.8688,"lon":151.2093},
+    {"name":"Melbourne","country":"Australia","lat":-37.8136,"lon":144.9631},
+    {"name":"Brisbane","country":"Australia","lat":-27.4698,"lon":153.0251},
+    {"name":"Perth","country":"Australia","lat":-31.9505,"lon":115.8605},
+    {"name":"Toronto","country":"Canada","lat":43.6532,"lon":-79.3832},
+    {"name":"Vancouver","country":"Canada","lat":49.2827,"lon":-123.1207},
+    {"name":"Montreal","country":"Canada","lat":45.5019,"lon":-73.5674},
+    {"name":"Calgary","country":"Canada","lat":51.0447,"lon":-114.0719},
+    {"name":"Paris","country":"France","lat":48.8566,"lon":2.3522},
+    {"name":"Marseille","country":"France","lat":43.2965,"lon":5.3698},
+    {"name":"Lyon","country":"France","lat":45.7640,"lon":4.8357},
+    {"name":"Toulouse","country":"France","lat":43.6047,"lon":1.4442},
+    {"name":"Berlin","country":"Germany","lat":52.5200,"lon":13.4050},
+    {"name":"Munich","country":"Germany","lat":48.1351,"lon":11.5820},
+    {"name":"Hamburg","country":"Germany","lat":53.5511,"lon":9.9937},
+    {"name":"Frankfurt","country":"Germany","lat":50.1109,"lon":8.6821},
+    {"name":"Bangkok","country":"Thailand","lat":13.7563,"lon":100.5018},
+    {"name":"Colombo","country":"Sri Lanka","lat":6.9271,"lon":79.8612},
+    {"name":"Kuala Lumpur","country":"Malaysia","lat":3.1390,"lon":101.6869},
+    {"name":"Jakarta","country":"Indonesia","lat":-6.2088,"lon":106.8456},
+    {"name":"Riyadh","country":"Saudi Arabia","lat":24.7136,"lon":46.6753},
+    {"name":"Doha","country":"Qatar","lat":25.2854,"lon":51.5310},
+    {"name":"Cape Town","country":"South Africa","lat":-33.9249,"lon":18.4241},
+    {"name":"Johannesburg","country":"South Africa","lat":-26.2041,"lon":28.0473},
+    {"name":"São Paulo","country":"Brazil","lat":-23.5505,"lon":-46.6333},
+    {"name":"Rio de Janeiro","country":"Brazil","lat":-22.9068,"lon":-43.1729},
+]
+COUNTRY_ALIASES = {
+    "usa":"United States","us":"United States","united states of america":"United States",
+    "uk":"United Kingdom","uae":"United Arab Emirates","south korea":"South Korea",
+}
+def _distance_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    from math import asin, cos, radians, sin, sqrt
+    dlat, dlon = radians(lat2-lat1), radians(lon2-lon1)
+    value = sin(dlat/2)**2 + cos(radians(lat1))*cos(radians(lat2))*sin(dlon/2)**2
+    return 6371.0 * 2 * asin(sqrt(min(1.0, value)))
+
+@app.get("/api/weather/featured")
+async def featured_weather(
+    latitude: float = Query(..., ge=-90, le=90),
+    longitude: float = Query(..., ge=-180, le=180),
+    country: str = Query(..., min_length=2, max_length=80),
+) -> dict[str, Any]:
+    """Return four major cities in the visitor's country and four nearby international cities."""
+    normalized = COUNTRY_ALIASES.get(country.strip().lower(), country.strip())
+    national = [item for item in FEATURED_CITIES if item["country"].lower() == normalized.lower()]
+    if len(national) > 4:
+        national = sorted(national, key=lambda item: _distance_km(latitude, longitude, item["lat"], item["lon"]))[:4]
+    international: list[dict[str, Any]] = []
+    seen_countries = {normalized.lower()}
+    candidates = sorted(
+        (item for item in FEATURED_CITIES if item["country"].lower() != normalized.lower()),
+        key=lambda item: _distance_km(latitude, longitude, item["lat"], item["lon"]),
+    )
+    for item in candidates:
+        key = item["country"].lower()
+        if key in seen_countries:
+            continue
+        international.append(item)
+        seen_countries.add(key)
+        if len(international) == 4:
+            break
+    selected = national + international
+    if len(national) < 4:
+        # Unknown/sparsely represented country: use the four closest known reference cities
+        # as the national/regional group rather than returning an empty weather panel.
+        selected_nearby = sorted(
+            FEATURED_CITIES,
+            key=lambda item: _distance_km(latitude, longitude, item["lat"], item["lon"]),
+        )[:4]
+        national = selected_nearby
+        international = [item for item in candidates if item not in national][:4]
+        selected = national + international
+    params = _meteo_params([item["lat"] for item in selected], [item["lon"] for item in selected])
+    params["current"] = "temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,cloud_cover,pressure_msl,wind_speed_10m,wind_direction_10m,wind_gusts_10m,weather_code"
+    try:
+        async with httpx.AsyncClient(timeout=35.0, follow_redirects=True) as client:
+            payload = await _fetch_open_meteo_current(client, params)
+        rows = payload if isinstance(payload, list) else [payload]
+        if len(rows) != len(selected):
+            raise HTTPException(status_code=502, detail="Weather provider returned an incomplete featured-city batch")
+        national_count = len(national)
+        reports = []
+        for index, (place, row) in enumerate(zip(selected, rows)):
+            reports.append({
+                **place,
+                "scope": "national" if index < national_count else "international",
+                "current": row.get("current") or {},
+            })
+        return {
+            "visitor_country": normalized,
+            "visitor_location": {"latitude": latitude, "longitude": longitude},
+            "national": reports[:national_count],
+            "international": reports[national_count:],
+            "reports": reports,
+            "source": "Open-Meteo global numerical weather model",
+            "retrieved_at": utc_now(),
+            "note": "These are model-based current conditions for selected major-city reference points, not live observations from every city or weather station.",
+        }
+    except HTTPException:
+        raise
+    except (httpx.HTTPError, ValueError, TypeError) as exc:
+        raise HTTPException(status_code=502, detail=f"Featured city weather unavailable: {exc.__class__.__name__}") from exc
+
 @app.get("/api/weather/bulk")
 async def weather_bulk(
     latitudes: str = Query(..., min_length=1, max_length=1000),
