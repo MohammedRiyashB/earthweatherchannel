@@ -488,3 +488,13 @@
  .weather-search-top{height:38px;margin-bottom:9px}
  .weather-search-top button{min-width:72px;padding:0 11px}
 }
+
+
+/* Final masthead refinement: larger original wordmark, no alerts control. */
+.masthead-row .brand-wordmark{width:min(360px,70vw)}
+.masthead-row .brand-lockup{flex:1 1 auto;min-width:0}
+.masthead-actions{flex:0 0 auto}
+@media(max-width:620px){
+ .masthead-row .brand-wordmark{width:min(230px,calc(100vw - 150px));max-width:100%}
+ .masthead-row{gap:8px}
+}
