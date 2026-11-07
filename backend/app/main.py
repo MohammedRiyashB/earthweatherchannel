@@ -491,7 +491,7 @@ async def reverse_location(
             "addressdetails": 1,
         }
         headers = {
-            "User-Agent": "EARTH-WEATHER/1.0 (+https://earthweatherchannel.web.app)",
+            "User-Agent": os.getenv("EARTH_WEATHER_USER_AGENT", "EARTH-WEATHER/1.0 (+https://earthweatherchannel.web.app)"),
             "Referer": "https://earthweatherchannel.web.app/",
             "Accept-Language": "en",
         }
