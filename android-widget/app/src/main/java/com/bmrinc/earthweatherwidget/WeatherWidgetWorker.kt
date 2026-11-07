@@ -36,13 +36,15 @@ class WeatherWidgetWorker(context: Context, params: WorkerParameters) : Coroutin
    val label = label(code)
    val iconRes = iconResource(code)
    val city = prefs.getString("city", "Your location") ?: "Your location"
+   val celsius = prefs.getBoolean("celsius", true)
+   val shownTemp = if (temp == null) "--°" else if (celsius) temp.toInt().toString() + "°C" else (temp * 9.0 / 5.0 + 32.0).toInt().toString() + "°F"
    val manager = AppWidgetManager.getInstance(applicationContext)
 
    val detailedIds = manager.getAppWidgetIds(ComponentName(applicationContext, WeatherWidgetProvider::class.java))
    detailedIds.forEach { id ->
     val view = RemoteViews(applicationContext.packageName, R.layout.weather_widget)
     view.setTextViewText(R.id.widget_city, city)
-    view.setTextViewText(R.id.widget_temperature, if (temp == null) "--°" else temp.toInt().toString() + "°")
+    view.setTextViewText(R.id.widget_temperature, shownTemp)
     view.setTextViewText(R.id.widget_humidity, "💧 " + (humidity?.toInt()?.toString() ?: "--") + "%")
     view.setTextViewText(R.id.widget_wind, "🌬 " + (wind?.toInt()?.toString() ?: "--") + " km/h")
     view.setTextViewText(R.id.weather_condition, label)
