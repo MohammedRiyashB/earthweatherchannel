@@ -14,3 +14,7 @@
 .empty-state.compact{padding:8px 0;font-size:9px}
 .side-panel .forecast>.metric{margin:6px 0;border:1px solid #1d3546}
 @media(max-width:560px){.globe-controls{max-width:calc(100% - 18px);flex-direction:row;flex-wrap:wrap;justify-content:flex-end;bottom:92px}.globe-controls button{padding:7px 8px}.globe-controls button span{display:none}.layer-select{max-width:145px}.history-timeline{bottom:8px;left:8px;right:8px}.layer-legend{left:8px}.wind-legend{top:95px}.cloud-legend{top:120px}}
+
+
+.account-controls{display:flex;align-items:center;gap:8px}.account-label{max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#b8d5e3;font-size:9px;letter-spacing:.4px}.account-label small{display:block;color:#66c9a0;font-size:8px;margin-top:3px;letter-spacing:1px}
+@media(max-width:760px){.topbar{padding:0 12px;gap:8px}.account-controls{gap:5px}.account-label{display:none}.location-btn{padding:8px;font-size:8px}.top-status{font-size:8px;letter-spacing:.4px}.top-status b{display:none}}
