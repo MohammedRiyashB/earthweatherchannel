@@ -6,7 +6,7 @@ const API=import.meta.env.VITE_API_BASE_URL||"https://earthweather-api.onrender.
 type Current={time?:string;temperature_2m?:number;relative_humidity_2m?:number;apparent_temperature?:number;precipitation?:number;cloud_cover?:number;pressure_msl?:number;wind_speed_10m?:number;wind_direction_10m?:number;weather_code?:number;source?:string;source_url?:string};
 type Place={name:string;region:string;lat:number;lon:number;country?:string;country_code?:string;state?:string;district?:string;accuracy?:number;source?: "gps"|"search";current?:Current;loading?:boolean;error?:boolean};
 type Storm={id:string;title:string;description?:string;link?:string;coordinates?:{lat:number;lon:number;date?:string}[]};
-type Story={title:string;url:string;source:string;published_at?:string;language?:string;image?:string};
+type Story={title:string;url:string;source:string;published_at?:string;language?:string;image?:string;description?:string};
 const CITIES:Place[]=[
 {name:"New Delhi",region:"India",lat:28.6139,lon:77.209},{name:"Chennai",region:"India",lat:13.0827,lon:80.2707},
 {name:"Mumbai",region:"India",lat:19.076,lon:72.8777},{name:"London",region:"United Kingdom",lat:51.5072,lon:-0.1276},
@@ -159,7 +159,7 @@ function WeatherNewsPage({section,location}:{section:"World"|"Country"|"State"|"
     <div className="news-reader-content"><div className="news-reader-meta">{article?.source||selected.source} · {published(selected.published_at)}</div><h1>{article?.title||selected.title}</h1>
      {articleLoading?<div className="article-loading"><div/><div/><div/><div className="short"/></div>:null}
      {articleError?<p className="article-reader-error">{articleError}</p>:null}
-     {article?.description&&<p className="news-reader-description">{article.description}</p>}
+     {(article?.description||selected.description)&&<p className="news-reader-description">{article?.description||selected.description}</p>}
      {!articleLoading&&article?.paragraphs?.length?article.paragraphs.map((paragraph,index)=><p className="news-reader-paragraph" key={index}>{paragraph}</p>):null}
      {!articleLoading&&article&&!article.paragraphs?.length&&!article.description?<p className="news-reader-description">The publisher did not expose readable article text to the reader. You can still open the original story below.</p>:null}
      <div className="news-reader-footer"><span>{article?.extraction_status==="publisher_excerpt"?"Publisher excerpt":"Publisher summary / limited text"}</span><a href={article?.source_url||selected.url} target="_blank" rel="noreferrer">Original publisher ↗</a></div>

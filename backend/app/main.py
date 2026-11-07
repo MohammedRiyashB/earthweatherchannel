@@ -970,7 +970,7 @@ def _rss_item_to_story(item: ET.Element, source_name: str) -> dict[str, Any]:
     image = None
     for child in item.iter():
         name = _xml_local(child)
-        if name in {"title", "description", "summary", "pubdate", "published", "updated", "author", "creator", "category", "guid"} and child.text:
+        if name in {"title", "description", "summary", "encoded", "pubdate", "published", "updated", "author", "creator", "category", "guid"} and child.text:
             fields.setdefault(name, child.text.strip())
         if name == "link":
             href = child.attrib.get("href")
@@ -985,10 +985,14 @@ def _rss_item_to_story(item: ET.Element, source_name: str) -> dict[str, Any]:
     title = html_unescape(fields.get("title", "")).strip()
     link = fields.get("link") or fields.get("guid") or ""
     description_html = fields.get("description") or fields.get("summary") or ""
+    encoded_html = fields.get("encoded") or ""
+    image_html = description_html + " " + encoded_html
+    if not description_html and encoded_html:
+        description_html = encoded_html
     description = re.sub(r"<[^>]+>", " ", description_html)
     description = re.sub(r"\s+", " ", html_unescape(description)).strip()
     if not image:
-        image_match = re.search(r'<img[^>]+src=["\']([^"\']+)', description_html, re.I)
+        image_match = re.search(r'<img[^>]+src=["\']([^"\']+)', image_html, re.I)
         if image_match:
             image = image_match.group(1)
     if image:
@@ -1051,7 +1055,11 @@ async def _fetch_weather_rss(url: str, source_name: str) -> list[dict[str, Any]]
 
 
 def _weather_story_matches(story: dict[str, Any]) -> bool:
-    return bool(WEATHER_NEWS_TERMS.search((story.get("title") or "") + " " + (story.get("description") or "")))
+    title = story.get("title") or ""
+    if WEATHER_NEWS_TERMS.search(title):
+        return True
+    specific_context = re.compile(r"cyclone|hurricane|typhoon|monsoon|flood|drought|heatwave|rainfall|snowfall|precipitation|thunderstorm|lightning|tornado|cloudburst|el nino|la nina|coastal water levels", re.I)
+    return bool(specific_context.search(story.get("description") or ""))
 
 
 @app.get("/api/weather-news")
@@ -1182,7 +1190,7 @@ async def weather_news_image(url: str = Query(..., min_length=12, max_length=204
 @app.get("/api/weather-news/article")
 async def weather_news_article(
     url: str = Query(..., min_length=12, max_length=2048),
-    fallback_title: str = Query("Weather report", max_length=300),
+    fallback_title: str = Query("Weather report", max_length=500),
 ) -> dict[str, Any]:
     """Fetch a public publisher page and extract its readable text and lead image for the in-site reader."""
     current_url = url

@@ -128,6 +128,7 @@ class WeatherNewsReaderTests(unittest.TestCase):
         self.assertIn("Namakkal", story["title"])
         self.assertEqual(story["category"], "Met")
         self.assertIn("IMD Chennai", story["source"])
+        self.assertTrue(weather_api._weather_story_matches(story))
         self.assertTrue(story["url"].startswith("https://sachet.ndma.gov.in/"))
 
     def test_rss_image_entities_are_decoded(self):
@@ -136,6 +137,7 @@ class WeatherNewsReaderTests(unittest.TestCase):
         <description><![CDATA[<img src='https://example.com/photo.jpg?width=120&amp;caption=storm'>]]></description></item>""")
         story = weather_api._rss_item_to_story(payload, "Example")
         self.assertEqual(story["image"], "https://example.com/photo.jpg?width=120&caption=storm")
+        self.assertEqual(story["description"], "")
 
     def test_article_host_rejects_loopback_addresses(self):
         async def check():
