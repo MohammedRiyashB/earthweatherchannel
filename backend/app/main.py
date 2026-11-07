@@ -3,6 +3,7 @@ from typing import Any
 import asyncio
 import os
 import logging
+from collections import OrderedDict
 
 import httpx
 from fastapi import FastAPI, HTTPException, Query
@@ -120,12 +121,14 @@ async def source_health() -> dict[str, Any]:
         results = await asyncio.gather(*(probe(client, item) for item in checks))
     return {"checked_at":utc_now(),"checks":results,"note":"Reachability checks only; they do not certify data freshness, coverage or accuracy."}
 
-_weather_cache: dict[tuple[float, float], tuple[float, dict[str, Any]]] = {}
+_weather_cache: OrderedDict[tuple[float, float], tuple[float, dict[str, Any]]] = OrderedDict()
+_WEATHER_CACHE_MAX_ENTRIES = 512
 _weather_cache_lock = asyncio.Lock()
 
 # Short-lived in-process cache with stale-if-error fallback. A provider outage must
 # not erase a previously successful report for the same coordinates.
-_current_provider_cache: dict[tuple[float, float], tuple[float, dict[str, Any]]] = {}
+_current_provider_cache: OrderedDict[tuple[float, float], tuple[float, dict[str, Any]]] = OrderedDict()
+_CURRENT_PROVIDER_CACHE_MAX_ENTRIES = 2048
 _CURRENT_CACHE_TTL = 90
 _CURRENT_STALE_TTL = 30 * 60
 
@@ -136,7 +139,7 @@ async def _request_current_chunk(
 ) -> list[dict[str, Any]]:
     params = _current_weather_params(latitudes, longitudes)
     last_error: Exception | None = None
-    for attempt in range(3):
+    for attempt in range(2):
         try:
             # Limit concurrent upstream calls: the homepage can request many cities at once.
             async with _WEATHER_UPSTREAM_SEMAPHORE:
@@ -152,7 +155,11 @@ async def _request_current_chunk(
                 raise ValueError("Incomplete current-weather response")
             now = asyncio.get_running_loop().time()
             for lat, lon, row in zip(latitudes, longitudes, rows):
-                _current_provider_cache[(round(lat, 3), round(lon, 3))] = (now, row)
+                cache_key = (round(lat, 3), round(lon, 3))
+                _current_provider_cache[cache_key] = (now, row)
+                _current_provider_cache.move_to_end(cache_key)
+                while len(_current_provider_cache) > _CURRENT_PROVIDER_CACHE_MAX_ENTRIES:
+                    _current_provider_cache.popitem(last=False)
             return rows
         except (httpx.HTTPError, ValueError, TypeError) as exc:
             last_error = exc
@@ -161,12 +168,12 @@ async def _request_current_chunk(
                 "Open-Meteo upstream failure attempt=%s/3 status=%s error=%s locations=%s",
                 attempt + 1, status_code, exc.__class__.__name__, len(latitudes),
             )
-            if attempt < 2:
+            if attempt < 1:
                 retry_after = None
                 if isinstance(exc, httpx.HTTPStatusError):
                     retry_after = exc.response.headers.get("Retry-After")
                 try:
-                    delay = min(8.0, max(0.8 * (2 ** attempt), float(retry_after))) if retry_after else 0.8 * (2 ** attempt)
+                    delay = min(4.0, max(0.5, float(retry_after))) if retry_after else 0.5
                 except (TypeError, ValueError):
                     delay = 0.8 * (2 ** attempt)
                 await asyncio.sleep(delay)
@@ -188,6 +195,7 @@ async def _fetch_open_meteo_current(client: httpx.AsyncClient, params: dict[str,
     for index, (lat, lon) in enumerate(zip(latitudes, longitudes)):
         cached = _current_provider_cache.get((round(lat, 3), round(lon, 3)))
         if cached and now - cached[0] <= _CURRENT_CACHE_TTL:
+            _current_provider_cache.move_to_end((round(lat, 3), round(lon, 3)))
             results[index] = cached[1]
         else:
             pending_indices.append(index)
@@ -195,7 +203,7 @@ async def _fetch_open_meteo_current(client: httpx.AsyncClient, params: dict[str,
     # Keep upstream query strings small, but run independent chunks concurrently.
     # Sequential 35-second waits multiplied by many cities caused cards to remain
     # in "Loading report…" for minutes when the upstream provider was slow.
-    chunks = [pending_indices[i:i + 4] for i in range(0, len(pending_indices), 4)]
+    chunks = [pending_indices[i:i + 12] for i in range(0, len(pending_indices), 12)]
 
     async def load_chunk(chunk: list[int]) -> tuple[list[int], list[dict[str, Any]] | None]:
         chunk_lats = [latitudes[i] for i in chunk]
@@ -204,17 +212,21 @@ async def _fetch_open_meteo_current(client: httpx.AsyncClient, params: dict[str,
             rows = await _request_current_chunk(client, chunk_lats, chunk_lons)
             return chunk, rows
         except RuntimeError:
-            # Retry individual coordinates so one bad upstream batch cannot
-            # prevent otherwise healthy cities from receiving a report.
-            rows: list[dict[str, Any] | None] = []
-            for index in chunk:
+            # Retry individual points in parallel. The shared semaphore still
+            # caps upstream concurrency and stale reports remain available.
+            async def load_one(index: int) -> dict[str, Any] | None:
+                key = (round(latitudes[index], 3), round(longitudes[index], 3))
                 try:
                     single = await _request_current_chunk(client, [latitudes[index]], [longitudes[index]])
-                    rows.append(single[0])
+                    return single[0]
                 except RuntimeError:
-                    cached = _current_provider_cache.get((round(latitudes[index], 3), round(longitudes[index], 3)))
-                    rows.append(cached[1] if cached and now - cached[0] <= _CURRENT_STALE_TTL else None)
-            return chunk, rows  # type: ignore[return-value]
+                    cached = _current_provider_cache.get(key)
+                    if cached:
+                        _current_provider_cache.move_to_end(key)
+                    return cached[1] if cached and now - cached[0] <= _CURRENT_STALE_TTL else None
+
+            rows = await asyncio.gather(*(load_one(index) for index in chunk))
+            return chunk, rows
 
     loaded_chunks = await asyncio.gather(*(load_chunk(chunk) for chunk in chunks))
     for chunk, rows in loaded_chunks:
@@ -409,7 +421,7 @@ async def weather_bulk(
 
     params = _current_weather_params(lats, lons)
     try:
-        async with httpx.AsyncClient(timeout=35.0, follow_redirects=True) as client:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(12.0, connect=4.0), follow_redirects=True) as client:
             payload = await _fetch_open_meteo_current(client, params)
         rows = payload if isinstance(payload, list) else [payload]
         reports = []
@@ -438,16 +450,25 @@ async def weather(
     async with _weather_cache_lock:
         cached = _weather_cache.get(cache_key)
     if cached and cached[0] > now:
+        async with _weather_cache_lock:
+            _weather_cache.move_to_end(cache_key)
         return cached[1]
 
     params = _current_weather_params([latitude], [longitude])
     try:
         # Do not hold the shared cache lock during network I/O: different cities must load concurrently.
-        async with httpx.AsyncClient(timeout=35.0, follow_redirects=True) as client:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(12.0, connect=4.0), follow_redirects=True) as client:
             data = await _fetch_open_meteo_current(client, params)
         data["source"] = {"name":"Open-Meteo","type":"numerical weather-model output","retrieved_at":utc_now()}
         async with _weather_cache_lock:
-            _weather_cache[cache_key] = (asyncio.get_running_loop().time() + 45, data)
+            cache_now = asyncio.get_running_loop().time()
+            _weather_cache[cache_key] = (cache_now + 45, data)
+            _weather_cache.move_to_end(cache_key)
+            for key, (expires_at, _) in list(_weather_cache.items()):
+                if expires_at <= cache_now:
+                    del _weather_cache[key]
+            while len(_weather_cache) > _WEATHER_CACHE_MAX_ENTRIES:
+                _weather_cache.popitem(last=False)
         return data
     except HTTPException:
         raise
@@ -456,7 +477,8 @@ async def weather(
 
 
 # Public Nominatim reverse-geocoding: one request at a time, cached by nearby coordinates.
-_reverse_location_cache: dict[tuple[float, float], tuple[float, dict[str, Any]]] = {}
+_reverse_location_cache: OrderedDict[tuple[float, float], tuple[float, dict[str, Any]]] = OrderedDict()
+_REVERSE_LOCATION_CACHE_MAX_ENTRIES = 2048
 _reverse_location_lock = asyncio.Lock()
 _last_reverse_location_request = 0.0
 
@@ -472,6 +494,7 @@ async def reverse_location(
         cached = _reverse_location_cache.get(cache_key)
         now = asyncio.get_running_loop().time()
         if cached and cached[0] > now:
+            _reverse_location_cache.move_to_end(cache_key)
             return cached[1]
 
         # Respect the public Nominatim service's one-request-per-second application limit.
@@ -524,7 +547,14 @@ async def reverse_location(
             "attribution": "© OpenStreetMap contributors",
             "retrieved_at": utc_now(),
         }
-        _reverse_location_cache[cache_key] = (asyncio.get_running_loop().time() + 30 * 24 * 60 * 60, result)
+        cache_now = asyncio.get_running_loop().time()
+        _reverse_location_cache[cache_key] = (cache_now + 30 * 24 * 60 * 60, result)
+        _reverse_location_cache.move_to_end(cache_key)
+        for key, (expires_at, _) in list(_reverse_location_cache.items()):
+            if expires_at <= cache_now:
+                del _reverse_location_cache[key]
+        while len(_reverse_location_cache) > _REVERSE_LOCATION_CACHE_MAX_ENTRIES:
+            _reverse_location_cache.popitem(last=False)
         return result
 
 @app.get("/api/wind-grid")
