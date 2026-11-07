@@ -45,6 +45,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -696,13 +697,40 @@ private fun PollenCard() {
 @Composable
 private fun WeatherMetricGrid(state: DashboardState, celsius: Boolean) {
     val current = state.current
+    val context = LocalContext.current
+    val prefs = remember { context.getSharedPreferences("earth_weather_app", Context.MODE_PRIVATE) }
+    val windUnit = prefs.getString("wind_unit", "km/h") ?: "km/h"
+    val pressureUnit = prefs.getString("pressure_unit", "hPa") ?: "hPa"
+    val visibilityUnit = prefs.getString("visibility_unit", "km") ?: "km"
+    val wind = current?.windKmh?.let { value ->
+        val converted = when (windUnit) {
+            "m/s" -> value / 3.6
+            "mph" -> value * 0.621371
+            else -> value
+        }
+        formatValue(converted, 1) + " " + windUnit
+    } ?: "—"
+    val pressure = current?.pressure?.let { value ->
+        val converted = when (pressureUnit) {
+            "mmHg" -> value * 0.750062
+            "inHg" -> value * 0.02952998
+            else -> value
+        }
+        formatValue(converted, if (pressureUnit == "hPa") 0 else 2) + " " + pressureUnit
+    } ?: "—"
+    val visibilityKm = state.hourly.firstOrNull()?.visibilityKm ?: Double.NaN
+    val visibility = if (visibilityKm.isFinite()) {
+        val value = if (visibilityUnit == "mi") visibilityKm * 0.621371 else visibilityKm
+        formatValue(value, 1) + " " + visibilityUnit
+    } else "—"
+    val uv = state.daily.firstOrNull()?.uvMax ?: state.air?.uv ?: Double.NaN
     val items = listOf(
-        Triple("UV index", if (state.air?.uv?.isFinite() == true) formatValue(state.air!!.uv, 1) else "—", "☀️"),
+        Triple("UV index", formatValue(uv, 1), "☀️"),
         Triple("Feels like", displayTemp(current?.feelsLike ?: Double.NaN, celsius) + "°", "🌡️"),
         Triple("Humidity", current?.humidity?.takeIf { it >= 0 }?.toString()?.plus("%") ?: "—", "💧"),
-        Triple("Wind", current?.windKmh?.let { formatValue(it) + " km/h" } ?: "—", "🌬️"),
-        Triple("Air pressure", current?.pressure?.let { formatValue(it) + " hPa" } ?: "—", "↘️"),
-        Triple("Visibility", "—", "👁️")
+        Triple("Wind", wind, "🌬️"),
+        Triple("Air pressure", pressure, "↘️"),
+        Triple("Visibility", visibility, "👁️")
     )
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         items.chunked(2).forEach { row ->
@@ -1056,6 +1084,11 @@ private fun SettingsScreen(
     modifier: Modifier, state: DashboardState, onBack: () -> Unit, onOpenRealtime: () -> Unit
 ) {
     var rainExpanded by remember { mutableStateOf(false) }
+    val settingsContext = LocalContext.current
+    val settingsPrefs = remember { settingsContext.getSharedPreferences("earth_weather_app", Context.MODE_PRIVATE) }
+    var windUnit by remember { mutableStateOf(settingsPrefs.getString("wind_unit", "km/h") ?: "km/h") }
+    var pressureUnit by remember { mutableStateOf(settingsPrefs.getString("pressure_unit", "hPa") ?: "hPa") }
+    var visibilityUnit by remember { mutableStateOf(settingsPrefs.getString("visibility_unit", "km") ?: "km") }
     Column(modifier.fillMaxSize().background(Color.Black).verticalScroll(rememberScrollState()).padding(horizontal = 18.dp)) {
         Row(Modifier.fillMaxWidth().padding(top = 20.dp, bottom = 28.dp), verticalAlignment = Alignment.CenterVertically) {
             Text("‹", color = Ink, fontSize = 36.sp, modifier = Modifier.clickable { onBack() }.padding(end = 18.dp))
@@ -1069,6 +1102,7 @@ private fun SettingsScreen(
                 Text("›", color = Muted, fontSize = 27.sp, modifier = Modifier.padding(start = 8.dp))
             }
             if (rainExpanded) {
+                SettingSwitch("Rain alerts enabled", "Notify before forecast rain during the selected hours.", rainRemindersEnabled, onRainReminders)
                 Text("Rain probability threshold · " + rainThreshold + "%", color = Muted, fontSize = 11.sp)
                 Slider(value = rainThreshold.toFloat(), onValueChange = { onRainThreshold(it.toInt().coerceIn(40, 90)) }, valueRange = 40f..90f, steps = 9)
                 Text("Reminder window · " + String.format("%02d:00–%02d:00", rainStartHour, rainEndHour), color = Muted, fontSize = 11.sp)
@@ -1099,13 +1133,21 @@ private fun SettingsScreen(
         }
         SettingsCaption("Units")
         Column(Modifier.fillMaxWidth().background(Color(0xFF1D1D1F), RoundedCornerShape(23.dp)).padding(horizontal = 18.dp)) {
-            UnitSettingRow("Temperature", if (celsius) "Celsius (°C)" else "Fahrenheit (°F)") { onUnit(!celsius) }
+            UnitSettingRow("Temperature", if (celsius) "Celsius (°C)" else "Fahrenheit (°F)", listOf("Celsius (°C)", "Fahrenheit (°F)")) {
+                onUnit(it.startsWith("Celsius"))
+            }
             DarkDivider()
-            UnitSettingRow("Wind", "Kilometres per hour (km/h)") { }
+            UnitSettingRow("Wind", windUnitLabel(windUnit), listOf("km/h", "m/s", "mph")) {
+                windUnit = it; settingsPrefs.edit().putString("wind_unit", it).apply()
+            }
             DarkDivider()
-            UnitSettingRow("Air pressure", "Hectopascals (hPa)") { }
+            UnitSettingRow("Air pressure", pressureUnitLabel(pressureUnit), listOf("hPa", "mmHg", "inHg")) {
+                pressureUnit = it; settingsPrefs.edit().putString("pressure_unit", it).apply()
+            }
             DarkDivider()
-            UnitSettingRow("Visibility", "Kilometres (km)") { }
+            UnitSettingRow("Visibility", visibilityUnitLabel(visibilityUnit), listOf("km", "mi")) {
+                visibilityUnit = it; settingsPrefs.edit().putString("visibility_unit", it).apply()
+            }
         }
         Spacer(Modifier.height(28.dp))
         Column(Modifier.fillMaxWidth().background(Color(0xFF1D1D1F), RoundedCornerShape(23.dp)).clickable { }.padding(18.dp)) {
@@ -1188,13 +1230,31 @@ private fun DisabledSettingRow(title: String, subtitle: String) {
 }
 
 @Composable
-private fun UnitSettingRow(title: String, value: String, onClick: () -> Unit) {
-    Row(Modifier.fillMaxWidth().clickable { onClick() }.padding(vertical = 20.dp), verticalAlignment = Alignment.CenterVertically) {
+private fun UnitSettingRow(title: String, value: String, options: List<String>, onSelect: (String) -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+    Row(Modifier.fillMaxWidth().clickable { expanded = true }.padding(vertical = 20.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(title, color = Ink, fontSize = 17.sp, fontFamily = FontFamily.Cursive, modifier = Modifier.weight(1f))
         Text(value, color = Muted, fontSize = 13.sp)
         Text("⌃⌄", color = Muted, fontSize = 16.sp, modifier = Modifier.padding(start = 8.dp))
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            options.forEach { option ->
+                DropdownMenuItem(text = { Text(option) }, onClick = { expanded = false; onSelect(option) })
+            }
+        }
     }
 }
+
+private fun windUnitLabel(unit: String): String = when(unit) {
+    "m/s" -> "Metres per second (m/s)"
+    "mph" -> "Miles per hour (mph)"
+    else -> "Kilometres per hour (km/h)"
+}
+private fun pressureUnitLabel(unit: String): String = when(unit) {
+    "mmHg" -> "Millimetres of mercury (mmHg)"
+    "inHg" -> "Inches of mercury (inHg)"
+    else -> "Hectopascals (hPa)"
+}
+private fun visibilityUnitLabel(unit: String): String = if (unit == "mi") "Miles (mi)" else "Kilometres (km)"
 
 @Composable
 private fun ScreenTitle(title: String, subtitle: String) {
