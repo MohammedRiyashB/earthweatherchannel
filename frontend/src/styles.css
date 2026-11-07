@@ -443,3 +443,48 @@
   .masthead-clock{min-height:0;padding:0;font-size:10px;line-height:1}
   .masthead-row{min-height:47px}
 }
+
+/* Compact, clock-free mobile masthead and regional tabs. */
+.masthead{
+  display:flex;
+  flex-direction:row;
+  align-items:center;
+  height:70px;
+  min-height:70px;
+  padding:0 max(16px,calc((100% - 1280px)/2));
+  gap:0;
+}
+.masthead-row{width:100%;min-height:0;align-items:center}
+.masthead-clock{display:none!important}
+.masthead-actions{display:flex;align-items:center;gap:7px;flex:none}
+.masthead-actions .notification-toggle{
+  border:1px solid #c8dbe4;
+  background:#f6fafc;
+  color:#24566f;
+  border-radius:8px;
+  padding:8px 10px;
+  font-size:10px;
+  line-height:1.15;
+  font-weight:800;
+  white-space:nowrap;
+}
+.masthead-actions .notification-toggle.enabled{background:#e9f6ef;border-color:#b6dec8;color:#28724b}
+.news-nav{height:42px;padding-inline:5px}
+.news-nav button{padding-inline:11px;font-size:10px}
+.news-main{padding-top:12px}
+.weather-search-top{height:40px;margin:0 0 10px;border-radius:8px}
+.weather-search-top input{font-size:12px;padding-left:13px}
+.weather-search-top button{min-width:78px;padding-inline:14px;font-size:11px}
+@media(max-width:620px){
+ .masthead{height:64px;min-height:64px;padding:0 10px}
+ .masthead-row{min-height:0;gap:8px}
+ .masthead-row .brand-wordmark{width:clamp(132px,42vw,174px)}
+ .masthead-actions{gap:5px}
+ .masthead-actions .notification-toggle{padding:7px 7px;font-size:9px;max-width:92px;white-space:normal}
+ .masthead-actions button:not(.notification-toggle){padding:7px 7px;font-size:9px;max-width:76px;white-space:normal;line-height:1.15}
+ .news-nav{height:39px;padding:0 2px}
+ .news-nav button{padding:0 9px;font-size:9px}
+ .news-main{padding:9px 12px 35px}
+ .weather-search-top{height:38px;margin-bottom:9px}
+ .weather-search-top button{min-width:72px;padding:0 11px}
+}

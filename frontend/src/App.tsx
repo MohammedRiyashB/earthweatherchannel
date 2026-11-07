@@ -173,9 +173,13 @@ function WeatherNewsPage({section,location}:{section:"World"|"Country"|"State"|"
 export default function App(){
  const [cities,setCities]=useState<Place[]>(()=>readCache<Place[]>("cities",CITIES.map(x=>({...x,loading:true}))));
  const [storms,setStorms]=useState<Storm[]>(()=>readCache<Storm[]>("storms",[]));
-  const [updated,setUpdated]=useState<string>(()=>readCache<string>("cities-updated",""));const [clock,setClock]=useState(new Date());const [busy,setBusy]=useState(false);const [query,setQuery]=useState("");
+  const [updated,setUpdated]=useState<string>(()=>readCache<string>("cities-updated",""));const [busy,setBusy]=useState(false);const [query,setQuery]=useState("");
 const [section,setSection]=useState("Weather Report");const [page,setPage]=useState<"home"|"about"|"terms"|"privacy">("home");const [isSearchLocation,setIsSearchLocation]=useState<boolean>(()=>readCache<Place|null>("local",null)?.source==="search");
  const [user,setUser]=useState<User|null>(null);const [notice,setNotice]=useState("");
+ const [notificationsEnabled,setNotificationsEnabled]=useState(()=>{
+  try{return typeof window!=="undefined"&&"Notification" in window&&Notification.permission==="granted"&&localStorage.getItem("earth-weather-notifications")==="on";}catch{return false;}
+ });
+ const notificationRegistration=useRef<ServiceWorkerRegistration|null>(null);
  const [local,setLocal]=useState<Place|null>(()=>readCache<Place|null>("local",null));
  const [visitorLocation,setVisitorLocation]=useState<Place|null>(()=>readCache<Place|null>("visitor-location",null));
  const [personalizedCities,setPersonalizedCities]=useState<boolean>(()=>readCache<boolean>("cities-personalized",false));
@@ -185,6 +189,12 @@ const [section,setSection]=useState("Weather Report");const [page,setPage]=useSt
  const locationRequestVersion=useRef(0);
  const cityRequestVersion=useRef(0);
  useEffect(()=>{if(!auth||!firebaseReady)return;return onAuthStateChanged(auth,setUser)},[]);
+ useEffect(()=>{
+  if(!("serviceWorker" in navigator))return;
+  let active=true;
+  void navigator.serviceWorker.register("/sw.js",{scope:"/",updateViaCache:"none"}).then(registration=>{if(active)notificationRegistration.current=registration;}).catch(()=>{});
+  return()=>{active=false;};
+ },[]);
 
  const detectLocalWeather=()=>{
   const requestVersion=++locationRequestVersion.current;
@@ -289,7 +299,7 @@ const [section,setSection]=useState("Weather Report");const [page,setPage]=useSt
    if(response.ok){const data=await response.json();setStorms(data.events||[]);writeCache("storms",data.events||[]);}
   }catch{/* Keep the last successful severe-weather event report. */}
  };
- useEffect(()=>{void refreshFeeds();const newsId=window.setInterval(()=>void refreshFeeds(),5*60*1000);const clockId=window.setInterval(()=>setClock(new Date()),1000);return()=>{window.clearInterval(newsId);window.clearInterval(clockId)}},[]);
+ useEffect(()=>{void refreshFeeds();const newsId=window.setInterval(()=>void refreshFeeds(),5*60*1000);return()=>window.clearInterval(newsId)},[]);
  useEffect(()=>{if(visitorLocation)return;void refreshPopularCities();const id=window.setInterval(()=>void refreshPopularCities(),5*60*1000);return()=>window.clearInterval(id)},[visitorLocation?.lat,visitorLocation?.lon,visitorLocation?.country]);
 
  useEffect(()=>{
@@ -324,6 +334,56 @@ const [section,setSection]=useState("Weather Report");const [page,setPage]=useSt
  },[local?.lat,local?.lon]);
 
  const hasValidCurrent=(value?:Current)=>typeof value?.temperature_2m==="number"&&Number.isFinite(value.temperature_2m);
+ const showWeatherNotification=async(place:Place)=>{
+  if(!place.current||!hasValidCurrent(place.current)||!("Notification" in window)||Notification.permission!=="granted")return;
+  try{
+   const registration=notificationRegistration.current||await navigator.serviceWorker.ready;
+   const current=place.current;
+   const temp=Math.round(current.temperature_2m as number);
+   const condition=weatherLabel(current.weather_code);
+   const code=current.weather_code??-1;
+   const rain=(current.precipitation??0)>0||[51,53,55,56,57,61,63,65,66,67,80,81,82].includes(code);
+   const storm=[95,96,99].includes(code);
+   const message=storm?"Thunderstorms are nearby. Stay alert and avoid exposed areas.":rain?"Rain is reported in your area. Carry an umbrella.":temp>=38?"High heat today. Drink water and limit prolonged outdoor activity.":temp<=17?"Cool conditions outside. A light layer may help.":(current.cloud_cover??0)>=85?"Overcast skies right now. Keep an eye on changing conditions.":(current.cloud_cover??0)>=40?"Clouds and sunshine may alternate. Enjoy your day.":(current.wind_speed_10m??0)>=30?"Strong winds are reported. Secure loose outdoor items.":(current.relative_humidity_2m??0)>=85?"Humidity is high. Stay hydrated and take it easy.":"Weather looks settled for now. Have a good day.";
+   await registration.showNotification("EARTH WEATHER",{
+    body:`${icon(current.weather_code)}  ${temp}°C · ${condition} · ${place.name}\n${message}`,
+    icon:"/web-logo.png",badge:"/favicon.svg",tag:"earth-weather-current",
+    data:{url:"/"}
+   });
+  }catch{/* Notifications may be unavailable in private or restricted browser modes. */}
+ };
+ const toggleWeatherNotifications=async()=>{
+  if(notificationsEnabled){setNotificationsEnabled(false);try{localStorage.setItem("earth-weather-notifications","off");}catch{}return;}
+  if(!("Notification" in window)||!("serviceWorker" in navigator)){
+   setNotice("This browser does not support EARTH WEATHER notifications. Try Chrome on Android.");return;
+  }
+  try{
+   const permission=Notification.permission==="granted"?"granted":await Notification.requestPermission();
+   if(permission!=="granted"){
+    setNotice(permission==="denied"?"Notifications are blocked for this site. Enable them in Chrome site settings.":"Allow notifications to receive EARTH WEATHER updates.");return;
+   }
+   const registration=notificationRegistration.current||await navigator.serviceWorker.register("/sw.js",{scope:"/",updateViaCache:"none"});
+   notificationRegistration.current=registration;
+   setNotificationsEnabled(true);localStorage.setItem("earth-weather-notifications","on");
+   if(local&&local.current&&hasValidCurrent(local.current)){
+    const c=local.current;
+    localStorage.setItem("earth-weather-notification-snapshot",JSON.stringify({temperature:c.temperature_2m,code:c.weather_code,precipitation:c.precipitation||0}));
+    await showWeatherNotification(local);
+    setNotice("EARTH WEATHER alerts are on. Notifications update when local conditions change while the website is open.");
+   }else setNotice("Weather alerts are enabled. Your first update will appear after your location weather loads.");
+  }catch{setNotice("Could not enable notifications. Check Chrome notification and site permissions.");}
+ };
+ useEffect(()=>{
+  const c=local?.current;
+  if(!notificationsEnabled||!local||!c||!hasValidCurrent(c)||!("Notification" in window)||Notification.permission!=="granted")return;
+  const next={temperature:c.temperature_2m,code:c.weather_code,precipitation:c.precipitation||0};
+  let previous:any=null;
+  try{const raw=localStorage.getItem("earth-weather-notification-snapshot");if(raw)previous=JSON.parse(raw);}catch{/* Ignore a damaged local snapshot. */}
+  if(!previous){localStorage.setItem("earth-weather-notification-snapshot",JSON.stringify(next));void showWeatherNotification(local);return;}
+  const meaningfulChange=Math.abs((next.temperature??0)-(previous.temperature??0))>=2||next.code!==previous.code||((next.precipitation??0)>0&&(previous.precipitation??0)<=0);
+  localStorage.setItem("earth-weather-notification-snapshot",JSON.stringify(next));
+  if(meaningfulChange)void showWeatherNotification(local);
+ },[notificationsEnabled,local?.name,local?.current?.temperature_2m,local?.current?.weather_code,local?.current?.precipitation]);
  const active=cities.filter(c=>hasValidCurrent(c.current));
  const hottest=useMemo(()=>[...active].sort((a,b)=>(b.current?.temperature_2m??-100)-(a.current?.temperature_2m??-100))[0],[active]);
  const nationalCities=cities.filter(city=>city.region.endsWith("· National"));
@@ -337,7 +397,7 @@ const [section,setSection]=useState("Weather Report");const [page,setPage]=useSt
  const localTab=visitorLocation?.name?(visitorLocation?.district?`${visitorLocation.name} · ${visitorLocation.district}`:visitorLocation.name):(visitorLocation?.district||"Local");
  const newsTabs=[{key:"World",label:"World"},{key:"Country",label:countryTab},{key:"State",label:stateTab},{key:"Local",label:localTab}];
  return <div className="news-site">
-  <header className="masthead"><div className="masthead-clock" aria-label="Current local time">{clock.toLocaleTimeString([], {hour:"2-digit",minute:"2-digit",second:"2-digit"})}</div><div className="masthead-row"><div className="brand-lockup"><img className="brand-wordmark" src="/logo.png" alt="EARTH WEATHER" width="1200" height="220" /></div><div className="masthead-actions">{user?<button onClick={()=>void signOut(auth!)}>{user.displayName||"Account"}</button>:<button onClick={()=>void signIn()}>Sign in</button>}</div></div></header>
+  <header className="masthead"><div className="masthead-row"><div className="brand-lockup"><img className="brand-wordmark" src="/logo.png" alt="EARTH WEATHER" width="1200" height="220" /></div><div className="masthead-actions"><button className={`notification-toggle${notificationsEnabled?" enabled":""}`} onClick={()=>void toggleWeatherNotifications()} aria-pressed={notificationsEnabled} title="Weather alerts while EARTH WEATHER is open">{notificationsEnabled?"✓ Alerts on":"🔔 Enable alerts"}</button>{user?<button onClick={()=>void signOut(auth!)}>{user.displayName||"Account"}</button>:<button onClick={()=>void signIn()}>Sign in</button>}</div></div></header>
   <nav className="news-nav">{[{key:"Weather Report",label:"Weather Report"},...newsTabs,{key:"Satellite imagery",label:"Satellite imagery"},{key:"Satellite Report",label:"Satellite Report"}].map(item=><button className={section===item.key?"active":""} key={item.key} onClick={()=>setSection(item.key)}>{item.label}</button>)}</nav>
   {page==="home"?(section==="Satellite Report"?<SatelliteNumericalReport/>:section==="Satellite imagery"?<SatelliteDashboard/>:section!=="Weather Report"?<WeatherNewsPage section={section as "World"|"Country"|"State"|"Local"} location={visitorLocation}/>:<main className="news-main">
    {notice&&<div className="notice">{notice}</div>}
