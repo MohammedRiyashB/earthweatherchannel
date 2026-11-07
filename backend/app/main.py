@@ -23,6 +23,7 @@ app.add_middleware(
 )
 
 from app.cache_middleware import PublicResponseCacheMiddleware
+from app.satellite_sources import SATELLITE_PROVIDERS, fetch_gibs_layers
 
 # Bounded per-process cache; shared cache can be enabled in a later stage.
 app.add_middleware(PublicResponseCacheMiddleware)
@@ -90,12 +91,50 @@ SATELLITE_CATALOG = [
 
 @app.get("/api/satellites/catalog")
 async def satellite_catalog() -> dict[str, Any]:
-    """Catalog of satellite mission data services; availability and access requirements are explicit."""
+    """Return provider readiness plus actual live NASA GIBS WMTS imagery layers."""
+    import os
+
+    async with httpx.AsyncClient(
+        timeout=httpx.Timeout(12.0, connect=4.0),
+        follow_redirects=True,
+        headers={"User-Agent": "EARTH-WEATHER/1.0 (+https://earthweatherchannel.web.app)"},
+    ) as client:
+        try:
+            live_imagery = await fetch_gibs_layers(client)
+        except (httpx.HTTPError, ValueError, TypeError) as exc:
+            logger.warning("NASA GIBS layer catalogue unavailable: %s", exc.__class__.__name__)
+            live_imagery = {
+                "provider": "NASA EOSDIS GIBS",
+                "status": "degraded",
+                "retrieved_layers": 0,
+                "layers": [],
+                "capabilities_url": NASA_GIBS_CAPABILITIES,
+                "error": exc.__class__.__name__,
+            }
+
+    providers = []
+    for provider in SATELLITE_PROVIDERS:
+        item = dict(provider)
+        if item["id"] == "nasa-gibs":
+            item["status"] = live_imagery["status"]
+            item["connected"] = live_imagery["status"] == "live"
+            item["live_layer_count"] = live_imagery["retrieved_layers"]
+        elif item["requires_credentials"]:
+            env_names = item.get("credential_env") or ""
+            required = [name.strip() for name in env_names.split(" and ") if name.strip()]
+            item["status"] = "credentials-configured" if required and all(os.getenv(name) for name in required) else "credentials-required"
+            item["connected"] = False
+        else:
+            item["status"] = "public-source-not-yet-adapted"
+            item["connected"] = False
+        providers.append(item)
+
     return {
         "retrieved_at": utc_now(),
-        "count": len(SATELLITE_CATALOG),
-        "providers": SATELLITE_CATALOG,
-        "note": "This is a provider and mission catalogue, not a claim that every satellite is connected to a live feed. Live access depends on each provider's published endpoint, product coverage, latency, licence and credentials."
+        "count": len(providers),
+        "providers": providers,
+        "live_imagery": live_imagery,
+        "note": "Only NASA GIBS is currently connected as a live machine-readable satellite imagery feed in this backend. Other providers are identified with their real access requirements; a reachable website is not the same as an integrated data feed. Satellite imagery is not a direct replacement for local temperature forecasts or official warnings.",
     }
 
 @app.get("/api/health/sources")
