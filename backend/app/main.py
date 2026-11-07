@@ -37,6 +37,15 @@ SOURCES = [
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
+def _current_weather_params(latitudes: list[float], longitudes: list[float]) -> dict[str, Any]:
+    """Small current-conditions request; do not download hourly history for city cards."""
+    return {
+        "latitude": ",".join(str(x) for x in latitudes),
+        "longitude": ",".join(str(x) for x in longitudes),
+        "current": "temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,cloud_cover,pressure_msl,wind_speed_10m,wind_direction_10m,wind_gusts_10m,weather_code",
+        "timezone": "UTC",
+    }
+
 def _meteo_params(latitudes: list[float], longitudes: list[float]) -> dict[str, Any]:
     return {
         "latitude": ",".join(str(x) for x in latitudes),
@@ -252,8 +261,7 @@ async def featured_weather(
         if len(international) == 4:
             break
     selected = national + regional + international
-    params = _meteo_params([item["lat"] for item in selected], [item["lon"] for item in selected])
-    params["current"] = "temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,cloud_cover,pressure_msl,wind_speed_10m,wind_direction_10m,wind_gusts_10m,weather_code"
+    params = _current_weather_params([item["lat"] for item in selected], [item["lon"] for item in selected])
     try:
         async with httpx.AsyncClient(timeout=35.0, follow_redirects=True) as client:
             payload = await _fetch_open_meteo_current(client, params)
@@ -300,8 +308,7 @@ async def weather_bulk(
     if any(not -90 <= value <= 90 for value in lats) or any(not -180 <= value <= 180 for value in lons):
         raise HTTPException(status_code=422, detail="Coordinates are outside valid ranges")
 
-    params = _meteo_params(lats, lons)
-    params["current"] = "temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,cloud_cover,pressure_msl,wind_speed_10m,wind_direction_10m,wind_gusts_10m,weather_code"
+    params = _current_weather_params(lats, lons)
     try:
         async with httpx.AsyncClient(timeout=35.0, follow_redirects=True) as client:
             payload = await _fetch_open_meteo_current(client, params)
@@ -334,8 +341,7 @@ async def weather(
     if cached and cached[0] > now:
         return cached[1]
 
-    params = _meteo_params([latitude], [longitude])
-    params["current"] = "temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,cloud_cover,pressure_msl,wind_speed_10m,wind_direction_10m,wind_gusts_10m,weather_code"
+    params = _current_weather_params([latitude], [longitude])
     try:
         # Do not hold the shared cache lock during network I/O: different cities must load concurrently.
         async with httpx.AsyncClient(timeout=35.0, follow_redirects=True) as client:
