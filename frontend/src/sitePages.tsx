@@ -821,6 +821,23 @@ const PAGES: Record<SitePageId, PageData> = {
 
 export function SitePageView({ slug }: { slug: SitePageId }) {
   const page = PAGES[slug];
+  React.useEffect(() => {
+    const previousTitle = document.title;
+    const title = `${page.title.replace(/[.]+$/, "")} | EARTH WEATHER`;
+    document.title = title;
+    let description = document.querySelector<HTMLMetaElement>('meta[name="description"]');
+    if (!description) {
+      description = document.createElement("meta");
+      description.name = "description";
+      document.head.appendChild(description);
+    }
+    const previousDescription = description.content;
+    description.content = page.lead.slice(0, 155);
+    return () => {
+      document.title = previousTitle;
+      description!.content = previousDescription;
+    };
+  }, [slug, page.title, page.lead]);
   return (
     <div className="site-content-page">
       <div className="info-page-brand"><img src="/logo.png" alt="EARTH WEATHER" /></div>
