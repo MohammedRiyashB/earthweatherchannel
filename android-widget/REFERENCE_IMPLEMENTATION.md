@@ -1,69 +1,70 @@
-# EARTH WEATHER Native Android App — implementation register
+# EARTH WEATHER Native Android App — full reference register
 
-## Product target
-Build an original native Android weather app with the functional breadth and interaction quality of the inspected ColorOS Weather reference, using EARTH WEATHER branding, original artwork and BMR INC. backend services. This is an independent implementation: no proprietary OPPO source, logo, fonts, shaders, videos, OEM UI classes or QuickCard code is redistributed.
+## Reference APK inventory (static inspection)
+- Package: `com.coloros.weather2`, version 16.45.5, APK about 96.1 MB.
+- 4,203 archive entries, 7 DEX files, 543 Android layouts, 2,434 drawable entries, 297 bundled assets, 13 native libraries.
+- Main weather pager / city pages; city manager; current conditions; dynamic weather scenes; hourly forecast; daily forecast with chart/list; AQI; short-term rain; weather/life indexes; sunrise/sunset; alerts; radar; accuracy feedback; followed cities; location and background updates; rain reminder times; morning weather service; settings/privacy/export/feedback/about; standard Android widgets; OEM QuickCards.
 
-## Reference APK inventory
-- APK: 100,803,256 bytes (about 96.1 MiB), version 16.45.5, package `com.coloros.weather2`
-- 4,203 ZIP entries; 7 DEX files; 543 layouts; 2,434 drawable entries across qualifiers; 297 bundled assets; 13 native libraries; arm64-v8a only; min Android 10, target/compile SDK 36.
-- Main weather pager / swipeable city pages; city manager; current conditions; dynamic weather backgrounds; hourly forecast; daily/future forecast with chart/list; AQI; minute-rain banner; weather/life indices; sunrise/sunset; alert and warning cards; radar charts; accuracy feedback; followed cities; auto-location service; background update receivers; rain reminder windows; morning weather service; privacy, feedback, about and meteorological settings; standard Android AppWidget; OPlus QuickCard/Seedling cards.
+These are reference archive counts only. Protected ColorOS resources are not redistributed or renamed. EARTH WEATHER uses its own package, backend, layout, vector assets and original Compose implementation.
 
-Counts describe the reference archive only. They are not an instruction to copy the reference's copyrighted binary assets. All EARTH WEATHER visuals are original.
+## Current implementation in this branch
+- [x] Independent app identity `com.bmrinc.earthweather`, Kotlin + Jetpack Compose, custom launcher icon.
+- [x] Current conditions via EARTH WEATHER API; location permission, GPS fix, reverse-geocoded city and selected-city persistence.
+- [x] Country/regional top-city shortcuts, world cities, backend search and saved-city manager.
+- [x] Swipe left/right on the main weather hero to cycle selected/saved cities.
+- [x] Hourly forecast strip (up to 48 hours).
+- [x] Up-to-15-day forecast list and high/low temperature graph.
+- [x] AQI panel (European/US AQI, PM2.5, PM10, ozone) with model-estimate disclaimer.
+- [x] UV index, sunrise/sunset, current pressure/cloud/wind/rain detail.
+- [x] Daily life/outdoor/rain/UV guidance derived from the available model values; not official health/safety guidance.
+- [x] Dynamic original vector condition illustrations (sun, partly-cloudy, overcast, fog, rain, thunder, snow), animated hero drift and condition-based background gradient.
+- [x] Rain forecast strip using hourly precipitation probability and amount.
+- [x] Interactive historical RainViewer radar map with OSM basemap, selected city marker, frame slider, previous/next and playback.
+- [x] Weather alert display with coverage disclosure; background alerts only when connected provider returns an alert.
+- [x] Severe-weather alert notifications (opt-in).
+- [x] Rain reminders (opt-in), user-configurable precipitation-probability threshold.
+- [x] Morning weather briefing (opt-in), configurable local-device hour (05:00–11:00).
+- [x] Celsius/Fahrenheit setting.
+- [x] 2×2 compact and 4×2 detailed widgets with original artwork, live backend weather and selected-city/units sync.
+- [x] Settings screens for units, notification controls, provider data and privacy caveats.
 
-## Implemented in this branch
-- [x] Independent Android package `com.bmrinc.earthweather`, Kotlin + Jetpack Compose.
-- [x] EARTH WEATHER app identity and original launcher icon.
-- [x] Current weather screen using the EARTH WEATHER API; foreground location permission and reverse geocoding.
-- [x] Backend city search route; app city search, saved cities, select/switch city, country popular-city shortcuts and world-city shortcuts.
-- [x] Typed Android API client for current conditions, forecast, AQI, reverse geocoding, alerts and radar metadata.
-- [x] Dedicated backend `GET /api/forecast` returning 48-hour app-consumed hourly values and up to 15 daily forecast records (API supports up to 16).
-- [x] Dedicated backend `GET /api/air-quality` with European/US AQI, PM2.5, PM10, ozone and UV fields.
-- [x] Forecast UI: hourly strip and 15-day high/low list.
-- [x] AQI card, daily UV max and sunrise/sunset cards.
-- [x] Rain/precipitation probability screen and RainViewer past-frame metadata (not a full map player or nowcast).
-- [x] Alert display using the current `/api/alerts` adapter; the connected NOAA/NWS adapter is US-only.
-- [x] Settings: °C/°F and explicit severe-weather notification control.
-- [x] Background alert worker (only notifies when the configured official-alert endpoint returns an active alert; currently useful only where that provider has coverage).
-- [x] Original vector weather illustrations for clear, partly-cloudy, overcast, fog, rain, thunder and snow; gently animated hero artwork.
-- [x] 4×2 detailed widget and 2×2 compact widget registered in the same native app. Both read current conditions from EARTH WEATHER API and refresh through WorkManager.
+## Still required before feature-complete production release
+- [ ] IMD/authorised Indian warning integration and other country-specific official warning adapters. Current NOAA/NWS backend route is US-only.
+- [ ] True minute-by-minute rain nowcast. Current app shows hourly forecast probabilities; do not relabel this as minute rain.
+- [ ] Rain reminder quiet hours / user-selected reminder windows in addition to probability threshold.
+- [ ] Full-screen detail pages for weather/life indices, more condition-specific animations and day/night scene variants.
+- [ ] Accuracy feedback form backed by durable storage and an anti-abuse policy.
+- [ ] Rich radar timeline polish and licensing review for the intended commercial distribution scope.
+- [ ] Widget configuration screen (city choice, refresh preferences), resizing previews and OEM launcher verification.
+- [ ] Offline/stale-data cache with timestamps, exponential retry/backoff and provider failover visibility in UI.
+- [ ] Accessibility pass (TalkBack labels, text scaling, contrast, touch targets) and responsive layout pass.
+- [ ] Unit/contract/integration tests for backend endpoints; Android UI/instrumentation tests.
+- [ ] Commercial Open-Meteo licence/customer API key and attribution review before public commercial release.
+- [ ] Release signing, APK/AAB optimisation, Play policy/data-safety disclosure, Realme 14T 5G physical-device validation and production deployment.
 
-## Still required before calling the app feature-complete
-- [ ] City pager / swipe between multiple saved city weather pages; city list currently switches through selectable rows and shortcut lists.
-- [ ] 15-day chart view in addition to the list view.
-- [ ] Minute-by-minute rain banner; current endpoint provides hourly precipitation probabilities, not true minute nowcast.
-- [ ] More complete weather/life indices (comfort, outdoor activity, clothing guidance) with transparent calculations and source labels.
-- [ ] Full interactive radar map, frame timeline and playback. Current app shows RainViewer frame metadata and rain probabilities only.
-- [ ] India/region-appropriate official alert integration. `/api/alerts` currently returns NOAA/NWS data for US coordinates only; an authorised IMD feed/API arrangement is required for official Indian warnings.
-- [ ] Rain reminder schedule with user-configurable time windows.
-- [ ] Morning weather briefing and configurable delivery.
-- [ ] Weather accuracy feedback endpoint and UI.
-- [ ] More weather condition animations/background transitions and night/day scene variants.
-- [ ] Widget configuration (city selection, units, refresh preferences), preview and OEM launcher verification.
-- [ ] Offline/stale-data cache, retry strategy, loading/error states and accessibility audit.
-- [ ] Full Android unit/instrumentation tests and API contract tests.
-- [ ] Device testing on Realme 14T 5G; debug/release signing, release build, APK size optimisation and production distribution.
-
-## Backend routes available or added
-Existing:
-- `GET /api/weather` — current conditions and source metadata.
-- `GET /api/weather/featured`, `GET /api/weather/bulk` — featured / bulk city reports.
-- `GET /api/location/reverse` — GPS coordinate to place/country/state/district.
-- `GET /api/cyclones` — NASA EONET curated severe-storm events (not a complete official warning feed).
+## Backend routes
+Existing routes:
+- `GET /api/weather` — current model conditions and source metadata.
+- `GET /api/weather/featured`, `GET /api/weather/bulk` — city reports.
+- `GET /api/location/reverse` — coordinates to place/country/state/district.
+- `GET /api/cyclones` — NASA EONET curated event metadata, not a complete cyclone warning feed.
 - `GET /api/alerts` — NOAA/NWS alerts for US coordinates only.
-- `GET /api/radar` — RainViewer past frames only, not a nowcast.
-- Weather news, satellite catalogue and health routes.
+- `GET /api/radar` — RainViewer historical past frames only.
+- Weather news, satellite catalogue and provider health endpoints.
 Added in this branch:
-- `GET /api/location/search?q=...` — rate-paced and cached Nominatim city/town/village lookup.
-- `GET /api/forecast?latitude=&longitude=&days=15` — hourly + daily forecast payload.
-- `GET /api/air-quality?latitude=&longitude=` — current AQI and pollutant estimates.
+- `GET /api/location/search?q=...` — cached/rate-paced Nominatim location search.
+- `GET /api/forecast?latitude=&longitude=&days=15` — hourly + up to 16 daily forecast values.
+- `GET /api/air-quality?latitude=&longitude=` — AQI/pollutant estimates.
 
-## Provider licensing and data integrity
-- The forecast and AQI adapters use Open-Meteo evaluation endpoints when no `OPEN_METEO_API_KEY` is configured. Their free API is limited to non-commercial use; commercial release needs the applicable Open-Meteo commercial licence/customer endpoint and attribution.
-- AQI values are model estimates, not regulatory ground-station readings. Health-critical guidance must link to local official agencies.
-- RainViewer endpoint currently provides past radar frames; this is not a future-rain nowcast.
-- NOAA/NWS alert feed currently covers the United States only. Do not show "no alerts" as "no risk"; label provider coverage clearly.
-- IMD/official India warnings need registered access and provider terms. Do not scrape or claim official coverage without permission.
-- Do not ship upstream provider secrets in the APK. Route provider access through EARTH WEATHER API.
+## Data integrity and licensing
+- Without `OPEN_METEO_API_KEY`, forecast/AQI adapters use Open-Meteo evaluation endpoints. The free tier is non-commercial; commercial release requires the applicable Open-Meteo licence/customer endpoint and attribution.
+- AQI values are model estimates, not regulatory ground-station observations. Link official agencies for health-critical decisions.
+- RainViewer here is used for past radar frames, not future precipitation nowcasting. Commercial use needs a provider terms/licence review.
+- NOAA/NWS alert coverage is United States only. "No alert returned" does not mean "no risk".
+- IMD official alerts require registered/authorised access; no scraping or false claim of official coverage.
+- Do not put upstream provider secrets in the APK; all upstream requests must go through EARTH WEATHER API.
 
-## Architecture principles
-Android app -> EARTH WEATHER FastAPI -> licensed provider adapters. Add source, model/observation timestamp, coverage and limitation metadata. Respect Android background scheduling and request only permissions required by user-enabled features.
+## Platform scope
+- App code and assets are independent EARTH WEATHER implementations.
+- OEM-only OPlus QuickCards/Seedling APIs are not recreated using proprietary code; standard Android AppWidgets are provided instead.
+- Background work uses Android WorkManager and may be deferred by the OS battery policy; exact minute delivery is not guaranteed.
