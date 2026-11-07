@@ -49,7 +49,7 @@ const TOP_CITIES_BY_COUNTRY:Record<string,Place[]> = {
  AU:[
   {name:"Sydney",region:"New South Wales, Australia",country:"Australia",country_code:"AU",state:"New South Wales",lat:-33.8688,lon:151.2093},
   {name:"Melbourne",region:"Victoria, Australia",country:"Australia",country_code:"AU",state:"Victoria",lat:-37.8136,lon:144.9631},
-  {name:"Brisbane",region:"Queensland, Australia",country:"Australia",country_code:"AU",state:"Queensland",country_code:"AU",lat:-27.4698,lon:153.0251},
+  {name:"Brisbane",region:"Queensland, Australia",country:"Australia",country_code:"AU",state:"Queensland",lat:-27.4698,lon:153.0251},
   {name:"Perth",region:"Western Australia, Australia",country:"Australia",country_code:"AU",state:"Western Australia",lat:-31.9505,lon:115.8605},
   {name:"Adelaide",region:"South Australia, Australia",country:"Australia",country_code:"AU",state:"South Australia",lat:-34.9285,lon:138.6007}
  ],
