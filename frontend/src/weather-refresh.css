@@ -86,7 +86,7 @@ button,input,a{-webkit-tap-highlight-color:transparent}button:focus-visible,inpu
 .source-brand-track{
   display:flex;
   width:max-content;
-  gap:12px;
+  gap:0;
   transform:translate3d(0,0,0);
   animation-play-state:paused;
 }
@@ -120,6 +120,7 @@ button,input,a{-webkit-tap-highlight-color:transparent}button:focus-visible,inpu
   box-shadow:0 6px 17px rgba(20,53,72,.08);
   transform:translateY(-2px);
 }
+.source-brand-monogram img{display:block;width:22px;height:22px;object-fit:contain}
 .source-brand-monogram{
   display:grid;
   flex:0 0 39px;
@@ -197,7 +198,7 @@ button,input,a{-webkit-tap-highlight-color:transparent}button:focus-visible,inpu
   .source-brand-heading h2{font-size:21px}
   .source-brand-heading p{font-size:11px}
   .source-brand-motion{gap:10px}
-  .source-brand-track{gap:9px}
+  .source-brand-track{gap:0}
   .source-brand-group{gap:9px;padding-right:9px}
   .source-brand-tile{
     flex-basis:190px;
