@@ -59,6 +59,7 @@ import com.bmrinc.earthweatherwidget.WeatherWidgetWorker
 import com.bmrinc.earthweatherwidget.RainReminderWorker
 import com.bmrinc.earthweatherwidget.MorningBriefingWorker
 import com.bmrinc.earthweatherwidget.LiveWeatherNotificationWorker
+import com.bmrinc.earthweatherwidget.WeeklyForecastWorker
 import java.util.concurrent.TimeUnit
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
@@ -117,6 +118,7 @@ class MainActivity : ComponentActivity() {
     private var morningBriefingEnabled by mutableStateOf(false)
     private var morningBriefingHour by mutableIntStateOf(7)
     private var liveWeatherEnabled by mutableStateOf(false)
+    private var weeklyForecastEnabled by mutableStateOf(false)
     private var refreshInProgress = false
 
     private val notificationPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -136,6 +138,12 @@ class MainActivity : ComponentActivity() {
         getSharedPreferences("earth_weather_app", MODE_PRIVATE).edit().putBoolean("morning_briefing_enabled", granted).apply()
         if (granted) MorningBriefingWorker.schedule(this)
         else WorkManager.getInstance(this).cancelUniqueWork("earth-weather-morning-briefing")
+    }
+
+    private val weeklyNotificationPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        weeklyForecastEnabled = granted
+        getSharedPreferences("earth_weather_app", MODE_PRIVATE).edit().putBoolean("weekly_forecast_enabled", granted).apply()
+        if (granted) WeeklyForecastWorker.schedule(this) else WeeklyForecastWorker.cancel(this)
     }
 
     private val liveNotificationPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -185,7 +193,9 @@ class MainActivity : ComponentActivity() {
                     onMorningHour = { morningBriefingHour = it; getSharedPreferences("earth_weather_app", MODE_PRIVATE).edit().putInt("morning_briefing_hour", it).apply(); if (morningBriefingEnabled) MorningBriefingWorker.schedule(this) },
                     onSearch = { searchCities(cityQuery) },
                     liveWeatherEnabled = liveWeatherEnabled,
-                    onLiveWeather = { setLiveWeatherNotifications(it) }
+                    onLiveWeather = { setLiveWeatherNotifications(it) },
+                    weeklyForecastEnabled = weeklyForecastEnabled,
+                    onWeeklyForecast = { setWeeklyForecast(it) }
                 )
             }
         }
@@ -194,6 +204,24 @@ class MainActivity : ComponentActivity() {
         if (rainRemindersEnabled) scheduleRainReminders()
         if (morningBriefingEnabled) MorningBriefingWorker.schedule(this)
         if (liveWeatherEnabled) LiveWeatherNotificationWorker.schedule(this)
+        if (weeklyForecastEnabled) WeeklyForecastWorker.schedule(this)
+    }
+
+    private fun setWeeklyForecast(enabled: Boolean) {
+        if (!enabled) {
+            weeklyForecastEnabled = false
+            getSharedPreferences("earth_weather_app", MODE_PRIVATE).edit().putBoolean("weekly_forecast_enabled", false).apply()
+            WeeklyForecastWorker.cancel(this)
+            return
+        }
+        if (Build.VERSION.SDK_INT >= 33 &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            weeklyNotificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+        } else {
+            weeklyForecastEnabled = true
+            getSharedPreferences("earth_weather_app", MODE_PRIVATE).edit().putBoolean("weekly_forecast_enabled", true).apply()
+            WeeklyForecastWorker.schedule(this)
+        }
     }
 
     private fun setLiveWeatherNotifications(enabled: Boolean) {
@@ -218,6 +246,7 @@ class MainActivity : ComponentActivity() {
         morningBriefingEnabled = prefs.getBoolean("morning_briefing_enabled", false)
         morningBriefingHour = prefs.getInt("morning_briefing_hour", 7).coerceIn(5, 11)
         liveWeatherEnabled = prefs.getBoolean("live_weather_enabled", false)
+        weeklyForecastEnabled = prefs.getBoolean("weekly_forecast_enabled", false)
         try {
             val array = JSONArray(prefs.getString("saved_cities", "[]") ?: "[]")
             savedCities = (0 until array.length()).mapNotNull { i ->
@@ -1081,7 +1110,8 @@ private fun SettingsScreen(
     rainRemindersEnabled: Boolean, onRainReminders: (Boolean) -> Unit, rainThreshold: Int, onRainThreshold: (Int) -> Unit,
     rainStartHour: Int, rainEndHour: Int, onRainWindow: (Int, Int) -> Unit,
     morningBriefingEnabled: Boolean, morningBriefingHour: Int, onMorningBriefing: (Boolean) -> Unit, onMorningHour: (Int) -> Unit,
-    modifier: Modifier, state: DashboardState, onBack: () -> Unit, onOpenRealtime: () -> Unit
+    modifier: Modifier, state: DashboardState, onBack: () -> Unit, onOpenRealtime: () -> Unit,
+    weeklyForecastEnabled: Boolean, onWeeklyForecast: (Boolean) -> Unit
 ) {
     var rainExpanded by remember { mutableStateOf(false) }
     val settingsContext = LocalContext.current
@@ -1124,7 +1154,7 @@ private fun SettingsScreen(
                 Slider(value = morningBriefingHour.toFloat(), onValueChange = { onMorningHour(it.toInt().coerceIn(5, 11)) }, valueRange = 5f..11f, steps = 5)
             }
             DarkDivider()
-            DisabledSettingRow("Weekly weather forecast", "Weekly digest will be enabled after the forecast schedule is added.")
+            SettingSwitch("Weekly weather forecast", "Get a 7-day weather outlook every Sunday.", weeklyForecastEnabled, onWeeklyForecast)
             DarkDivider()
             Row(Modifier.fillMaxWidth().clickable { onOpenRealtime() }.padding(vertical = 18.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text("Real-time weather notifications", color = Ink, fontSize = 17.sp, fontFamily = FontFamily.Cursive, modifier = Modifier.weight(1f))
