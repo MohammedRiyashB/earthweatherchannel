@@ -914,7 +914,7 @@ private fun SettingsScreen(celsius: Boolean, onUnit: (Boolean) -> Unit, notifica
         Spacer(Modifier.height(22.dp)); SectionHeader("DATA & PRIVACY", "About your weather")
         InfoCard("EARTH WEATHER API", "Weather information is served by BMR INC. infrastructure. Location is requested only to show local weather. City search works without GPS permission.")
         Spacer(Modifier.height(9.dp))
-        InfoCard("DATA SOURCES", "Current weather uses the configured provider failover. Forecast and air-quality are currently routed through Open-Meteo evaluation endpoints. Commercial publication requires the appropriate provider licence.")
+        InfoCard("DATA SOURCES", "Current weather uses the configured provider failover. Forecast and AQI currently use Open-Meteo evaluation endpoints (CC BY 4.0 attribution). The free tier is non-commercial; commercial release requires the appropriate customer licence/endpoint. City search and reverse geocoding use OpenStreetMap Nominatim attribution. Radar history uses RainViewer past frames; review its commercial terms before public monetisation.")
         Spacer(Modifier.height(9.dp))
         InfoCard("ALERT COVERAGE", state.alertCoverage.ifBlank { "Alert service status has not loaded." })
         Spacer(Modifier.height(9.dp))
