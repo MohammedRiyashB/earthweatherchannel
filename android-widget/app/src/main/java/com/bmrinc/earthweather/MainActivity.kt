@@ -127,7 +127,7 @@ class MainActivity : ComponentActivity() {
                     savedCities = savedCities,
                     onSelect = { choosePlace(it) }, onSave = { saveCity(it) }, onRemove = { removeCity(it) },
                     celsius = celsius,
-                    onUnit = { celsius = it; getSharedPreferences("earth_weather_app", MODE_PRIVATE).edit().putBoolean("celsius", it).apply() },
+                    onUnit = { celsius = it; getSharedPreferences("earth_weather_app", MODE_PRIVATE).edit().putBoolean("celsius", it).apply(); getSharedPreferences("earth_weather", MODE_PRIVATE).edit().putBoolean("celsius", it).apply(); WeatherWidgetWorker.enqueueNow(this) },
                     notificationsEnabled = notificationsEnabled,
                     onNotifications = { setWeatherNotifications(it) },
                     rainRemindersEnabled = rainRemindersEnabled,
@@ -178,6 +178,7 @@ class MainActivity : ComponentActivity() {
             put("country", place.country); put("countryCode", place.countryCode)
             put("state", place.state); put("district", place.district)
         }
+        getSharedPreferences("earth_weather", MODE_PRIVATE).edit().putBoolean("celsius", celsius).apply()
         getSharedPreferences("earth_weather_app", MODE_PRIVATE).edit()
             .putString("selected_place", item.toString())
             .putString("lat", place.latitude.toString())
@@ -972,7 +973,7 @@ private fun WeatherDetailsCard(current: CurrentConditions?, celsius: Boolean) {
 private fun LifeIndexCard(state: DashboardState) {
     val current = state.current
     val nextHours = state.hourly.take(6)
-    val rainChance = nextHours.maxOfOrNull { it.precipitationProbability.coerceAtLeast(0) } ?: -1
+    val rainChance = nextHours.map { it.precipitationProbability }.filter { it >= 0 }.maxOrNull() ?: -1
     val uv = state.daily.firstOrNull()?.uvMax ?: state.air?.uv ?: Double.NaN
     val temperature = current?.temperature ?: Double.NaN
     val wind = current?.windKmh ?: Double.NaN
