@@ -54,6 +54,7 @@ import androidx.work.WorkManager
 import com.bmrinc.earthweatherwidget.WeatherAlertWorker
 import com.bmrinc.earthweatherwidget.WeatherWidgetWorker
 import com.bmrinc.earthweatherwidget.RainReminderWorker
+import com.bmrinc.earthweatherwidget.MorningBriefingWorker
 import java.util.concurrent.TimeUnit
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
@@ -103,6 +104,8 @@ class MainActivity : ComponentActivity() {
     private var notificationsEnabled by mutableStateOf(false)
     private var rainRemindersEnabled by mutableStateOf(false)
     private var rainThreshold by mutableIntStateOf(60)
+    private var morningBriefingEnabled by mutableStateOf(false)
+    private var morningBriefingHour by mutableIntStateOf(7)
     private var refreshInProgress = false
 
     private val notificationPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -115,6 +118,13 @@ class MainActivity : ComponentActivity() {
         rainRemindersEnabled = granted
         getSharedPreferences("earth_weather_app", MODE_PRIVATE).edit().putBoolean("rain_reminders_enabled", granted).apply()
         if (granted) scheduleRainReminders() else WorkManager.getInstance(this).cancelUniqueWork("earth-weather-rain-reminders")
+    }
+
+    private val morningNotificationPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        morningBriefingEnabled = granted
+        getSharedPreferences("earth_weather_app", MODE_PRIVATE).edit().putBoolean("morning_briefing_enabled", granted).apply()
+        if (granted) MorningBriefingWorker.schedule(this)
+        else WorkManager.getInstance(this).cancelUniqueWork("earth-weather-morning-briefing")
     }
 
     private val locationPermission = registerForActivityResult(
@@ -146,6 +156,10 @@ class MainActivity : ComponentActivity() {
                     onRainReminders = { setRainReminders(it) },
                     rainThreshold = rainThreshold,
                     onRainThreshold = { rainThreshold = it; getSharedPreferences("earth_weather_app", MODE_PRIVATE).edit().putInt("rain_threshold", it).apply(); getSharedPreferences("earth_weather", MODE_PRIVATE).edit().putInt("rain_probability_threshold", it).apply() },
+                    morningBriefingEnabled = morningBriefingEnabled,
+                    morningBriefingHour = morningBriefingHour,
+                    onMorningBriefing = { setMorningBriefing(it) },
+                    onMorningHour = { morningBriefingHour = it; getSharedPreferences("earth_weather_app", MODE_PRIVATE).edit().putInt("morning_briefing_hour", it).apply(); if (morningBriefingEnabled) MorningBriefingWorker.schedule(this) },
                     onSearch = { searchCities(cityQuery) }
                 )
             }
@@ -153,6 +167,7 @@ class MainActivity : ComponentActivity() {
         selectedPlace?.let { loadWeather(it) } ?: requestLocation()
         if (notificationsEnabled) scheduleAlertChecks()
         if (rainRemindersEnabled) scheduleRainReminders()
+        if (morningBriefingEnabled) MorningBriefingWorker.schedule(this)
     }
 
     private fun restorePreferences() {
@@ -161,6 +176,8 @@ class MainActivity : ComponentActivity() {
         notificationsEnabled = prefs.getBoolean("notifications_enabled", false)
         rainRemindersEnabled = prefs.getBoolean("rain_reminders_enabled", false)
         rainThreshold = prefs.getInt("rain_threshold", 60).coerceIn(40, 90)
+        morningBriefingEnabled = prefs.getBoolean("morning_briefing_enabled", false)
+        morningBriefingHour = prefs.getInt("morning_briefing_hour", 7).coerceIn(5, 11)
         try {
             val array = JSONArray(prefs.getString("saved_cities", "[]") ?: "[]")
             savedCities = (0 until array.length()).mapNotNull { i ->
@@ -381,6 +398,22 @@ class MainActivity : ComponentActivity() {
         choosePlace(places[next])
     }
 
+    private fun setMorningBriefing(enabled: Boolean) {
+        if (!enabled) {
+            morningBriefingEnabled = false
+            getSharedPreferences("earth_weather_app", MODE_PRIVATE).edit().putBoolean("morning_briefing_enabled", false).apply()
+            WorkManager.getInstance(this).cancelUniqueWork("earth-weather-morning-briefing")
+            return
+        }
+        if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            morningNotificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+        } else {
+            morningBriefingEnabled = true
+            getSharedPreferences("earth_weather_app", MODE_PRIVATE).edit().putBoolean("morning_briefing_enabled", true).apply()
+            MorningBriefingWorker.schedule(this)
+        }
+    }
+
     private fun saveCity(place: WeatherPlace) {
         if (savedCities.none { it.name.equals(place.name, true) && it.countryCode == place.countryCode }) {
             savedCities = savedCities + place
@@ -408,7 +441,7 @@ private fun EarthWeatherApp(
     results: List<WeatherPlace>, searching: Boolean, searchError: String,
     savedCities: List<WeatherPlace>, onSelect: (WeatherPlace) -> Unit,
     onSave: (WeatherPlace) -> Unit, onRemove: (WeatherPlace) -> Unit,
-    celsius: Boolean, onUnit: (Boolean) -> Unit, notificationsEnabled: Boolean, onNotifications: (Boolean) -> Unit, rainRemindersEnabled: Boolean, onRainReminders: (Boolean) -> Unit, rainThreshold: Int, onRainThreshold: (Int) -> Unit, onSearch: () -> Unit
+    celsius: Boolean, onUnit: (Boolean) -> Unit, notificationsEnabled: Boolean, onNotifications: (Boolean) -> Unit, rainRemindersEnabled: Boolean, onRainReminders: (Boolean) -> Unit, rainThreshold: Int, onRainThreshold: (Int) -> Unit, morningBriefingEnabled: Boolean, morningBriefingHour: Int, onMorningBriefing: (Boolean) -> Unit, onMorningHour: (Int) -> Unit, onSearch: () -> Unit
 ) {
     Scaffold(
         containerColor = Page,
@@ -429,7 +462,7 @@ private fun EarthWeatherApp(
             "Forecast" -> ForecastScreen(state, place, Modifier.padding(padding), celsius)
             "Cities" -> CitiesScreen(place, savedCities, query, onQuery, results, searching, searchError, Modifier.padding(padding), onSelect, onSave, onRemove, onSearch, onDetectLocation)
             "Radar" -> RadarScreen(state, place, Modifier.padding(padding))
-            else -> SettingsScreen(celsius, onUnit, notificationsEnabled, onNotifications, rainRemindersEnabled, onRainReminders, rainThreshold, onRainThreshold, Modifier.padding(padding), state)
+            else -> SettingsScreen(celsius, onUnit, notificationsEnabled, onNotifications, rainRemindersEnabled, onRainReminders, rainThreshold, onRainThreshold, morningBriefingEnabled, morningBriefingHour, onMorningBriefing, onMorningHour, Modifier.padding(padding), state)
         }
     }
 }
@@ -805,7 +838,7 @@ setTimeout(()=>map.invalidateSize(),300);
 }
 
 @Composable
-private fun SettingsScreen(celsius: Boolean, onUnit: (Boolean) -> Unit, notificationsEnabled: Boolean, onNotifications: (Boolean) -> Unit, rainRemindersEnabled: Boolean, onRainReminders: (Boolean) -> Unit, rainThreshold: Int, onRainThreshold: (Int) -> Unit, modifier: Modifier, state: DashboardState) {
+private fun SettingsScreen(celsius: Boolean, onUnit: (Boolean) -> Unit, notificationsEnabled: Boolean, onNotifications: (Boolean) -> Unit, rainRemindersEnabled: Boolean, onRainReminders: (Boolean) -> Unit, rainThreshold: Int, onRainThreshold: (Int) -> Unit, morningBriefingEnabled: Boolean, morningBriefingHour: Int, onMorningBriefing: (Boolean) -> Unit, onMorningHour: (Int) -> Unit, modifier: Modifier, state: DashboardState) {
     Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp)) {
         ScreenTitle("Settings", "Personalise EARTH WEATHER")
         SectionHeader("UNITS", "Temperature")
@@ -851,6 +884,29 @@ private fun SettingsScreen(celsius: Boolean, onUnit: (Boolean) -> Unit, notifica
                     valueRange = 40f..90f,
                     steps = 9
                 )
+            }
+        }
+        Spacer(Modifier.height(10.dp))
+        Card(colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(18.dp)) {
+            Column(Modifier.fillMaxWidth().padding(16.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Morning weather briefing", color = Ink, fontWeight = FontWeight.SemiBold)
+                        Text("A daily forecast notification around the selected time", color = Muted, fontSize = 10.sp)
+                    }
+                    Switch(checked = morningBriefingEnabled, onCheckedChange = onMorningBriefing)
+                }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("Briefing time", color = Muted, fontSize = 11.sp)
+                    Text(String.format("%02d:00", morningBriefingHour), color = Sky, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                }
+                Slider(
+                    value = morningBriefingHour.toFloat(),
+                    onValueChange = { onMorningHour(it.toInt().coerceIn(5, 11)) },
+                    valueRange = 5f..11f,
+                    steps = 5
+                )
+                Text("Android may delay background delivery to save battery.", color = Muted, fontSize = 9.sp)
             }
         }
         Spacer(Modifier.height(22.dp)); SectionHeader("DATA & PRIVACY", "About your weather")
