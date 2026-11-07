@@ -2,6 +2,8 @@ services:
   - type: web
     name: earth-weather-api
     runtime: python
+    branch: main
+    autoDeployTrigger: commit
     rootDir: backend
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
@@ -15,6 +17,8 @@ services:
   - type: web
     name: earth-weather-web
     runtime: static
+    branch: main
+    autoDeployTrigger: commit
     rootDir: frontend
     buildCommand: npm install && npm run build
     staticPublishPath: dist
