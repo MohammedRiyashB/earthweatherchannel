@@ -141,7 +141,9 @@ const [section,setSection]=useState("Weather Report");const [page,setPage]=useSt
    if(requestVersion!==cityRequestVersion.current)return;
    const rows=CITIES.map((city,index)=>({...city,current:payload.reports[index]?.current||{},loading:false,error:!payload.reports[index]?.current}));setCities(rows);writeCache("cities",rows);
    setPersonalizedCities(false);setUpdated(payload.retrieved_at||new Date().toISOString());
-  }catch{\n   // Keep cached reports; avoid a slow fan-out of 12 individual requests.\n   if(requestVersion===cityRequestVersion.current)setCities(previous=>previous.map(city=>({...city,loading:false,error:!city.current})));\n  }finally{if(requestVersion===cityRequestVersion.current)setBusy(false);}
+  }catch{
+   // Keep cached reports; avoid a slow fan-out of 12 individual requests.
+   if(requestVersion===cityRequestVersion.current)setCities(previous=>previous.map(city=>({...city,loading:false,error:!city.current})));\n  }finally{if(requestVersion===cityRequestVersion.current)setBusy(false);}
  };
  useEffect(()=>{
   if(!visitorLocation)return;
