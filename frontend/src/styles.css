@@ -141,3 +141,23 @@
 .footer-copyright{flex-basis:100%;padding-top:15px;border-top:1px solid #ffffff20;color:#9fb1bd;font-size:10px;line-height:1.7}
 .footer-copyright strong{color:#fff;margin-left:5px;letter-spacing:.5px}
 @media(max-width:620px){.info-page{padding:20px 12px 35px}.info-card{padding:22px 18px}.info-card p{font-size:13px}.info-card h2{font-size:17px}.footer-legal{margin-left:0}.footer-copyright{margin-top:3px}}
+
+
+/* Footer brand mark and two-sided navigation alignment */
+.news-footer{display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:clamp(28px,8vw,110px);row-gap:18px;align-items:start}
+.footer-column{display:flex;flex-direction:column;align-items:flex-start;gap:9px}
+.footer-logo{display:block;width:min(190px,48vw);height:auto;object-fit:contain;margin:0 0 3px}
+.footer-links{display:flex;flex-direction:column;align-items:flex-start;gap:9px}
+.footer-legal{display:flex;flex-direction:column;align-items:flex-start;gap:9px;margin:0;padding-top:calc( min(190px,48vw) * .183 + 38px)}
+.footer-copyright{grid-column:1/-1}
+@media(max-width:620px){
+ .news-footer{grid-template-columns:minmax(0,1fr) auto;column-gap:18px;row-gap:16px}
+ .footer-logo{width:min(155px,42vw)}
+ .footer-legal{padding-top:calc(min(155px,42vw) * .183 + 38px)}
+ .footer-column button,.footer-legal button{font-size:10px}
+ .footer-copyright{grid-column:1/-1}
+}
+@media(max-width:380px){
+ .news-footer{grid-template-columns:1fr;gap:15px}
+ .footer-legal{padding-top:0;margin:0}
+}
