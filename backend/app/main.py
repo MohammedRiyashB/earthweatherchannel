@@ -103,22 +103,83 @@ async def source_health() -> dict[str, Any]:
         results = await asyncio.gather(*(probe(client, item) for item in checks))
     return {"checked_at":utc_now(),"checks":results,"note":"Reachability checks only; they do not certify data freshness, coverage or accuracy."}
 
+_weather_cache: dict[tuple[float, float], tuple[float, dict[str, Any]]] = {}
+_weather_cache_lock = asyncio.Lock()
+
+async def _fetch_open_meteo_current(client: httpx.AsyncClient, params: dict[str, Any]) -> Any:
+    last_error: Exception | None = None
+    for attempt in range(3):
+        try:
+            response = await client.get(OPEN_METEO, params=params)
+            response.raise_for_status()
+            return response.json()
+        except (httpx.HTTPError, ValueError) as exc:
+            last_error = exc
+            if attempt < 2:
+                await asyncio.sleep(0.4 * (attempt + 1))
+    raise HTTPException(status_code=502, detail=f"Weather provider unavailable: {last_error.__class__.__name__ if last_error else 'UnknownError'}")
+
+@app.get("/api/weather/bulk")
+async def weather_bulk(
+    latitudes: str = Query(..., min_length=1, max_length=1000),
+    longitudes: str = Query(..., min_length=1, max_length=1000),
+) -> dict[str, Any]:
+    """Fetch current conditions for multiple cities in one upstream request."""
+    try:
+        lats = [float(value) for value in latitudes.split(",")]
+        lons = [float(value) for value in longitudes.split(",")]
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail="Coordinates must be comma-separated numbers") from exc
+    if len(lats) != len(lons) or not lats or len(lats) > 30:
+        raise HTTPException(status_code=422, detail="Provide 1–30 matching latitude and longitude values")
+    if any(not -90 <= value <= 90 for value in lats) or any(not -180 <= value <= 180 for value in lons):
+        raise HTTPException(status_code=422, detail="Coordinates are outside valid ranges")
+
+    params = _meteo_params(lats, lons)
+    params["current"] = "temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,cloud_cover,pressure_msl,wind_speed_10m,wind_direction_10m,wind_gusts_10m,weather_code"
+    try:
+        async with httpx.AsyncClient(timeout=35.0, follow_redirects=True) as client:
+            payload = await _fetch_open_meteo_current(client, params)
+        rows = payload if isinstance(payload, list) else [payload]
+        reports = []
+        for index, row in enumerate(rows):
+            current = row.get("current") or {}
+            reports.append({
+                "latitude": lats[index], "longitude": lons[index],
+                "current": current,
+                "source": {"name": "Open-Meteo", "type": "numerical weather-model output", "retrieved_at": utc_now()},
+            })
+        if len(reports) != len(lats):
+            raise HTTPException(status_code=502, detail="Weather provider returned an incomplete city batch")
+        return {"source": "Open-Meteo", "retrieved_at": utc_now(), "count": len(reports), "reports": reports}
+    except HTTPException:
+        raise
+    except (httpx.HTTPError, ValueError, TypeError) as exc:
+        raise HTTPException(status_code=502, detail=f"Bulk weather provider unavailable: {exc.__class__.__name__}") from exc
+
 @app.get("/api/weather")
 async def weather(
     latitude: float = Query(..., ge=-90, le=90),
     longitude: float = Query(..., ge=-180, le=180),
 ) -> dict[str, Any]:
-    params = _meteo_params([latitude], [longitude])
-    params["current"] = "temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,cloud_cover,pressure_msl,wind_speed_10m,wind_direction_10m,wind_gusts_10m,weather_code"
-    try:
-        async with httpx.AsyncClient(timeout=20.0) as client:
-            response = await client.get(OPEN_METEO, params=params)
-            response.raise_for_status()
-            data = response.json()
+    cache_key = (round(latitude, 3), round(longitude, 3))
+    async with _weather_cache_lock:
+        now = asyncio.get_running_loop().time()
+        cached = _weather_cache.get(cache_key)
+        if cached and cached[0] > now:
+            return cached[1]
+        params = _meteo_params([latitude], [longitude])
+        params["current"] = "temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,cloud_cover,pressure_msl,wind_speed_10m,wind_direction_10m,wind_gusts_10m,weather_code"
+        try:
+            async with httpx.AsyncClient(timeout=35.0, follow_redirects=True) as client:
+                data = await _fetch_open_meteo_current(client, params)
             data["source"] = {"name":"Open-Meteo","type":"numerical weather-model output","retrieved_at":utc_now()}
+            _weather_cache[cache_key] = (asyncio.get_running_loop().time() + 45, data)
             return data
-    except (httpx.HTTPError, ValueError) as exc:
-        raise HTTPException(status_code=502, detail=f"Weather provider unavailable: {exc.__class__.__name__}") from exc
+        except HTTPException:
+            raise
+        except (httpx.HTTPError, ValueError) as exc:
+            raise HTTPException(status_code=502, detail=f"Weather provider unavailable: {exc.__class__.__name__}") from exc
 
 
 # Public Nominatim reverse-geocoding: one request at a time, cached by nearby coordinates.
