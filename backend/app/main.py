@@ -49,7 +49,8 @@ logger = logging.getLogger("earthweather.weather")
 WEATHERAPI_CURRENT = "https://api.weatherapi.com/v1/current.json"
 OPENWEATHER_CURRENT = "https://api.openweathermap.org/data/2.5/weather"
 METNORWAY_COMPACT = "https://api.met.no/weatherapi/locationforecast/2.0/compact"
-WEATHER_PROVIDER_ORDER = ("weatherapi", "openweather", "metnorway")
+WEATHER_PROVIDER_ORDER = ("open-meteo",)
+OPEN_METEO_FORECAST = "https://api.open-meteo.com/v1/forecast"
 _METNORWAY_CACHE: dict[tuple[float, float], tuple[float, dict[str, Any]]] = {}
 _METNORWAY_CACHE_LOCK = asyncio.Lock()
 EONET_EVENTS = "https://eonet.gsfc.nasa.gov/api/v3/events"
@@ -75,6 +76,8 @@ def _current_weather_params(latitudes: list[float], longitudes: list[float]) -> 
 
 
 def _provider_is_configured(provider: str) -> bool:
+    if provider == "open-meteo":
+        return True
     if provider == "weatherapi":
         return bool(os.getenv("WEATHERAPI_KEY"))
     if provider == "openweather":
@@ -168,7 +171,48 @@ def _normalize_metnorway(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 async def _fetch_provider_current(client: httpx.AsyncClient, provider: str, lat: float, lon: float) -> dict[str, Any]:
-    if provider == "weatherapi":
+    if provider == "open-meteo":
+        response = await client.get(OPEN_METEO_FORECAST, params={
+            "latitude": lat, "longitude": lon,
+            "current": "temperature_2m,relative_humidity_2m,apparent_temperature,is_day,precipitation,rain,showers,weather_code,cloud_cover,pressure_msl,wind_speed_10m,wind_direction_10m,wind_gusts_10m",
+            "hourly": "rain,precipitation",
+            "forecast_days": 1, "past_days": 1,
+            "timezone": "UTC", "wind_speed_unit": "kmh",
+        })
+        response.raise_for_status()
+        payload = response.json()
+        raw = payload.get("current") or {}
+        hourly = payload.get("hourly") or {}
+        times = hourly.get("time") or []
+        current_time = raw.get("time")
+        try:
+            hour_index = times.index(current_time)
+        except (ValueError, TypeError):
+            hour_index = -1
+        def hourly_value(key: str):
+            values = hourly.get(key) or []
+            return values[hour_index] if 0 <= hour_index < len(values) else None
+        current = {
+            "temperature_2m": raw.get("temperature_2m"),
+            "relative_humidity_2m": raw.get("relative_humidity_2m"),
+            "apparent_temperature": raw.get("apparent_temperature"),
+            "is_day": raw.get("is_day"),
+            "precipitation": raw.get("precipitation"),
+            "rain": raw.get("rain"),
+            "rainfall_rate_mm_h": hourly_value("rain"),
+            "cloud_cover": raw.get("cloud_cover"),
+            "pressure_msl": raw.get("pressure_msl"),
+            "wind_speed_10m": raw.get("wind_speed_10m"),
+            "wind_direction_10m": raw.get("wind_direction_10m"),
+            "wind_gusts_10m": raw.get("wind_gusts_10m"),
+            "weather_code": raw.get("weather_code"),
+            "time": current_time,
+            "interval_seconds": raw.get("interval", 900),
+            "units": payload.get("current_units") or {},
+            "source": "Open-Meteo multi-model weather analysis",
+            "source_url": "https://open-meteo.com/en/docs",
+        }
+    elif provider == "weatherapi":
         response = await client.get(WEATHERAPI_CURRENT, params={"key":os.environ["WEATHERAPI_KEY"],"q":f"{lat:.4f},{lon:.4f}","aqi":"no"})
         response.raise_for_status()
         current = _normalize_weatherapi(response.json())
@@ -815,26 +859,31 @@ SATELLITE_PROVIDER_CHECKS = [
 
 @app.get("/api/satellite-weather")
 async def satellite_weather_report(latitude: float, longitude: float) -> dict[str, Any]:
-    """Honest satellite-only numerical report. Never substitutes NWP or conventional weather APIs."""
+    """Live model-analysis conditions plus separately identified satellite product availability."""
     if not (-90 <= latitude <= 90 and -180 <= longitude <= 180):
         raise HTTPException(status_code=422, detail="Invalid latitude/longitude")
+    row = await _fetch_provider_current(app.state.weather_http, "open-meteo", latitude, longitude)
+    current = row["current"]
+    nasa_token = bool(os.getenv("NASA_EARTHDATA_TOKEN"))
     parameters = [
-        {"id":"air_temperature","label":"Air temperature","value":None,"unit":"°C","status":"unavailable","source":None,"reason":"No verified, globally available satellite-only 2 m air-temperature point retrieval is connected. Land-surface temperature is not equivalent to 2 m air temperature."},
-        {"id":"relative_humidity","label":"Relative humidity","value":None,"unit":"%","status":"unavailable","source":None,"reason":"Satellite humidity retrievals are generally profile/pressure-level products with coverage and retrieval gaps; no point-level product adapter is currently connected."},
-        {"id":"wind_speed","label":"Wind speed","value":None,"unit":"km/h","status":"unavailable","source":None,"reason":"Available satellite wind products are feature/cloud-motion or ocean-surface retrievals, not a verified all-surface 10 m wind feed for this point."},
-        {"id":"wind_direction","label":"Wind direction","value":None,"unit":"°","status":"unavailable","source":None,"reason":"No verified satellite-only near-surface wind-direction retrieval is connected for this location."},
-        {"id":"cloud_cover","label":"Cloud cover","value":None,"unit":"%","status":"unavailable","source":None,"reason":"A satellite cloud-fraction numeric retrieval adapter is not yet connected; true-colour imagery is not converted into a fabricated percentage."},
-        {"id":"rainfall_rate","label":"Rainfall rate","value":None,"unit":"mm/h","status":"metadata_only","source":{"name":"NASA GPM IMERG V07B","url":"https://gpm.nasa.gov/data/imerg","nominal_resolution":"0.1° (~10 km)","temporal_resolution":"30 minutes","minimum_latency":"about 4 hours"},"reason":"NASA documents the satellite-derived IMERG precipitation-rate product, but its numeric point-extraction/download path is not yet integrated. No rainfall value is guessed."},
+        {"id":"air_temperature","label":"Air temperature","value":current.get("temperature_2m"),"unit":"°C","status":"live" if current.get("temperature_2m") is not None else "unavailable","source":{"name":"Open-Meteo multi-model analysis","type":"weather-model analysis","url":"https://open-meteo.com/en/docs"},"observation_time":current.get("time")},
+        {"id":"relative_humidity","label":"Relative humidity","value":current.get("relative_humidity_2m"),"unit":"%","status":"live" if current.get("relative_humidity_2m") is not None else "unavailable","source":{"name":"Open-Meteo multi-model analysis","type":"weather-model analysis","url":"https://open-meteo.com/en/docs"},"observation_time":current.get("time")},
+        {"id":"wind_speed","label":"Wind speed","value":current.get("wind_speed_10m"),"unit":"km/h","status":"live" if current.get("wind_speed_10m") is not None else "unavailable","source":{"name":"Open-Meteo multi-model analysis","type":"weather-model analysis at 10 m","url":"https://open-meteo.com/en/docs"},"observation_time":current.get("time")},
+        {"id":"wind_direction","label":"Wind direction","value":current.get("wind_direction_10m"),"unit":"°","status":"live" if current.get("wind_direction_10m") is not None else "unavailable","source":{"name":"Open-Meteo multi-model analysis","type":"weather-model analysis at 10 m","url":"https://open-meteo.com/en/docs"},"observation_time":current.get("time")},
+        {"id":"cloud_cover","label":"Cloud cover","value":current.get("cloud_cover"),"unit":"%","status":"model_analysis" if current.get("cloud_cover") is not None else "unavailable","source":{"name":"Open-Meteo multi-model analysis","type":"model-estimated total cloud cover","url":"https://open-meteo.com/en/docs"},"observation_time":current.get("time"),"satellite_product":{"name":"NASA MODIS Cloud Fraction MOD06_L2","status":"requires_earthdata_access","url":"https://www.earthdata.nasa.gov/data/catalog/lpcloud-mod06-l2-061"}},
+        {"id":"rainfall_rate","label":"Rainfall rate","value":current.get("rainfall_rate_mm_h"),"unit":"mm/h","status":"model_analysis" if current.get("rainfall_rate_mm_h") is not None else "unavailable","source":{"name":"Open-Meteo hourly precipitation analysis","type":"model-estimated hourly rain amount expressed as mm/h","url":"https://open-meteo.com/en/docs"},"observation_time":current.get("time"),"satellite_product":{"name":"NASA GPM IMERG Early Run V07","status":"requires_earthdata_access" if nasa_token else "requires_earthdata_token","minimum_latency":"about 4 hours","temporal_resolution":"30 minutes","url":"https://gpm.nasa.gov/data/imerg"}},
     ]
     return {
-        "product":"EARTH WEATHER Satellite Numerical Report",
-        "mode":"satellite-only",
+        "product":"EARTH WEATHER Satellite-Enhanced Live Weather",
+        "mode":"satellite-enhanced",
         "coordinates":{"latitude":latitude,"longitude":longitude},
         "retrieved_at":utc_now(),
-        "status":"partial-data-integration",
+        "observation_time":current.get("time"),
+        "status":"live-model-data-satellite-products-pending-auth" if not nasa_token else "live-model-data-satellite-auth-configured",
         "parameters":parameters,
-        "policy":"Only directly satellite-derived/retrieved products are eligible. No WeatherAPI, OpenWeather, MET Norway, Open-Meteo, NWP forecast or reanalysis fallback is used by this endpoint.",
-        "next_integration":"NASA GPM IMERG V07B point extraction is the first numerical satellite adapter to complete; temperature, humidity, wind and cloud products require separate scientifically compatible retrieval pipelines.",
+        "satellite_data":{"provider":"NASA Earthdata","credentials_configured":nasa_token,"credential_env":"NASA_EARTHDATA_TOKEN","note":"NASA MODIS cloud fraction and GPM IMERG numerical extraction require an Earthdata-authenticated granule/subset adapter. Until that adapter returns a numeric retrieval, satellite values are not substituted with model values."},
+        "policy":"Temperature, humidity and wind are explicitly labelled Open-Meteo model-analysis data. Cloud and rainfall values shown here are also model-analysis values until the corresponding NASA satellite numeric retrieval is successfully ingested. No model value is labelled as a satellite observation.",
+        "refresh_seconds":300,
     }
 
 @app.get("/api/satellites/health")
