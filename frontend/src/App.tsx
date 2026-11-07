@@ -206,7 +206,7 @@ const [section,setSection]=useState("Weather Report");const [page,setPage]=useSt
    }finally{window.clearTimeout(timeout);}
   };
   void refreshLocal();
-  const id=window.setInterval(()=>void refreshLocal(),60*1000);
+  const id=window.setInterval(()=>void refreshLocal(),5*60*1000);
   return()=>{active=false;window.clearInterval(id);};
  },[local?.lat,local?.lon]);
 
