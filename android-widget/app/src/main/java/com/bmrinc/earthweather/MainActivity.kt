@@ -19,6 +19,8 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -122,6 +124,8 @@ class MainActivity : ComponentActivity() {
                     state = dashboard, place = selectedPlace, tab = tab,
                     onTab = { tab = it },
                     onRefresh = { selectedPlace?.let { loadWeather(it) } ?: requestLocation() },
+                    onSwipeCity = { swipeSavedCity(it) },
+                    onDetectLocation = { requestLocation() },
                     query = cityQuery, onQuery = { cityQuery = it },
                     results = cityResults, searching = searching, searchError = searchError,
                     savedCities = savedCities,
@@ -355,6 +359,17 @@ class MainActivity : ComponentActivity() {
         WorkManager.getInstance(this).enqueueUniquePeriodicWork("earth-weather-rain-reminders", ExistingPeriodicWorkPolicy.UPDATE, request)
     }
 
+    private fun swipeSavedCity(direction: Int) {
+        val current = selectedPlace ?: return
+        val places = (listOf(current) + savedCities.filterNot {
+            it.latitude == current.latitude && it.longitude == current.longitude
+        }).distinctBy { it.latitude.toString() + "," + it.longitude.toString() }
+        if (places.size < 2) return
+        val index = places.indexOfFirst { it.latitude == current.latitude && it.longitude == current.longitude }.coerceAtLeast(0)
+        val next = (index + direction + places.size) % places.size
+        choosePlace(places[next])
+    }
+
     private fun saveCity(place: WeatherPlace) {
         if (savedCities.none { it.name.equals(place.name, true) && it.countryCode == place.countryCode }) {
             savedCities = savedCities + place
@@ -378,7 +393,7 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun EarthWeatherApp(
     state: DashboardState, place: WeatherPlace?, tab: String, onTab: (String) -> Unit,
-    onRefresh: () -> Unit, query: String, onQuery: (String) -> Unit,
+    onRefresh: () -> Unit, onSwipeCity: (Int) -> Unit, onDetectLocation: () -> Unit, query: String, onQuery: (String) -> Unit,
     results: List<WeatherPlace>, searching: Boolean, searchError: String,
     savedCities: List<WeatherPlace>, onSelect: (WeatherPlace) -> Unit,
     onSave: (WeatherPlace) -> Unit, onRemove: (WeatherPlace) -> Unit,
@@ -399,9 +414,9 @@ private fun EarthWeatherApp(
         }
     ) { padding ->
         when (tab) {
-            "Weather" -> WeatherScreen(state, place, Modifier.padding(padding), celsius, onRefresh, onTab)
+            "Weather" -> WeatherScreen(state, place, Modifier.padding(padding), celsius, onRefresh, onTab, onSwipeCity)
             "Forecast" -> ForecastScreen(state, place, Modifier.padding(padding), celsius)
-            "Cities" -> CitiesScreen(place, savedCities, query, onQuery, results, searching, searchError, Modifier.padding(padding), onSelect, onSave, onRemove, onSearch)
+            "Cities" -> CitiesScreen(place, savedCities, query, onQuery, results, searching, searchError, Modifier.padding(padding), onSelect, onSave, onRemove, onSearch, onDetectLocation)
             "Radar" -> RadarScreen(state, place, Modifier.padding(padding))
             else -> SettingsScreen(celsius, onUnit, notificationsEnabled, onNotifications, rainRemindersEnabled, onRainReminders, Modifier.padding(padding), state)
         }
@@ -409,7 +424,7 @@ private fun EarthWeatherApp(
 }
 
 @Composable
-private fun WeatherScreen(state: DashboardState, place: WeatherPlace?, modifier: Modifier, celsius: Boolean, onRefresh: () -> Unit, onTab: (String) -> Unit) {
+private fun WeatherScreen(state: DashboardState, place: WeatherPlace?, modifier: Modifier, celsius: Boolean, onRefresh: () -> Unit, onTab: (String) -> Unit, onSwipeCity: (Int) -> Unit) {
     LaunchedEffect(place?.latitude, place?.longitude) {
         while (true) {
             delay(10 * 60 * 1000L)
@@ -433,10 +448,21 @@ private fun WeatherScreen(state: DashboardState, place: WeatherPlace?, modifier:
             }
             TextButton(onClick = { onTab("Cities") }) { Text("Change") }
         }
+        var horizontalTravel = 0f
         Column(Modifier.fillMaxWidth().background(
             Brush.linearGradient(weatherGradient(current?.weatherCode ?: -1, current?.isDay ?: true)),
             RoundedCornerShape(28.dp)
-        ).padding(22.dp)) {
+        ).pointerInput(place?.latitude, place?.longitude) {
+            detectHorizontalDragGestures(
+                onDragEnd = {
+                    if (horizontalTravel < -55f) onSwipeCity(1)
+                    else if (horizontalTravel > 55f) onSwipeCity(-1)
+                    horizontalTravel = 0f
+                },
+                onDragCancel = { horizontalTravel = 0f },
+                onHorizontalDrag = { change, amount -> horizontalTravel += amount; change.consume() }
+            )
+        }.padding(22.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Top) {
                 Column {
                     Text("CURRENT WEATHER", color = Color.White.copy(alpha = .76f), fontSize = 9.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.8.sp)
@@ -581,13 +607,14 @@ private fun CitiesScreen(
     current: WeatherPlace?, saved: List<WeatherPlace>, query: String, onQuery: (String) -> Unit,
     results: List<WeatherPlace>, searching: Boolean, searchError: String, modifier: Modifier,
     onSelect: (WeatherPlace) -> Unit, onSave: (WeatherPlace) -> Unit,
-    onRemove: (WeatherPlace) -> Unit, onSearch: () -> Unit
+    onRemove: (WeatherPlace) -> Unit, onSearch: () -> Unit, onDetectLocation: () -> Unit
 ) {
     LaunchedEffect(query) {
         if (query.trim().length >= 2) { delay(500); onSearch() }
     }
     Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp)) {
         ScreenTitle("Your cities", "Search and manage locations")
+        OutlinedButton(onClick = onDetectLocation, modifier = Modifier.fillMaxWidth()) { Text("⌖  Use my current location") }
         OutlinedTextField(
             value = query, onValueChange = onQuery, modifier = Modifier.fillMaxWidth(),
             singleLine = true, shape = RoundedCornerShape(16.dp),
