@@ -21,8 +21,8 @@ These are reference archive counts only. Protected ColorOS resources are not red
 - [x] Rain forecast strip using hourly precipitation probability and amount.
 - [x] Interactive historical RainViewer radar map with OSM basemap, selected city marker, frame slider, previous/next and playback.
 - [x] Weather alert display with coverage disclosure; background alerts only when connected provider returns an alert.
-- [x] Severe-weather alert notifications (opt-in).
-- [x] Rain reminders (opt-in), user-configurable precipitation-probability threshold.
+- [x] Severe-weather alert notifications (opt-in).\n- [x] Morning weather briefing (opt-in) with configurable device-local time and daily self-rescheduling worker.
+- [x] Rain reminders (opt-in), user-configurable precipitation-probability threshold and selected-city local-time window.
 - [x] Morning weather briefing (opt-in), configurable local-device hour (05:00–11:00).
 - [x] Celsius/Fahrenheit setting.
 - [x] 2×2 compact and 4×2 detailed widgets with original artwork, live backend weather and selected-city/units sync.
@@ -31,7 +31,7 @@ These are reference archive counts only. Protected ColorOS resources are not red
 ## Still required before feature-complete production release
 - [ ] IMD/authorised Indian warning integration and other country-specific official warning adapters. Current NOAA/NWS backend route is US-only.
 - [ ] True minute-by-minute rain nowcast. Current app shows hourly forecast probabilities; do not relabel this as minute rain.
-- [ ] Rain reminder quiet hours / user-selected reminder windows in addition to probability threshold.
+
 - [ ] Full-screen detail pages for weather/life indices, more condition-specific animations and day/night scene variants.
 - [ ] Accuracy feedback form backed by durable storage and an anti-abuse policy.
 - [ ] Rich radar timeline polish and licensing review for the intended commercial distribution scope.
