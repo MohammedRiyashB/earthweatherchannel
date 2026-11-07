@@ -9,6 +9,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
@@ -22,6 +23,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -328,7 +331,7 @@ private fun WeatherScreen(state: DashboardState, place: WeatherPlace?, modifier:
                     Spacer(Modifier.height(6.dp))
                     Text(description.first, color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
                 }
-                Text(description.second, fontSize = 50.sp)
+                WeatherIcon(current?.weatherCode ?: -1, 62.dp)
             }
             Row(verticalAlignment = Alignment.Top) {
                 Text(displayTemp(current?.temperature ?: Double.NaN, celsius), color = Color.White, fontSize = 78.sp, fontWeight = FontWeight.Light, letterSpacing = (-4).sp)
@@ -513,7 +516,7 @@ private fun HourlyStrip(items: List<HourlyPoint>, celsius: Boolean) {
             Card(modifier = Modifier.width(76.dp), colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(17.dp)) {
                 Column(Modifier.fillMaxWidth().padding(vertical = 12.dp, horizontal = 7.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(if (index == 0) "Now" else point.time.substringAfter("T").take(5), color = Muted, fontSize = 10.sp)
-                    Text(weatherDescription(point.weatherCode).second, fontSize = 24.sp, modifier = Modifier.padding(vertical = 7.dp))
+                    WeatherIcon(point.weatherCode, 32.dp, Modifier.padding(vertical = 7.dp))
                     Text(displayTemp(point.temperature, celsius) + "°", color = Ink, fontSize = 16.sp, fontWeight = FontWeight.Bold)
                     Text("☔ " + (point.precipitationProbability.takeIf { it >= 0 }?.toString() ?: "—") + "%", color = Sky, fontSize = 9.sp, modifier = Modifier.padding(top = 7.dp))
                 }
@@ -535,7 +538,7 @@ private fun DailyRow(day: DailyPoint, index: Int, celsius: Boolean) {
             Text(if (index == 0) "Today" else day.date.takeLast(5), color = Ink, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
             Text(if (day.rainChance >= 0) "☔ " + day.rainChance + "%" else " ", color = Sky, fontSize = 9.sp)
         }
-        Text(weatherDescription(day.weatherCode).second, fontSize = 23.sp, modifier = Modifier.width(42.dp))
+        WeatherIcon(day.weatherCode, 32.dp, Modifier.width(42.dp))
         Text(displayTemp(day.low, celsius) + "°", color = Muted, fontSize = 12.sp, modifier = Modifier.width(43.dp))
         Box(Modifier.weight(1f).height(5.dp).background(Line, CircleShape)) {
             Box(Modifier.fillMaxWidth(.55f).height(5.dp).background(Brush.horizontalGradient(listOf(Color(0xFF76C8D3), Sky)), CircleShape))
@@ -637,6 +640,27 @@ private fun InfoCard(title: String, detail: String) {
             Text(detail, color = Muted, fontSize = 10.sp, lineHeight = 15.sp, modifier = Modifier.padding(top = 5.dp))
         }
     }
+}
+
+
+@Composable
+private fun WeatherIcon(code: Int, size: Dp, modifier: Modifier = Modifier) {
+    val resource = when (code) {
+        0 -> R.drawable.ic_weather_sun
+        1, 2 -> R.drawable.ic_weather_partly
+        3 -> R.drawable.ic_weather_cloud
+        45, 48 -> R.drawable.ic_weather_fog
+        51, 53, 55, 56, 57 -> R.drawable.ic_weather_rain
+        61, 63, 65, 66, 67, 80, 81, 82 -> R.drawable.ic_weather_rain
+        71, 73, 75, 77, 85, 86 -> R.drawable.ic_weather_snow
+        95, 96, 99 -> R.drawable.ic_weather_thunder
+        else -> R.drawable.ic_weather_partly
+    }
+    Image(
+        painter = painterResource(resource),
+        contentDescription = weatherDescription(code).first,
+        modifier = modifier.size(size)
+    )
 }
 
 private fun displayTemp(value: Double, celsius: Boolean): String {
