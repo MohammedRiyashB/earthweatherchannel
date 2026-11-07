@@ -24,7 +24,7 @@ data class CurrentConditions(
 data class HourlyPoint(
     val time: String, val temperature: Double, val apparentTemperature: Double,
     val precipitationProbability: Int, val precipitation: Double, val weatherCode: Int,
-    val windKmh: Double, val uv: Double
+    val windKmh: Double, val uv: Double, val visibilityKm: Double = Double.NaN
 )
 data class DailyPoint(
     val date: String, val high: Double, val low: Double, val weatherCode: Int,
@@ -89,7 +89,8 @@ object EarthWeatherApi {
                 apparentTemperature=item.number("apparent_temperature"),
                 precipitationProbability=item.integer("precipitation_probability"),
                 precipitation=item.number("precipitation"), weatherCode=item.integer("weather_code"),
-                windKmh=item.number("wind_speed_10m"), uv=item.number("uv_index")
+                windKmh=item.number("wind_speed_10m"), uv=item.number("uv_index"),
+                visibilityKm=item.number("visibility") / 1000.0
             )
         }
         val daily = (0 until minOf(dailyArray.length(), 15)).mapNotNull { index ->
