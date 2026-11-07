@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { auth, firebaseReady, googleProvider } from "./firebase";
 import { onAuthStateChanged, signInWithPopup, signOut, type User } from "firebase/auth";
 
@@ -38,7 +38,41 @@ export default function App(){
  const [searchResult,setSearchResult]=useState<Place|null>(null);const [section,setSection]=useState("Top Stories");
  const [user,setUser]=useState<User|null>(null);const [notice,setNotice]=useState("");
  const [local,setLocal]=useState<Place|null>(null);
+ const [locationStatus,setLocationStatus]=useState<"locating"|"ready"|"denied"|"error">("locating");
+ const [locationMessage,setLocationMessage]=useState("Finding your nearby town or village…");
+ const locationStarted=useRef(false);
  useEffect(()=>{if(!auth||!firebaseReady)return;return onAuthStateChanged(auth,setUser)},[]);
+
+ const detectLocalWeather=()=>{
+  if(!navigator.geolocation){
+   setLocationStatus("error");setLocationMessage("Location detection is not supported by this browser.");return;
+  }
+  setLocationStatus("locating");setLocationMessage("Finding your nearby town or village…");
+  navigator.geolocation.getCurrentPosition(async position=>{
+   const lat=position.coords.latitude,lon=position.coords.longitude;
+   try{
+    const [weatherResponse,placeResponse]=await Promise.all([
+     fetch(`${API}/api/weather?latitude=${lat}&longitude=${lon}`,{cache:"no-store"}),
+     fetch(`${API}/api/location/reverse?latitude=${lat}&longitude=${lon}`,{cache:"no-store"})
+    ]);
+    if(!weatherResponse.ok)throw new Error("Local weather is temporarily unavailable.");
+    const weatherData=await weatherResponse.json();
+    const placeData=placeResponse.ok?await placeResponse.json():null;
+    const name=placeData?.name||"Your nearby area";
+    const region=placeData?.region||"GPS location";
+    setLocal({name,region,lat,lon,current:weatherData.current||{}});
+    setLocationStatus("ready");setLocationMessage("");
+   }catch(error){
+    setLocationStatus("error");setLocationMessage(error instanceof Error?error.message:"Could not load your local weather.");
+   }
+  },error=>{
+   if(error.code===error.PERMISSION_DENIED){setLocationStatus("denied");setLocationMessage("Location permission is off. Allow location access to see weather for your current town or village.");}
+   else if(error.code===error.TIMEOUT){setLocationStatus("error");setLocationMessage("Location request timed out. Please try again.");}
+   else{setLocationStatus("error");setLocationMessage("Your current location could not be detected. Please try again.");}
+  },{enableHighAccuracy:true,timeout:20000,maximumAge:300000});
+ };
+
+ useEffect(()=>{if(locationStarted.current)return;locationStarted.current=true;detectLocalWeather()},[]);
  const refreshWeather=async()=>{
   setBusy(true);
   const rows=await Promise.all(CITIES.map(async p=>{try{const r=await fetch(`${API}/api/weather?latitude=${p.lat}&longitude=${p.lon}`,{cache:"no-store"});if(!r.ok)throw new Error();const d=await r.json();return {...p,current:d.current||{},loading:false}}catch{return {...p,loading:false,error:true}}}));
@@ -52,6 +86,15 @@ export default function App(){
   }catch{setNotice("Some live weather or headline feeds are temporarily unavailable.");}
  };
  useEffect(()=>{void refreshWeather();void refreshFeeds();const weatherId=window.setInterval(()=>void refreshWeather(),60*1000);const newsId=window.setInterval(()=>void refreshFeeds(),5*60*1000);const clockId=window.setInterval(()=>setClock(new Date()),1000);return()=>{window.clearInterval(weatherId);window.clearInterval(newsId);window.clearInterval(clockId)}},[]);
+
+ useEffect(()=>{
+  if(!local)return;
+  const {lat,lon,name,region}=local;
+  const refreshLocal=async()=>{try{const r=await fetch(`${API}/api/weather?latitude=${lat}&longitude=${lon}`,{cache:"no-store"});if(!r.ok)return;const d=await r.json();setLocal(prev=>prev?{...prev,name,region,lat,lon,current:d.current||prev.current}:prev);}catch{/* retain the last good location report */}};
+  const id=window.setInterval(()=>void refreshLocal(),60*1000);
+  return()=>window.clearInterval(id);
+ },[local?.lat,local?.lon,local?.name,local?.region]);
+
  const active=cities.filter(c=>c.current);
  const hottest=useMemo(()=>[...active].sort((a,b)=>(b.current?.temperature_2m??-100)-(a.current?.temperature_2m??-100))[0],[active]);
  const headlines=newsRegion==="india"?indiaNews:worldNews;
@@ -66,6 +109,26 @@ export default function App(){
    {(searchResult||local)&&<section className="search-result"><div><small>SELECTED LOCATION</small><h2>{(searchResult||local)!.name}</h2><p>{(searchResult||local)!.region}</p></div><strong>{Math.round((searchResult||local)!.current?.temperature_2m??0)}°C</strong><span>{weatherLabel((searchResult||local)!.current?.weather_code)}</span><button onClick={()=>{setSearchResult(null);setLocal(null)}}>×</button></section>}
    {notice&&<div className="notice">{notice}</div>}
    <div className="news-toolbar"><div><span className="eyebrow">GLOBAL WEATHER COVERAGE</span><h1>Weather around the world</h1><p>Live weather conditions, forecasts and weather-only news from India and around the world.</p></div><form className="search-weather" onSubmit={e=>{e.preventDefault();void search()}}><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search city or region" aria-label="Search city or region"/><button type="submit">Search</button></form></div>
+
+   <section className="local-weather-card" aria-live="polite">
+    <div className="local-weather-heading">
+     <div><span className="eyebrow">WEATHER NEAR YOU</span><h2>Your current location</h2><p>Automatically detected using your device location</p></div>
+     <button className="location-refresh" onClick={detectLocalWeather} disabled={locationStatus==="locating"}>{locationStatus==="locating"?"Detecting…":"⌖ Detect location"}</button>
+    </div>
+    {local&&locationStatus==="ready"?<>
+     <div className="local-weather-place">
+      <div><h3>{local.name}</h3><p>{local.region}</p><span className="local-live-indicator"><i/> LOCATION DETECTED</span></div>
+      <div className="local-temperature"><span>{icon(local.current?.weather_code)}</span><strong>{local.current?.temperature_2m!=null?Math.round(local.current.temperature_2m)+"°C":"—"}</strong><small>{weatherLabel(local.current?.weather_code)}</small></div>
+     </div>
+     <div className="local-weather-stats">
+      <div><span>Humidity</span><strong>{local.current?.relative_humidity_2m!=null?local.current.relative_humidity_2m+"%":"—"}</strong></div>
+      <div><span>Wind</span><strong>{local.current?.wind_speed_10m!=null?local.current.wind_speed_10m+" km/h":"—"}</strong></div>
+      <div><span>Cloud cover</span><strong>{local.current?.cloud_cover!=null?local.current.cloud_cover+"%":"—"}</strong></div>
+     </div>
+     <div className="local-weather-foot">Weather model time: {local.current?.time?stamp(local.current.time):"—"} · Place name: © OpenStreetMap contributors</div>
+    </>:<div className="local-weather-prompt"><span>{locationMessage}</span><button onClick={detectLocalWeather} disabled={locationStatus==="locating"}>{locationStatus==="denied"?"Try location again":"Retry location"}</button></div>}
+   </section>
+
    <section className="lead-grid">
     <aside className="top-brief"><div className="section-heading"><h2>Weather briefing</h2><span>GLOBAL</span></div>{hottest&&<div className="brief-highlight"><small>WARMEST IN THIS CITY WATCHLIST</small><b>{hottest.name}</b><strong>{Math.round(hottest.current?.temperature_2m??0)}°C</strong><span>{weatherLabel(hottest.current?.weather_code)}</span></div>}<div className="brief-line"><span>Active severe-storm events</span><b>{storms.length}</b></div><div className="brief-line"><span>Reporting locations</span><b>{active.length}/{cities.length}</b></div><div className="brief-line"><span>Weather headlines</span><b>{indiaNews.length+worldNews.length}</b></div><div className="brief-line"><span>Auto refresh</span><b>{busy?"Updating":"Every 60 seconds"}</b></div><button className="refresh-button" onClick={()=>{void refreshWeather();void refreshFeeds()}} disabled={busy}>{busy?"Refreshing…":"↻ Refresh live reports"}</button></aside>
    </section>
