@@ -117,6 +117,26 @@ class WeatherNewsReaderTests(unittest.TestCase):
         self.assertEqual(len(parser.paragraphs), 2)
         self.assertIn("flooded roads", parser.paragraphs[1])
 
+    def test_sachet_rss_item_maps_official_alert_metadata_and_localized_text(self):
+        import xml.etree.ElementTree as ET
+        payload = ET.fromstring("""<item><title>Rain and thunderstorm over Namakkal</title>
+        <description></description><category>Met</category>
+        <link>https://sachet.ndma.gov.in/cap_public_website/FetchXMLFile?identifier=123</link>
+        <author>controlroom@ndma.gov.in (IMD Chennai)</author>
+        <pubDate>Sat, 07 Nov 2026 16:45:33 GMT</pubDate></item>""")
+        story = weather_api._rss_item_to_story(payload, "NDMA SACHET")
+        self.assertIn("Namakkal", story["title"])
+        self.assertEqual(story["category"], "Met")
+        self.assertIn("IMD Chennai", story["source"])
+        self.assertTrue(story["url"].startswith("https://sachet.ndma.gov.in/"))
+
+    def test_rss_image_entities_are_decoded(self):
+        import xml.etree.ElementTree as ET
+        payload = ET.fromstring("""<item><title>Storm photo</title><link>https://example.com/story</link>
+        <description><![CDATA[<img src='https://example.com/photo.jpg?width=120&amp;caption=storm'>]]></description></item>""")
+        story = weather_api._rss_item_to_story(payload, "Example")
+        self.assertEqual(story["image"], "https://example.com/photo.jpg?width=120&caption=storm")
+
     def test_article_host_rejects_loopback_addresses(self):
         async def check():
             with self.assertRaises(HTTPException) as raised:

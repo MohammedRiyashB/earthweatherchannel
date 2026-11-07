@@ -6,6 +6,8 @@ import logging
 import ipaddress
 import re
 import socket
+import xml.etree.ElementTree as ET
+from html import unescape as html_unescape
 from html.parser import HTMLParser
 from urllib.parse import urljoin, urlparse
 from email.utils import parsedate_to_datetime
@@ -932,9 +934,124 @@ async def _assert_public_article_host(url: str) -> None:
         raise HTTPException(status_code=403, detail="Private or non-public article hosts are not allowed")
 
 
-_GDELT_ARTICLE_CACHE: dict[str, tuple[float, float, dict[str, Any]]] = {}
-_GDELT_CACHE_LOCK = asyncio.Lock()
-_GDELT_LAST_UPSTREAM = 0.0
+_WEATHER_RSS_CACHE: dict[str, tuple[float, float, list[dict[str, Any]]]] = {}
+_WEATHER_RSS_LOCK = asyncio.Lock()
+NDMA_RSS_BASE = "https://sachet.ndma.gov.in/cap_public_website/rss/"
+NDMA_STATE_FEEDS = {
+    "andaman and nicobar islands":"rss_andaman.xml", "andaman":"rss_andaman.xml",
+    "andhra pradesh":"rss_andhra.xml", "arunachal pradesh":"rss_arunachal.xml",
+    "assam":"rss_assam.xml", "bihar":"rss_bihar.xml", "chandigarh":"rss_chandigarh.xml",
+    "chhattisgarh":"rss_chhattisgarh.xml", "dadra and nagar haveli and daman and diu":"rss_dadra.xml",
+    "delhi":"rss_delhi.xml", "goa":"rss_goa.xml", "gujarat":"rss_gujarat.xml",
+    "haryana":"rss_haryana.xml", "himachal pradesh":"rss_himachal.xml",
+    "jammu and kashmir":"rss_jammu.xml", "jammu & kashmir":"rss_jammu.xml",
+    "jharkhand":"rss_jharkhand.xml", "karnataka":"rss_karnataka.xml", "kerala":"rss_kerala.xml",
+    "ladakh":"rss_ladakh.xml", "lakshadweep":"rss_lakshadweep.xml",
+    "madhya pradesh":"rss_madhya.xml", "maharashtra":"rss_maharashtra.xml",
+    "manipur":"rss_manipur.xml", "meghalaya":"rss_meghalaya.xml", "mizoram":"rss_mizoram.xml",
+    "nagaland":"rss_nagaland.xml", "odisha":"rss_odisha.xml", "puducherry":"rss_puducherry.xml",
+    "punjab":"rss_punjab.xml", "rajasthan":"rss_rajasthan.xml", "sikkim":"rss_sikkim.xml",
+    "tamil nadu":"rss_tamil.xml", "telangana":"rss_telangana.xml", "tripura":"rss_tripura.xml",
+    "uttarakhand":"rss_uttarakhand.xml", "uttar pradesh":"rss_uttar.xml", "west bengal":"rss_west.xml",
+}
+WEATHER_NEWS_TERMS = re.compile(
+    r"weather|rain|storm|cyclone|hurricane|typhoon|flood|drought|heat|snow|monsoon|"
+    r"precipitation|atmosphere|temperature|climate|thunder|lightning|wind|tornado|"
+    r"water level|coastal water|el nino|la nina|meteorolog|cloudburst|landslide", re.I
+)
+
+
+def _xml_local(node: ET.Element) -> str:
+    return node.tag.rsplit("}", 1)[-1].split(":")[-1].lower()
+
+
+def _rss_item_to_story(item: ET.Element, source_name: str) -> dict[str, Any]:
+    fields: dict[str, str] = {}
+    image = None
+    for child in item.iter():
+        name = _xml_local(child)
+        if name in {"title", "description", "summary", "pubdate", "published", "updated", "author", "creator", "category", "guid"} and child.text:
+            fields.setdefault(name, child.text.strip())
+        if name == "link":
+            href = child.attrib.get("href")
+            if href:
+                fields.setdefault("link", href.strip())
+            elif child.text:
+                fields.setdefault("link", child.text.strip())
+        if name in {"content", "thumbnail"} and child.attrib.get("url"):
+            image = child.attrib["url"]
+        if name == "enclosure" and child.attrib.get("url") and child.attrib.get("type", "").startswith("image/"):
+            image = child.attrib["url"]
+    title = html_unescape(fields.get("title", "")).strip()
+    link = fields.get("link") or fields.get("guid") or ""
+    description_html = fields.get("description") or fields.get("summary") or ""
+    description = re.sub(r"<[^>]+>", " ", description_html)
+    description = re.sub(r"\s+", " ", html_unescape(description)).strip()
+    if not image:
+        image_match = re.search(r'<img[^>]+src=["\']([^"\']+)', description_html, re.I)
+        if image_match:
+            image = image_match.group(1)
+    if image:
+        image = html_unescape(image)
+    return {
+        "title": title,
+        "url": link,
+        "source": fields.get("author") or fields.get("creator") or source_name,
+        "published_at": fields.get("pubdate") or fields.get("published") or fields.get("updated"),
+        "language": None,
+        "image": image,
+        "description": description[:1500],
+        "category": fields.get("category"),
+    }
+
+
+async def _fetch_weather_rss(url: str, source_name: str) -> list[dict[str, Any]]:
+    """Fetch and cache an official RSS feed; handles known namespace quirks in NASA's feed."""
+    async with _WEATHER_RSS_LOCK:
+        now = asyncio.get_running_loop().time()
+        cached = _WEATHER_RSS_CACHE.get(url)
+        if cached and cached[0] > now:
+            return cached[2]
+        try:
+            async with httpx.AsyncClient(timeout=15.0, follow_redirects=True, headers={
+                "User-Agent": "EARTH-WEATHER/1.0 (+https://earthweatherchannel.web.app)",
+                "Accept": "application/rss+xml, application/xml, text/xml;q=0.9, */*;q=0.5",
+            }) as client:
+                response = await client.get(url)
+                response.raise_for_status()
+                content = response.text
+            # NASA's current RSS has a missing whitespace between these two namespace attributes.
+            content = content.replace('xmlns:apod="https://science.nasa.gov/apod/"xmlns:media=', 'xmlns:apod="https://science.nasa.gov/apod/" xmlns:media=')
+            # Repair bare ampersands from legacy RSS descriptions, preserving valid entities.
+            content = re.sub(r"&(?!#\d+;|#x[0-9a-fA-F]+;|amp;|lt;|gt;|apos;|quot;)", "&amp;", content)
+            root = ET.fromstring(content)
+            items = [node for node in root.iter() if _xml_local(node) in {"item", "entry"}]
+            stories: list[dict[str, Any]] = []
+            for item in items[:150]:
+                story = _rss_item_to_story(item, source_name)
+                if not story["title"] or not story["url"]:
+                    continue
+                if urlparse(story["url"]).scheme not in {"http", "https"}:
+                    continue
+                if story["image"]:
+                    story["image"] = urljoin(story["url"], story["image"])
+                    if urlparse(story["image"]).scheme not in {"http", "https"}:
+                        story["image"] = None
+                stories.append(story)
+            _WEATHER_RSS_CACHE[url] = (now + 5 * 60, now + 30 * 60, stories)
+            if len(_WEATHER_RSS_CACHE) > 80:
+                for old_url, value in list(_WEATHER_RSS_CACHE.items()):
+                    if value[1] < now or len(_WEATHER_RSS_CACHE) > 80:
+                        _WEATHER_RSS_CACHE.pop(old_url, None)
+            return stories
+        except (httpx.HTTPError, ET.ParseError, ValueError):
+            if cached and cached[1] > asyncio.get_running_loop().time():
+                return cached[2]
+            raise
+
+
+def _weather_story_matches(story: dict[str, Any]) -> bool:
+    return bool(WEATHER_NEWS_TERMS.search((story.get("title") or "") + " " + (story.get("description") or "")))
 
 
 @app.get("/api/weather-news")
@@ -947,101 +1064,74 @@ async def weather_news(
     local_name: str | None = Query(None, max_length=100),
     district_name: str | None = Query(None, max_length=100),
 ) -> dict[str, Any]:
-    """Weather-only stories scoped to the whole world, visitor country, state or nearby locality."""
-    weather_terms = '(weather OR forecast OR rainfall OR rain OR cyclone OR storm OR heatwave OR monsoon OR flood OR snowfall OR drought OR thunderstorm OR temperature OR hurricane OR typhoon OR meteorology)'
+    """Weather-only news: official India CAP alerts by location and global earth/weather news RSS."""
     code = (country_code or "").strip().upper()
-    if code == "IN":
-        weather_terms = weather_terms[:-1] + ' OR मौसम OR बारिश OR चक्रवात OR बाढ़ OR तापमान OR तूफान OR வானிலை OR மழை OR புயல் OR வெள்ளம் OR வெப்பநிலை)'
-    scope_query = ""
-    if region in {"country", "india"}:
-        if code and code.isalpha():
-            scope_query = f" sourcecountry:{code}"
-        elif country_name:
-            scope_query = f' "{country_name.strip()}"'
-    elif region == "state":
-        if code and code.isalpha():
-            scope_query += f" sourcecountry:{code}"
-        if state_name and state_name.strip():
-            scope_query += f' "{state_name.strip()}"'
-    elif region == "local":
-        if code and code.isalpha():
-            scope_query += f" sourcecountry:{code}"
-        place_terms = [value.strip() for value in (local_name, district_name, state_name) if value and value.strip()]
-        if place_terms:
-            scope_query += " (" + " OR ".join(f'"{value}"' for value in place_terms[:3]) + ")"
-    params = {
-        "query": weather_terms + scope_query,
-        "mode": "ArtList",
-        "format": "json",
-        "sort": "DateDesc",
-        "maxrecords": limit,
-        "timespan": "24h",
-    }
-    cache_key = "|".join([region, str(limit), code, country_name or "", state_name or "", local_name or "", district_name or ""])
+    is_india = code == "IN" or (region == "india")
+    feed_status: list[str] = []
     try:
-        async with _GDELT_CACHE_LOCK:
-            now = asyncio.get_running_loop().time()
-            cached = _GDELT_ARTICLE_CACHE.get(cache_key)
-            if cached and cached[0] > now:
-                payload = cached[2]
-            else:
-                global _GDELT_LAST_UPSTREAM
-                wait_seconds = 5.0 - (now - _GDELT_LAST_UPSTREAM)
-                if wait_seconds > 0:
-                    await asyncio.sleep(wait_seconds)
-                _GDELT_LAST_UPSTREAM = asyncio.get_running_loop().time()
-                try:
-                    async with httpx.AsyncClient(timeout=20.0, follow_redirects=True) as client:
-                        response = await client.get("https://api.gdeltproject.org/api/v2/doc/doc", params=params)
-                        response.raise_for_status()
-                        payload = response.json()
-                except (httpx.HTTPError, ValueError):
-                    if cached and cached[1] > asyncio.get_running_loop().time():
-                        payload = cached[2]
-                    else:
-                        raise
-                else:
-                    stored_at = asyncio.get_running_loop().time()
-                    _GDELT_ARTICLE_CACHE[cache_key] = (stored_at + 5 * 60, stored_at + 30 * 60, payload)
-                    # Bound memory while preserving recently requested regional feeds.
-                    if len(_GDELT_ARTICLE_CACHE) > 100:
-                        for old_key, value in list(_GDELT_ARTICLE_CACHE.items()):
-                            if value[1] < stored_at or len(_GDELT_ARTICLE_CACHE) > 100:
-                                _GDELT_ARTICLE_CACHE.pop(old_key, None)
-        articles = []
-        for item in payload.get("articles", []):
-            title = item.get("title")
-            url = item.get("url")
-            if not title or not url:
-                continue
-            image = item.get("socialimage")
-            if image:
-                image = urljoin(url, image)
-                if urlparse(image).scheme not in {"http", "https"}:
-                    image = None
-            articles.append({
-                "title": title,
-                "url": url,
-                "source": item.get("domain") or item.get("source") or "News outlet",
-                "published_at": item.get("seendate"),
-                "language": item.get("language"),
-                "image": image,
-            })
-        scope_names = {
-            "world": "World", "country": country_name or country_code or "Country",
-            "india": "India", "state": state_name or "State",
-            "local": local_name or district_name or "Local area",
-        }
+        if is_india and region in {"country", "india"}:
+            feed_url = NDMA_RSS_BASE + "rss_india.xml"
+            source_name = "NDMA SACHET · India"
+            items = await _fetch_weather_rss(feed_url, source_name)
+            stories = [story for story in items if (story.get("category") or "").lower() == "met" or _weather_story_matches(story)]
+            scope_name = country_name or "India"
+            feed_status.append("NDMA SACHET All-India CAP feed")
+        elif is_india and region in {"state", "local"}:
+            state_key = (state_name or "").strip().lower()
+            feed_file = NDMA_STATE_FEEDS.get(state_key)
+            if not feed_file:
+                raise HTTPException(status_code=422, detail="No official state alert feed is mapped for this location yet")
+            feed_url = NDMA_RSS_BASE + feed_file
+            source_name = f"NDMA SACHET · {state_name}"
+            items = await _fetch_weather_rss(feed_url, source_name)
+            stories = [story for story in items if (story.get("category") or "").lower() == "met" or _weather_story_matches(story)]
+            if region == "local":
+                local_terms = [value.strip().casefold() for value in (local_name, district_name) if value and value.strip()]
+                if local_terms:
+                    matched = [story for story in stories if any(term in (story.get("title", "") + " " + story.get("description", "")).casefold() for term in local_terms)]
+                    stories = matched
+            scope_name = local_name if region == "local" and local_name else state_name or "State"
+            feed_status.append(f"NDMA SACHET · {state_name} state CAP feed")
+        elif is_india:
+            feed_url = NDMA_RSS_BASE + "rss_india.xml"
+            items = await _fetch_weather_rss(feed_url, "NDMA SACHET · India")
+            stories = [story for story in items if (story.get("category") or "").lower() == "met" or _weather_story_matches(story)]
+            scope_name = "India"
+            feed_status.append("NDMA SACHET All-India CAP feed")
+        else:
+            feeds = await asyncio.gather(
+                _fetch_weather_rss("https://science.nasa.gov/feed/?science_org=19791%2C22453", "NASA Earth Science"),
+                _fetch_weather_rss("https://www.noaa.gov/rss.xml", "NOAA"),
+                return_exceptions=True,
+            )
+            stories = []
+            for source, result in zip(("NASA Earth Science", "NOAA"), feeds):
+                if isinstance(result, Exception):
+                    feed_status.append(f"{source}: unavailable")
+                    continue
+                feed_status.append(f"{source}: connected")
+                stories.extend(story for story in result if _weather_story_matches(story))
+            scope_name = "World"
+        # Prefer the newest timestamps when publishers provide them; preserve provider order as a fallback.
+        deduped: dict[str, dict[str, Any]] = {}
+        for story in stories:
+            key = story.get("url") or story.get("title")
+            if key and key not in deduped:
+                deduped[key] = story
+        stories = list(deduped.values())[:limit]
         return {
             "region": region,
-            "scope_name": scope_names.get(region, region.title()),
-            "source": "GDELT Global Knowledge Graph",
+            "scope_name": scope_name,
+            "source": "Official NDMA SACHET RSS" if is_india else "NASA Earth Science + NOAA RSS",
+            "feed_status": feed_status,
             "retrieved_at": utc_now(),
-            "window": "Past 24 hours",
-            "articles": articles,
-            "note": "Weather-related stories are aggregated from indexed publishers. Coverage depends on publishers and location mentions; results are not a complete official news feed.",
+            "window": "Latest publisher feed items",
+            "articles": stories,
+            "note": "India country/state/local tabs use official NDMA SACHET meteorological alert feeds. World items are weather-related stories from NASA Earth Science and NOAA. Publisher availability, regional coverage and update times vary.",
         }
-    except (httpx.HTTPError, ValueError) as exc:
+    except HTTPException:
+        raise
+    except (httpx.HTTPError, ET.ParseError, ValueError) as exc:
         raise HTTPException(status_code=502, detail=f"Weather news feed unavailable: {exc.__class__.__name__}") from exc
 
 
@@ -1117,6 +1207,35 @@ async def weather_news_article(
             if response.status_code >= 400:
                 raise HTTPException(status_code=502, detail=f"Publisher page returned HTTP {response.status_code}")
             content_type = response.headers.get("content-type", "").lower()
+            if "xml" in content_type and "sachet.ndma.gov.in" in urlparse(current_url).hostname:
+                cap_root = ET.fromstring(response.text)
+                cap_fields: dict[str, list[str]] = {}
+                for node in cap_root.iter():
+                    tag = _xml_local(node)
+                    if tag in {"sender", "sent", "status", "event", "urgency", "severity", "certainty", "effective", "expires", "headline", "description", "instruction", "areadesc"} and node.text:
+                        cap_fields.setdefault(tag, []).append(node.text.strip())
+                def first_field(key: str, fallback: str = "") -> str:
+                    return (cap_fields.get(key) or [fallback])[0]
+                title = first_field("headline", fallback_title)
+                paragraphs = []
+                for key, label in (("description", "Details"), ("instruction", "Safety instructions"), ("areadesc", "Affected area")):
+                    for value in cap_fields.get(key, []):
+                        if value and value not in paragraphs:
+                            paragraphs.append(f"{label}: {value}" if key != "description" else value)
+                metadata = [
+                    f"Event: {first_field('event')}", f"Severity: {first_field('severity')}",
+                    f"Urgency: {first_field('urgency')}", f"Effective: {first_field('effective')}",
+                    f"Expires: {first_field('expires')}",
+                ]
+                paragraphs = [value for value in paragraphs if value]
+                if metadata:
+                    paragraphs.extend(value for value in metadata if not value.endswith(": "))
+                return {
+                    "title": title[:500], "description": "Official Common Alerting Protocol (CAP) weather alert from NDMA SACHET.",
+                    "image": None, "paragraphs": paragraphs[:20], "source_url": current_url,
+                    "source": first_field("sender", "NDMA SACHET"), "retrieved_at": utc_now(),
+                    "extraction_status": "official_alert", "note": "Official CAP weather alert. Follow the issuing authority's instructions and validity period.",
+                }
             if "html" not in content_type:
                 raise HTTPException(status_code=415, detail="This publisher link does not provide an HTML article")
             source_html = response.text[:3_000_000]
