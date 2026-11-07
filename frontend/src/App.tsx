@@ -66,8 +66,8 @@ export default function App(){
     setLocationStatus("error");setLocationMessage(error instanceof Error?error.message:"Could not load your local weather.");
    }
   },error=>{
-   if(error.code===error.PERMISSION_DENIED){setLocationStatus("denied");setLocationMessage("Location permission is off. Allow location access to see weather for your current town or village.");}
-   else if(error.code===error.TIMEOUT){setLocationStatus("error");setLocationMessage("Location request timed out. Please try again.");}
+   if(error.code===1){setLocationStatus("denied");setLocationMessage("Location permission is off. Allow location access to see weather for your current town or village.");}
+   else if(error.code===3){setLocationStatus("error");setLocationMessage("Location request timed out. Please try again.");}
    else{setLocationStatus("error");setLocationMessage("Your current location could not be detected. Please try again.");}
   },{enableHighAccuracy:true,timeout:20000,maximumAge:300000});
  };
