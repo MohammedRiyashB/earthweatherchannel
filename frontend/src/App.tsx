@@ -550,14 +550,51 @@ const [section,setSection]=useState("Weather Report");const [page,setPage]=useSt
     <div className="footer-brand">EARTH WEATHER <span>GLOBAL WEATHER NEWSROOM</span></div>
    </div>
    <nav className="footer-navigation" aria-label="Footer navigation">
-    <div className="footer-links">
-     <button onClick={()=>{setPage("about");window.scrollTo({top:0,behavior:"smooth"})}}>About</button>
-     <button onClick={()=>{setPage("about");window.scrollTo({top:0,behavior:"smooth"})}}>Our mission &amp; vision</button>
-    </div>
-    <div className="footer-legal">
-     <button onClick={()=>{setPage("terms");window.scrollTo({top:0,behavior:"smooth"})}}>Terms and Conditions</button>
+    <section className="footer-group">
+     <h3>Company</h3>
+     <button onClick={()=>{setPage("about");window.scrollTo({top:0,behavior:"smooth"})}}>About Us</button>
+     <button onClick={()=>{setPage("about");window.scrollTo({top:0,behavior:"smooth"})}}>Mission &amp; Vision</button>
+     <span>Our Story</span>
+     <span>Careers</span>
+     <span>Press &amp; Media</span>
+     <span>Contact</span>
+    </section>
+    <section className="footer-group">
+     <h3>Resources</h3>
+     <span>Weather Reports</span>
+     <span>Global Weather News</span>
+     <span>Weather Data Sources</span>
+     <span>Weather Alerts &amp; Safety</span>
+     <span>Weather Glossary</span>
+     <span>Help Center &amp; FAQ</span>
+    </section>
+    <section className="footer-group">
+     <h3>Platform</h3>
+     <span>Our Technology</span>
+     <span>Satellite &amp; Radar</span>
+     <span>Location Services</span>
+     <span>Developer Portal</span>
+     <span>API Documentation</span>
+     <span>System Status</span>
+    </section>
+    <section className="footer-group">
+     <h3>Legal</h3>
+     <button onClick={()=>{setPage("terms");window.scrollTo({top:0,behavior:"smooth"})}}>Terms &amp; Conditions</button>
      <button onClick={()=>{setPage("privacy");window.scrollTo({top:0,behavior:"smooth"})}}>Privacy Policy</button>
-    </div>
+     <span>Cookie Policy</span>
+     <span>Disclaimer</span>
+     <span>Data Usage Policy</span>
+     <span>Copyright Policy</span>
+    </section>
+    <section className="footer-group">
+     <h3>Support</h3>
+     <span>Contact Support</span>
+     <span>Report an Issue</span>
+     <span>Submit Feedback</span>
+     <span>Report Incorrect Weather</span>
+     <span>Accessibility</span>
+     <span>Account &amp; Security</span>
+    </section>
    </nav>
    <div className="footer-copyright">© {new Date().getFullYear()} Earth Weather Channel. All rights reserved. <strong>BMR INC.</strong></div>
   </footer>
