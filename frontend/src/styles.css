@@ -37,3 +37,29 @@
   .masthead-actions button{padding:8px 8px;font-size:9px}
   .masthead-actions button:first-child{max-width:86px;white-space:normal;line-height:1.2}
 }
+
+
+/* Automatic nearby weather panel */
+.local-weather-card{background:#fff;border:1px solid #dfe6eb;padding:20px 22px;margin:22px 0 0}
+.local-weather-heading{display:flex;align-items:center;justify-content:space-between;gap:14px}
+.local-weather-heading h2{font-family:Manrope,sans-serif;font-size:20px;margin:5px 0;color:#203545}
+.local-weather-heading p{font-size:11px;color:#7c8993;margin:0}
+.location-refresh,.local-weather-prompt button{border:1px solid #bdcdd6;background:#fff;color:#28536c;border-radius:3px;padding:10px 13px;font-size:10px;font-weight:800;white-space:nowrap}
+.location-refresh:disabled,.local-weather-prompt button:disabled{opacity:.6;cursor:wait}
+.local-weather-place{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-top:17px;padding:15px;background:#f0f6f8;border-left:3px solid #3e899f}
+.local-weather-place h3{font-family:Manrope,sans-serif;font-size:21px;margin:0 0 3px;color:#1e3546}
+.local-weather-place p{font-size:11px;color:#778894;margin:0 0 10px}
+.local-live-indicator{font-size:8px;font-weight:800;letter-spacing:1px;color:#3a7c63}
+.local-live-indicator i{display:inline-block;width:6px;height:6px;border-radius:50%;background:#3da879;margin-right:6px}
+.local-temperature{display:flex;align-items:center;gap:9px;flex-wrap:wrap;justify-content:flex-end}
+.local-temperature>span{font-size:28px}
+.local-temperature strong{font-family:Manrope,sans-serif;font-size:35px;color:#1e5c79}
+.local-temperature small{width:100%;text-align:right;color:#778894;font-size:10px}
+.local-weather-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:12px}
+.local-weather-stats>div{border:1px solid #e6ecef;padding:12px 14px}
+.local-weather-stats span,.local-weather-stats strong{display:block}
+.local-weather-stats span{font-size:10px;color:#84919a}
+.local-weather-stats strong{font-family:Manrope,sans-serif;font-size:19px;color:#314958;margin-top:5px}
+.local-weather-foot{font-size:8px;color:#8a969e;margin-top:12px}
+.local-weather-prompt{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:14px;background:#f4f7f8;padding:14px;color:#687984;font-size:11px;line-height:1.5}
+@media(max-width:620px){.local-weather-card{padding:16px 14px;margin-top:18px}.local-weather-heading h2{font-size:17px}.local-weather-heading p{font-size:9px;max-width:205px}.location-refresh,.local-weather-prompt button{padding:9px 10px;font-size:9px}.local-weather-place{padding:12px}.local-weather-place h3{font-size:18px}.local-temperature strong{font-size:29px}.local-weather-stats{gap:7px}.local-weather-stats>div{padding:10px 8px}.local-weather-stats span{font-size:9px}.local-weather-stats strong{font-size:16px}.local-weather-prompt{align-items:flex-start;flex-direction:column}}
