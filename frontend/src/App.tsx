@@ -210,6 +210,21 @@ const [section,setSection]=useState("Weather Report");const [page,setPage]=useSt
  const locationStarted=useRef(false);
  const locationRequestVersion=useRef(0);
  const cityRequestVersion=useRef(0);
+ useEffect(()=>{
+  const cards=Array.from(document.querySelectorAll<HTMLElement>(".weather-scene"));
+  if(!cards.length)return;
+  if(!("IntersectionObserver" in window)){
+   cards.forEach(card=>card.classList.add("weather-anim-active"));
+   return;
+  }
+  const observer=new IntersectionObserver(entries=>{
+   for(const entry of entries){
+    (entry.target as HTMLElement).classList.toggle("weather-anim-active",entry.isIntersecting);
+   }
+  },{rootMargin:"120px 0px",threshold:0.01});
+  cards.forEach(card=>observer.observe(card));
+  return()=>observer.disconnect();
+ },[section,page,cities,local]);
  useEffect(()=>{if(!auth||!firebaseReady)return;return onAuthStateChanged(auth,setUser)},[]);
  useEffect(()=>{
   if(!("serviceWorker" in navigator))return;
