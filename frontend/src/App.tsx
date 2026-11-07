@@ -143,7 +143,8 @@ const [section,setSection]=useState("Weather Report");const [page,setPage]=useSt
    setPersonalizedCities(false);setUpdated(payload.retrieved_at||new Date().toISOString());
   }catch{
    // Keep cached reports; avoid a slow fan-out of 12 individual requests.
-   if(requestVersion===cityRequestVersion.current)setCities(previous=>previous.map(city=>({...city,loading:false,error:!city.current})));\n  }finally{if(requestVersion===cityRequestVersion.current)setBusy(false);}
+   if(requestVersion===cityRequestVersion.current)setCities(previous=>previous.map(city=>({...city,loading:false,error:!city.current})));
+  }finally{if(requestVersion===cityRequestVersion.current)setBusy(false);}
  };
  useEffect(()=>{
   if(!visitorLocation)return;
