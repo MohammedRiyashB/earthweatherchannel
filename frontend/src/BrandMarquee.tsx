@@ -45,7 +45,7 @@ function BrandRail({ items, direction, active }: { items: BrandItem[]; direction
           {items.map(item => <BrandTile item={item} key={item.name} />)}
         </div>
         <div className="source-brand-group" aria-hidden="true">
-          {items.map(item => <BrandTile item={item} key={item.name} />)}
+          {items.map(item => <BrandTile item={item} key={item.name} decorative />)}
         </div>
       </div>
     </div>
