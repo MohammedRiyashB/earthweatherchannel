@@ -222,7 +222,7 @@ const [section,setSection]=useState("Weather Report");const [page,setPage]=useSt
  const signIn=async()=>{if(!auth)return;try{await signInWithPopup(auth,googleProvider)}catch{setNotice("Google sign-in could not be completed.")}};
  return <div className="news-site">
   <div className="breaking-strip"><div className="breaking-label">WEATHER BULLETIN</div><div className="ticker"><span>GLOBAL WEATHER DESK</span><i>•</i><span>LIVE MODEL UPDATES</span><i>•</i><span>INDIA & WORLD WEATHER HEADLINES</span><i>•</i><span>WEATHER CHECK EVERY 60 SECONDS</span></div><div className="utc-clock">{clock.toLocaleTimeString([], {hour:"2-digit",minute:"2-digit",second:"2-digit"})} LOCAL</div></div>
-  <header className="masthead"><div className="brand-lockup"><img className="brand-wordmark" src="/earth-weather-logo.svg" alt="EARTH WEATHER" width="1200" height="220" /></div><div className="masthead-center"><span className="on-air"><b/> LIVE WEATHER DESK</span><small>Global reports · Forecasts · Weather headlines</small></div><div className="masthead-actions">{user?<button onClick={()=>void signOut(auth!)}>{user.displayName||"Account"}</button>:<button onClick={()=>void signIn()}>Sign in</button>}</div></header>
+  <header className="masthead"><div className="brand-lockup"><img className="brand-wordmark" src="/logo.png" alt="EARTH WEATHER" width="1200" height="220" /></div><div className="masthead-center"><span className="on-air"><b/> LIVE WEATHER DESK</span><small>Global reports · Forecasts · Weather headlines</small></div><div className="masthead-actions">{user?<button onClick={()=>void signOut(auth!)}>{user.displayName||"Account"}</button>:<button onClick={()=>void signIn()}>Sign in</button>}</div></header>
   <nav className="news-nav">{["Weather Report","World","Asia","India","Americas","Europe","Africa","Oceania","Satellite","Forecast"].map(x=><button className={section===x?"active":""} key={x} onClick={()=>{setSection(x);if(x==="India"||x==="Asia")setNewsRegion("india");else if(x!=="Weather Report")setNewsRegion("world")}}>{x}</button>)}</nav>
   {page==="home"?<main className="news-main">
    {notice&&<div className="notice">{notice}</div>}
@@ -288,7 +288,7 @@ const [section,setSection]=useState("Weather Report");const [page,setPage]=useSt
    </section>
   </main>
   :<main className="news-main info-page">
-   <div className="info-page-brand"><img src="/earth-weather-logo.svg" alt="EARTH WEATHER" /></div>
+   <div className="info-page-brand"><img src="/logo.png" alt="EARTH WEATHER" /></div>
    {page==="about"?<article className="info-card">
     <span className="eyebrow">ABOUT EARTH WEATHER</span>
     <h1>Weather information for a connected world.</h1>
@@ -328,7 +328,7 @@ const [section,setSection]=useState("Weather Report");const [page,setPage]=useSt
   </main>}
   <footer className="news-footer">
    <div className="footer-heading">
-    <img className="footer-logo" src="/earth-weather-logo.svg" alt="EARTH WEATHER logo" />
+    <img className="footer-logo" src="/logo.png" alt="EARTH WEATHER logo" />
     <div className="footer-brand">EARTH WEATHER <span>GLOBAL WEATHER NEWSROOM</span></div>
    </div>
    <nav className="footer-navigation" aria-label="Footer navigation">
