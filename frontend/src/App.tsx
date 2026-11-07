@@ -144,44 +144,60 @@ export default function App() {
     for(let i=0;i<150;i++){
       const lat=-68+Math.random()*136,lon=-180+Math.random()*360,wind=nearestWind(lat,lon,windGrid);
       const point=v.entities.add({position:new Cesium.ConstantPositionProperty(Cesium.Cartesian3.fromDegrees(lon,lat,18000)),show:windOn,point:{pixelSize:2.4,color:Cesium.Color.fromCssColorString("#8be9ff").withAlpha(0.9),disableDepthTestDistance:Number.POSITIVE_INFINITY}});
-      const line=v.entities.add({polyline:{positions:[],width:1.2,material:Cesium.Color.fromCssColorString("#65d8ee").withAlpha(0.42),arcType:Cesium.ArcType.NONE}});
-      particles.current.push({lat,lon,trail:[],point,line,speed:wind.speed_kmh,direction:wind.direction_deg});
+      let particle!:Particle;
+      const line=v.entities.add({polyline:{positions:new Cesium.CallbackProperty(()=>particle.trail,false),width:1.2,material:Cesium.Color.fromCssColorString("#65d8ee").withAlpha(0.42),arcType:Cesium.ArcType.NONE},show:windOn});
+      particle={lat,lon,trail:[],point,line,speed:wind.speed_kmh,direction:wind.direction_deg};particles.current.push(particle);
     }
-  },[windGrid]);
+  },[windGrid,windOn]);
 
   useEffect(()=>{
     const v=viewer.current;if(!v||!windGrid.length)return;
-    let frame=0,last=performance.now(),id=0;
+    let last=performance.now(),id=0;
     const animate=(now:number)=>{
       const dt=Math.min((now-last)/1000,0.08);last=now;
       for(const p of particles.current){
         const w=nearestWind(p.lat,p.lon,windGrid);p.speed=w.speed_kmh;p.direction=w.direction_deg;
-        const radians=(p.direction+180)*Math.PI/180;
-        const km=p.speed*dt/3600*18;
+        const radians=(p.direction+180)*Math.PI/180,km=p.speed*dt/3600*18;
         p.lat=clamp(p.lat+Math.cos(radians)*km/111,-72,72);
         p.lon+=Math.sin(radians)*km/(111*Math.max(0.18,Math.cos(p.lat*Math.PI/180)));
         if(p.lon>180)p.lon-=360;if(p.lon< -180)p.lon+=360;
         p.trail.push(Cesium.Cartesian3.fromDegrees(p.lon,p.lat,18000));if(p.trail.length>7)p.trail.shift();
-        p.point.position=Cesium.Cartesian3.fromDegrees(p.lon,p.lat,18000);
-        if(p.trail.length>1)p.line.polyline!.positions=p.trail;
+        p.point.position=new Cesium.ConstantPositionProperty(Cesium.Cartesian3.fromDegrees(p.lon,p.lat,18000));
       }
-      for(const cloud of cloudMotion.current){const cw=nearestWind(cloud.lat,cloud.lon,windGrid);const a=(cw.direction_deg+180)*Math.PI/180;const step=cw.speed_kmh*dt/3600*12;cloud.lat=clamp(cloud.lat+Math.cos(a)*step/111,-72,72);cloud.lon+=Math.sin(a)*step/(111*Math.max(0.18,Math.cos(cloud.lat*Math.PI/180)));if(cloud.lon>180)cloud.lon-=360;if(cloud.lon< -180)cloud.lon+=360;cloud.entity.position=new Cesium.ConstantPositionProperty(Cesium.Cartesian3.fromDegrees(cloud.lon,cloud.lat,25000));}\n      frame++;id=requestAnimationFrame(animate);
+      for(const cloud of cloudMotion.current){
+        const cw=nearestWind(cloud.lat,cloud.lon,windGrid),a=(cw.direction_deg+180)*Math.PI/180,step=cw.speed_kmh*dt/3600*12;
+        cloud.lat=clamp(cloud.lat+Math.cos(a)*step/111,-72,72);
+        cloud.lon+=Math.sin(a)*step/(111*Math.max(0.18,Math.cos(cloud.lat*Math.PI/180)));
+        if(cloud.lon>180)cloud.lon-=360;if(cloud.lon< -180)cloud.lon+=360;
+        cloud.entity.position=new Cesium.ConstantPositionProperty(Cesium.Cartesian3.fromDegrees(cloud.lon,cloud.lat,25000));
+      }
+      id=requestAnimationFrame(animate);
     };
     id=requestAnimationFrame(animate);return()=>cancelAnimationFrame(id);
   },[windGrid]);
 
   useEffect(()=>{
     const v=viewer.current;if(!v)return;
-    cloudEntities.current.forEach(e=>v.entities.remove(e));cloudEntities.current=[];
+    cloudEntities.current.forEach(e=>v.entities.remove(e));cloudEntities.current=[];cloudMotion.current=[];
     if(!cloudOn||!windGrid.length)return;
     windGrid.filter(p=>(p.cloud_cover_pct||0)>12).forEach(p=>{
       const entity=v.entities.add({position:new Cesium.ConstantPositionProperty(Cesium.Cartesian3.fromDegrees(p.lon,p.lat,25000)),point:{
         pixelSize:clamp((p.cloud_cover_pct||0)/5,4,17),color:Cesium.Color.fromCssColorString("#d9e9f2").withAlpha(0.12+(p.cloud_cover_pct||0)/180),
         outlineColor:Cesium.Color.WHITE.withAlpha(0.08),outlineWidth:1,disableDepthTestDistance:Number.POSITIVE_INFINITY
       }});
-      cloudEntities.current.push(entity);
+      cloudEntities.current.push(entity);cloudMotion.current.push({lat:p.lat,lon:p.lon,entity});
     });
   },[cloudOn,windGrid]);
+
+  useEffect(()=>{
+    const v=viewer.current;if(!v)return;
+    rainEntities.current.forEach(e=>v.entities.remove(e));rainEntities.current=[];
+    if(!rainOn||!windGrid.length)return;
+    windGrid.filter(p=>(p.precipitation_mm||0)>0.1).forEach(p=>{
+      const entity=v.entities.add({position:Cesium.Cartesian3.fromDegrees(p.lon,p.lat,35000),point:{pixelSize:clamp((p.precipitation_mm||0)*3,4,13),color:Cesium.Color.fromCssColorString("#4da8ff").withAlpha(0.7),outlineColor:Cesium.Color.WHITE.withAlpha(0.2),outlineWidth:1,disableDepthTestDistance:Number.POSITIVE_INFINITY}});
+      rainEntities.current.push(entity);
+    });
+  },[rainOn,windGrid]);
 
   useEffect(()=>{
     const v=viewer.current;if(!v)return;
@@ -212,7 +228,6 @@ export default function App() {
   const precip=(hourly.precipitation||[]) as number[];
   const evap=(hourly.evapotranspiration||[]) as number[];
   const humidity=(hourly.relative_humidity_2m||[]) as number[];
-  const healthStatus=(id:string)=>health.find(h=>h.id===id)?.status||"checking";
   return <main className="app-shell">
     <header className="topbar">
       <a className="brand" href="#"><span className="brand-mark">◎</span><span>EARTH <b>WEATHER</b><small>GLOBAL INTELLIGENCE SYSTEM</small></span></a>
