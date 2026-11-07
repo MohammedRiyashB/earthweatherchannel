@@ -680,3 +680,131 @@
  .city-card .weather-sky-art{opacity:.72}
  .local-weather-place .weather-sky-art{opacity:.85}
 }
+
+
+/* Photoreal-inspired atmospheric pass: volumetric cloud forms, natural light and subtle depth. */
+.weather-scene .weather-sky-art{
+  overflow:hidden;
+  border-radius:inherit;
+  background-blend-mode:screen;
+}
+.weather-scene .weather-sky-art i{
+  border-radius:48% 52% 44% 56% / 58% 46% 54% 42%;
+  background:
+    radial-gradient(ellipse at 18% 72%,rgba(255,255,255,.94) 0 13%,rgba(255,255,255,.55) 25%,transparent 48%),
+    radial-gradient(ellipse at 37% 39%,rgba(255,255,255,.98) 0 17%,rgba(255,255,255,.66) 30%,transparent 52%),
+    radial-gradient(ellipse at 59% 31%,rgba(255,255,255,.9) 0 16%,rgba(255,255,255,.48) 29%,transparent 51%),
+    radial-gradient(ellipse at 79% 61%,rgba(255,255,255,.82) 0 15%,rgba(255,255,255,.46) 29%,transparent 53%),
+    radial-gradient(ellipse at 48% 88%,rgba(67,91,111,.28) 0 18%,transparent 65%);
+  filter:blur(7px) drop-shadow(0 9px 10px rgba(30,55,75,.13));
+  mix-blend-mode:screen;
+  transform-origin:center;
+}
+.weather-scene .weather-sky-art i:nth-child(1){
+  width:76%;height:48%;left:-16%;top:15%;
+}
+.weather-scene .weather-sky-art i:nth-child(2){
+  width:72%;height:43%;left:29%;top:43%;
+  filter:blur(9px) drop-shadow(0 12px 12px rgba(25,45,65,.17));
+}
+.weather-scene .weather-sky-art i:nth-child(3){
+  width:58%;height:40%;right:-15%;top:1%;
+  filter:blur(8px) drop-shadow(0 8px 10px rgba(25,45,65,.12));
+}
+.weather-scene.cloud-clear .weather-sky-art i{opacity:.025}
+.weather-scene.cloud-light .weather-sky-art i{opacity:.16}
+.weather-scene.cloud-medium .weather-sky-art i{opacity:.38}
+.weather-scene.cloud-dense .weather-sky-art i{opacity:.68}
+.weather-scene.cloud-heavy .weather-sky-art i{opacity:.9}
+.weather-scene.scene-clear .weather-sky-art::before,
+.weather-scene.scene-partly .weather-sky-art::before{
+  filter:blur(.25px) drop-shadow(0 0 22px rgba(255,222,133,.85));
+}
+.weather-scene.phase-dawn.scene-clear,
+.weather-scene.phase-dawn.scene-partly{
+  background:
+    radial-gradient(ellipse at 78% 72%,rgba(255,198,132,.55),transparent 42%),
+    linear-gradient(165deg,#344b79 0%,#9c8297 47%,#f1bd91 100%);
+}
+.weather-scene.phase-dusk.scene-clear,
+.weather-scene.phase-dusk.scene-partly{
+  background:
+    radial-gradient(ellipse at 80% 76%,rgba(255,169,112,.5),transparent 42%),
+    linear-gradient(165deg,#283b6a 0%,#a66f80 50%,#edaa78 100%);
+}
+.weather-scene.scene-overcast .weather-sky-art i{
+  background:
+    radial-gradient(ellipse at 18% 70%,rgba(248,251,253,.9) 0 13%,rgba(219,229,235,.7) 28%,transparent 52%),
+    radial-gradient(ellipse at 42% 35%,rgba(245,249,251,.94) 0 18%,rgba(205,218,226,.7) 34%,transparent 56%),
+    radial-gradient(ellipse at 72% 64%,rgba(227,236,241,.92) 0 20%,rgba(171,190,202,.55) 36%,transparent 60%),
+    radial-gradient(ellipse at 50% 90%,rgba(73,94,111,.34),transparent 66%);
+  mix-blend-mode:normal;
+  filter:blur(10px);
+}
+.weather-scene.scene-rain .weather-sky-art i,
+.weather-scene.scene-thunder .weather-sky-art i{
+  background:
+    radial-gradient(ellipse at 20% 70%,rgba(157,177,193,.78) 0 14%,rgba(83,105,125,.72) 30%,transparent 54%),
+    radial-gradient(ellipse at 45% 35%,rgba(173,189,202,.8) 0 16%,rgba(72,91,112,.82) 34%,transparent 58%),
+    radial-gradient(ellipse at 75% 67%,rgba(124,148,167,.78) 0 18%,rgba(48,67,88,.8) 36%,transparent 62%),
+    radial-gradient(ellipse at 50% 92%,rgba(16,31,51,.58),transparent 68%);
+  mix-blend-mode:normal;
+  filter:blur(11px);
+}
+.weather-scene.scene-thunder .weather-sky-art i{filter:blur(13px) brightness(.76)}
+.weather-scene.scene-snow .weather-sky-art i{
+  background:
+    radial-gradient(ellipse at 18% 70%,rgba(255,255,255,.98) 0 14%,rgba(226,240,248,.78) 30%,transparent 54%),
+    radial-gradient(ellipse at 46% 34%,rgba(255,255,255,.98) 0 18%,rgba(217,233,243,.8) 34%,transparent 58%),
+    radial-gradient(ellipse at 77% 67%,rgba(245,251,255,.95) 0 18%,rgba(193,215,230,.7) 36%,transparent 61%);
+  mix-blend-mode:normal;
+  filter:blur(10px);
+}
+.weather-scene.scene-rain .weather-sky-art::after,
+.weather-scene.scene-thunder .weather-sky-art::after{
+  background:repeating-linear-gradient(104deg,transparent 0 12px,rgba(232,243,250,.0) 13px,rgba(232,243,250,.42) 14px,transparent 15px 27px);
+  opacity:.2;
+  filter:blur(.35px);
+}
+.weather-scene.scene-snow .weather-sky-art::after{
+  content:"";
+  inset:-8% 0 0;
+  background-image:
+    radial-gradient(2px 2px at 12% 18%,#fff 98%,transparent),
+    radial-gradient(1.5px 1.5px at 32% 42%,#fff 98%,transparent),
+    radial-gradient(2px 2px at 57% 12%,#fff 98%,transparent),
+    radial-gradient(1.5px 1.5px at 76% 36%,#fff 98%,transparent),
+    radial-gradient(2px 2px at 91% 64%,#fff 98%,transparent);
+  background-size:170px 125px;
+  animation:snowFloat 12s linear infinite;
+  opacity:.72;
+}
+.weather-scene.scene-fog .weather-sky-art::after{
+  height:38%;
+  top:43%;
+  background:linear-gradient(180deg,transparent,rgba(244,249,251,.48) 38%,rgba(255,255,255,.72) 55%,transparent);
+  filter:blur(13px);
+  box-shadow:0 -34px 20px rgba(255,255,255,.25),0 32px 22px rgba(255,255,255,.32);
+}
+.weather-scene.phase-night .weather-sky-art{
+  background-image:
+    radial-gradient(1.5px 1.5px at 12% 18%,#ffffffc9 98%,transparent),
+    radial-gradient(1px 1px at 29% 11%,#ffffff9c 98%,transparent),
+    radial-gradient(1px 1px at 53% 23%,#ffffffb0 98%,transparent),
+    radial-gradient(1.5px 1.5px at 78% 14%,#ffffffc0 98%,transparent),
+    radial-gradient(1px 1px at 91% 39%,#ffffff8c 98%,transparent),
+    radial-gradient(1px 1px at 39% 57%,#ffffff75 98%,transparent);
+  background-size:100% 100%;
+}
+.weather-scene.phase-night.scene-clear .weather-sky-art i,
+.weather-scene.phase-night.scene-partly .weather-sky-art i{
+  background:
+    radial-gradient(ellipse at 20% 70%,rgba(137,163,199,.58) 0 14%,rgba(74,100,141,.42) 32%,transparent 56%),
+    radial-gradient(ellipse at 47% 35%,rgba(167,187,216,.62) 0 17%,rgba(69,91,130,.48) 34%,transparent 58%),
+    radial-gradient(ellipse at 76% 65%,rgba(119,147,184,.56) 0 18%,rgba(45,66,104,.5) 36%,transparent 62%);
+  mix-blend-mode:screen;
+}
+.weather-scene .weather-sky-art i{backface-visibility:hidden}
+@media(prefers-reduced-motion:reduce){
+  .weather-scene .weather-sky-art i{transform:none!important;filter:none}
+}
