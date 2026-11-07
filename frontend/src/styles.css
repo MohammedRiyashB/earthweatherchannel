@@ -143,21 +143,13 @@
 @media(max-width:620px){.info-page{padding:20px 12px 35px}.info-card{padding:22px 18px}.info-card p{font-size:13px}.info-card h2{font-size:17px}.footer-legal{margin-left:0}.footer-copyright{margin-top:3px}}
 
 
-/* Footer brand mark and two-sided navigation alignment */
-.news-footer{display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:clamp(28px,8vw,110px);row-gap:18px;align-items:start}
-.footer-column{display:flex;flex-direction:column;align-items:flex-start;gap:9px}
-.footer-logo{display:block;width:min(190px,48vw);height:auto;object-fit:contain;margin:0 0 3px}
-.footer-links{display:flex;flex-direction:column;align-items:flex-start;gap:9px}
-.footer-legal{display:flex;flex-direction:column;align-items:flex-start;gap:9px;margin:0;padding-top:calc( min(190px,48vw) * .183 + 38px)}
-.footer-copyright{grid-column:1/-1}
-@media(max-width:620px){
- .news-footer{grid-template-columns:minmax(0,1fr) auto;column-gap:18px;row-gap:16px}
- .footer-logo{width:min(155px,42vw)}
- .footer-legal{padding-top:calc(min(155px,42vw) * .183 + 38px)}
- .footer-column button,.footer-legal button{font-size:10px}
- .footer-copyright{grid-column:1/-1}
-}
-@media(max-width:380px){
- .news-footer{grid-template-columns:1fr;gap:15px}
- .footer-legal{padding-top:0;margin:0}
-}
+
+/* Compact footer: brand above, balanced link columns, no spacer gaps */
+.news-footer{display:block;padding-top:30px;padding-bottom:24px}
+.footer-heading{display:flex;flex-direction:column;align-items:flex-start;gap:8px;margin:0 0 18px}
+.footer-logo{display:block;width:155px;max-width:42vw;height:auto;object-fit:contain;margin:0}
+.footer-brand{margin:0}
+.footer-navigation{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);column-gap:24px;align-items:start;margin:0 0 22px}
+.footer-links,.footer-legal{display:flex;flex-direction:column;align-items:flex-start;gap:10px;margin:0;padding:0}
+.footer-copyright{margin:0;padding-top:18px}
+@media(max-width:380px){.footer-navigation{column-gap:12px}.footer-links button,.footer-legal button{font-size:12px}}
