@@ -49,7 +49,7 @@ class WeatherProviderBatchTests(unittest.IsolatedAsyncioTestCase):
 
         async def fail_request(_client, latitudes, _longitudes):
             calls.append(len(latitudes))
-            raise RuntimeError("simulated provider outage")
+            raise weather_api.httpx.ConnectError("simulated provider outage")
 
         with patch.object(weather_api, "_request_current_chunk", new=fail_request):
             with self.assertRaises(HTTPException) as raised:
