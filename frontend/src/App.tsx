@@ -569,15 +569,6 @@ const [section,setSection]=useState("Weather Report");const [page,setPage]=useSt
      <span>Help Center &amp; FAQ</span>
     </section>
     <section className="footer-group">
-     <h3>Platform</h3>
-     <span>Our Technology</span>
-     <span>Satellite &amp; Radar</span>
-     <span>Location Services</span>
-     <span>Developer Portal</span>
-     <span>API Documentation</span>
-     <span>System Status</span>
-    </section>
-    <section className="footer-group">
      <h3>Legal</h3>
      <button onClick={()=>{setPage("terms");window.scrollTo({top:0,behavior:"smooth"})}}>Terms &amp; Conditions</button>
      <button onClick={()=>{setPage("privacy");window.scrollTo({top:0,behavior:"smooth"})}}>Privacy Policy</button>
