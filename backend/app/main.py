@@ -21,6 +21,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+from app.cache_middleware import PublicResponseCacheMiddleware
+
+# Bounded per-process cache; shared cache can be enabled in a later stage.
+app.add_middleware(PublicResponseCacheMiddleware)
+
 logger = logging.getLogger("earthweather.weather")
 OPEN_METEO = "https://api.open-meteo.com/v1/forecast"
 _WEATHER_UPSTREAM_SEMAPHORE = asyncio.Semaphore(2)
