@@ -1,0 +1,17 @@
+{
+  "name": "EARTH WEATHER",
+  "short_name": "EARTH WEATHER",
+  "description": "Live weather and weather-only news from India and around the world.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#ffffff",
+  "icons": [
+    {
+      "src": "/web-logo.png",
+      "sizes": "any",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
