@@ -11,6 +11,11 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
@@ -21,6 +26,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.offset
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -375,7 +381,7 @@ private fun WeatherScreen(state: DashboardState, place: WeatherPlace?, modifier:
                     Spacer(Modifier.height(6.dp))
                     Text(description.first, color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
                 }
-                WeatherIcon(current?.weatherCode ?: -1, 62.dp)
+                AnimatedWeatherIcon(current?.weatherCode ?: -1, 62.dp)
             }
             Row(verticalAlignment = Alignment.Top) {
                 Text(displayTemp(current?.temperature ?: Double.NaN, celsius), color = Color.White, fontSize = 78.sp, fontWeight = FontWeight.Light, letterSpacing = (-4).sp)
@@ -457,6 +463,20 @@ private fun CitiesScreen(
         }
         Spacer(Modifier.height(20.dp)); SectionHeader("CURRENT CITY", "Device location")
         if (current != null) CityListRow(current, true, { onSelect(current) })
+        val nationalCities = topCitiesFor(current?.countryCode ?: "")
+        Spacer(Modifier.height(20.dp)); SectionHeader("TOP CITIES · " + (current?.country ?: "YOUR REGION"), "Popular locations")
+        nationalCities.forEach { city ->
+            CityListRow(city, false, { onSelect(city) }) {
+                TextButton(onClick = { onSave(city) }) { Text("＋ Save") }
+            }
+        }
+        val worldCities = worldTopCities()
+        Spacer(Modifier.height(20.dp)); SectionHeader("TOP CITIES · WORLD", "Global")
+        worldCities.forEach { city ->
+            CityListRow(city, false, { onSelect(city) }) {
+                TextButton(onClick = { onSave(city) }) { Text("＋ Save") }
+            }
+        }
         Spacer(Modifier.height(20.dp)); SectionHeader("SAVED CITIES", saved.size.toString() + " saved")
         if (saved.isEmpty()) InfoCard("No saved cities yet", "Search for a city and tap Save to keep it in your list.")
         else saved.forEach { place ->
@@ -696,6 +716,62 @@ private fun InfoCard(title: String, detail: String) {
     }
 }
 
+
+@Composable
+private fun AnimatedWeatherIcon(code: Int, size: Dp) {
+    val transition = rememberInfiniteTransition(label = "earth-weather-icon")
+    val drift by transition.animateFloat(
+        initialValue = 0f, targetValue = -5f,
+        animationSpec = infiniteRepeatable(animation = tween(2200), repeatMode = RepeatMode.Reverse),
+        label = "weather-drift"
+    )
+    WeatherIcon(code, size, Modifier.offset(y = drift.dp))
+}
+
+private fun topCitiesFor(countryCode: String): List<WeatherPlace> = when (countryCode.uppercase()) {
+    "IN" -> listOf(
+        WeatherPlace("Chennai", "Tamil Nadu, India", 13.0827, 80.2707, "India", "IN", "Tamil Nadu"),
+        WeatherPlace("Coimbatore", "Tamil Nadu, India", 11.0168, 76.9558, "India", "IN", "Tamil Nadu"),
+        WeatherPlace("Salem", "Tamil Nadu, India", 11.6643, 78.1460, "India", "IN", "Tamil Nadu"),
+        WeatherPlace("Tiruchirappalli", "Tamil Nadu, India", 10.7905, 78.7047, "India", "IN", "Tamil Nadu"),
+        WeatherPlace("Erode", "Tamil Nadu, India", 11.3410, 77.7172, "India", "IN", "Tamil Nadu"),
+        WeatherPlace("Bengaluru", "Karnataka, India", 12.9716, 77.5946, "India", "IN", "Karnataka")
+    )
+    "US" -> listOf(
+        WeatherPlace("New York", "New York, United States", 40.7128, -74.0060, "United States", "US"),
+        WeatherPlace("Los Angeles", "California, United States", 34.0522, -118.2437, "United States", "US"),
+        WeatherPlace("Chicago", "Illinois, United States", 41.8781, -87.6298, "United States", "US"),
+        WeatherPlace("Houston", "Texas, United States", 29.7604, -95.3698, "United States", "US")
+    )
+    "GB" -> listOf(
+        WeatherPlace("London", "England, United Kingdom", 51.5072, -0.1276, "United Kingdom", "GB"),
+        WeatherPlace("Manchester", "England, United Kingdom", 53.4808, -2.2426, "United Kingdom", "GB"),
+        WeatherPlace("Birmingham", "England, United Kingdom", 52.4862, -1.8904, "United Kingdom", "GB"),
+        WeatherPlace("Glasgow", "Scotland, United Kingdom", 55.8642, -4.2518, "United Kingdom", "GB")
+    )
+    "AE" -> listOf(
+        WeatherPlace("Dubai", "United Arab Emirates", 25.2048, 55.2708, "United Arab Emirates", "AE"),
+        WeatherPlace("Abu Dhabi", "United Arab Emirates", 24.4539, 54.3773, "United Arab Emirates", "AE"),
+        WeatherPlace("Sharjah", "United Arab Emirates", 25.3463, 55.4209, "United Arab Emirates", "AE")
+    )
+    "AU" -> listOf(
+        WeatherPlace("Sydney", "New South Wales, Australia", -33.8688, 151.2093, "Australia", "AU"),
+        WeatherPlace("Melbourne", "Victoria, Australia", -37.8136, 144.9631, "Australia", "AU"),
+        WeatherPlace("Brisbane", "Queensland, Australia", -27.4698, 153.0251, "Australia", "AU")
+    )
+    else -> worldTopCities().take(5)
+}
+
+private fun worldTopCities(): List<WeatherPlace> = listOf(
+    WeatherPlace("New York", "United States", 40.7128, -74.0060, "United States", "US"),
+    WeatherPlace("London", "United Kingdom", 51.5072, -0.1276, "United Kingdom", "GB"),
+    WeatherPlace("Tokyo", "Japan", 35.6762, 139.6503, "Japan", "JP"),
+    WeatherPlace("Paris", "France", 48.8566, 2.3522, "France", "FR"),
+    WeatherPlace("Dubai", "United Arab Emirates", 25.2048, 55.2708, "United Arab Emirates", "AE"),
+    WeatherPlace("Singapore", "Singapore", 1.3521, 103.8198, "Singapore", "SG"),
+    WeatherPlace("Sydney", "Australia", -33.8688, 151.2093, "Australia", "AU"),
+    WeatherPlace("Toronto", "Canada", 43.6532, -79.3832, "Canada", "CA")
+)
 
 @Composable
 private fun WeatherIcon(code: Int, size: Dp, modifier: Modifier = Modifier) {
