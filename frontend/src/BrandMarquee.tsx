@@ -24,9 +24,9 @@ const ROW_TWO: BrandItem[] = [
   { name: "OpenAI · ChatGPT", role: "AI-assisted development", href: "https://openai.com/brand/", kind: "development", monogram: "AI" },
 ];
 
-function BrandTile({ item }: { item: BrandItem }) {
+function BrandTile({ item, decorative = false }: { item: BrandItem; decorative?: boolean }) {
   return (
-    <a className={`source-brand-tile source-brand-${item.kind}`} href={item.href} target="_blank" rel="noreferrer">
+    <a className={`source-brand-tile source-brand-${item.kind}`} href={item.href} target="_blank" rel="noreferrer" tabIndex={decorative ? -1 : undefined}>
       <span className="source-brand-monogram" aria-hidden="true">{item.monogram}</span>
       <span className="source-brand-copy">
         <strong>{item.name}</strong>
@@ -77,7 +77,7 @@ export default function BrandMarquee() {
         <h2 id="source-brand-title">The technology behind the forecast</h2>
         <p>Weather data, imagery, public information and development tools used in this project.</p>
       </div>
-      <div className="source-brand-motion" onMouseEnter={() => setActive(false)} onMouseLeave={() => setActive(true)}>
+      <div className="source-brand-motion">
         <BrandRail items={ROW_ONE} direction="left" active={active} />
         <BrandRail items={ROW_TWO} direction="right" active={active} />
       </div>
