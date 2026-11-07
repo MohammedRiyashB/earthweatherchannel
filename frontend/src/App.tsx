@@ -70,7 +70,9 @@ const [section,setSection]=useState("Weather Report");const [isSearchLocation,se
     const placeData=placeResponse.ok?await placeResponse.json():null;
     const name=placeData?.name||"Your nearby area";
     const region=placeData?.region||"GPS location";
-    setLocal({name,region,lat,lon,current:weatherData.current||{}});\n    setIsSearchLocation(false);\n    
+    setLocal({name,region,lat,lon,current:weatherData.current||{}});
+    setIsSearchLocation(false);
+    
     setLocationStatus("ready");setLocationMessage("");
    }catch(error){
     setLocationStatus("error");setLocationMessage(error instanceof Error?error.message:"Could not load your local weather.");
@@ -108,22 +110,20 @@ const [section,setSection]=useState("Weather Report");const [isSearchLocation,se
  const active=cities.filter(c=>c.current);
  const hottest=useMemo(()=>[...active].sort((a,b)=>(b.current?.temperature_2m??-100)-(a.current?.temperature_2m??-100))[0],[active]);
  const headlines=newsRegion==="india"?indiaNews:worldNews;
- const search=async()=>{if(!query.trim())return;try{const r=await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(query)}`,{headers:{"Accept-Language":"en"}});const d=await r.json();if(!d.length)throw new Error("No matching place found");const p={name:d[0].name||query,region:d[0].display_name,lat:Number(d[0].lat),lon:Number(d[0].lon)};const w=await fetch(`${API}/api/weather?latitude=${p.lat}&longitude=${p.lon}`);if(!w.ok)throw new Error("Weather feed unavailable");const wd=await w.json();setLocal({...p,current:wd.current||{}});setIsSearchLocation(true);setSearchResult(null);setLocationStatus("ready");setLocationMessage("");setNotice("");}catch(e){setNotice(e instanceof Error?e.message:"Search failed.");}};
- const useMyLocation=()=>detectLocalWeather();
+ const search=async()=>{if(!query.trim())return;try{const r=await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(query)}`,{headers:{"Accept-Language":"en"}});const d=await r.json();if(!d.length)throw new Error("No matching place found");const p={name:d[0].name||query,region:d[0].display_name,lat:Number(d[0].lat),lon:Number(d[0].lon)};const w=await fetch(`${API}/api/weather?latitude=${p.lat}&longitude=${p.lon}`);if(!w.ok)throw new Error("Weather feed unavailable");const wd=await w.json();setLocal({...p,current:wd.current||{}});setIsSearchLocation(true);setLocationStatus("ready");setLocationMessage("");setNotice("");}catch(e){setNotice(e instanceof Error?e.message:"Search failed.");}};
  const signIn=async()=>{if(!auth)return;try{await signInWithPopup(auth,googleProvider)}catch{setNotice("Google sign-in could not be completed.")}};
  return <div className="news-site">
   <div className="breaking-strip"><div className="breaking-label">WEATHER BULLETIN</div><div className="ticker"><span>GLOBAL WEATHER DESK</span><i>•</i><span>LIVE MODEL UPDATES</span><i>•</i><span>INDIA & WORLD WEATHER HEADLINES</span><i>•</i><span>WEATHER CHECK EVERY 60 SECONDS</span></div><div className="utc-clock">{clock.toLocaleTimeString([], {hour:"2-digit",minute:"2-digit",second:"2-digit"})} LOCAL</div></div>
   <header className="masthead"><div className="brand-lockup"><img className="brand-wordmark" src="https://raw.githubusercontent.com/MohammedRiyashB/earthweatherchannel/main/logo.png" alt="EARTH WEATHER" width="1200" height="220" /></div><div className="masthead-center"><span className="on-air"><b/> LIVE WEATHER DESK</span><small>Global reports · Forecasts · Weather headlines</small></div><div className="masthead-actions">{user?<button onClick={()=>void signOut(auth!)}>{user.displayName||"Account"}</button>:<button onClick={()=>void signIn()}>Sign in</button>}</div></header>
   <nav className="news-nav">{["Weather Report","World","Asia","India","Americas","Europe","Africa","Oceania","Satellite","Forecast"].map(x=><button className={section===x?"active":""} key={x} onClick={()=>{setSection(x);if(x==="India"||x==="Asia")setNewsRegion("india");else if(x!=="Weather Report")setNewsRegion("world")}}>{x}</button>)}</nav>
   <main className="news-main">
-   {searchResult&&<section className="search-result"><div><small>SELECTED LOCATION</small><h2>{searchResult!.name}</h2><p>{(searchResult||local)!.region}</p></div><strong>{Math.round((searchResult||local)!.current?.temperature_2m??0)}°C</strong><span>{weatherLabel((searchResult||local)!.current?.weather_code)}</span><button onClick={()=>{setSearchResult(null);setLocal(null)}}>×</button></section>}
    {notice&&<div className="notice">{notice}</div>}
    <div className="news-toolbar"><div><span className="eyebrow">GLOBAL WEATHER COVERAGE</span><h1>Weather around the world</h1><p>Live weather conditions, forecasts and weather-only news from India and around the world.</p></div><form className="search-weather" onSubmit={e=>{e.preventDefault();void search()}}><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search city or region" aria-label="Search city or region"/><button type="submit">Search</button></form></div>
 
    <section className="local-weather-card" aria-live="polite">
     <div className="local-weather-heading">
-     <div><span className="eyebrow">WEATHER NEAR YOU</span><h2>Your current location</h2><p>Automatically detected using your device location</p></div>
-     <button className="location-refresh" onClick={detectLocalWeather} disabled={locationStatus==="locating"}>{locationStatus==="locating"?"Detecting…":"⌖ Detect location"}</button>
+     <div><span className="eyebrow">{isSearchLocation ? "SELECTED CITY" : "WEATHER NEAR YOU"}</span><h2>{isSearchLocation && local ? `Weather in ${local.name}` : "Your current location"}</h2><p>{isSearchLocation ? "Showing weather for the city you searched" : "Automatically detected using your device location"}</p></div>
+     <button className="location-refresh" onClick={detectLocalWeather} disabled={locationStatus==="locating"}>{locationStatus==="locating"?"Detecting…":isSearchLocation?"⌖ Return to my location":"⌖ Detect location"}</button>
     </div>
     {local&&locationStatus==="ready"?<>
      <div className={`local-weather-place weather-scene ${weatherScene(local.current?.weather_code,local.current?.cloud_cover)}`}><span className="weather-sky-art" aria-hidden="true"><i/><i/><i/></span>
