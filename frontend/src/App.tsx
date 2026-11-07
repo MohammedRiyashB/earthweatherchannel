@@ -4,7 +4,7 @@ import { onAuthStateChanged, signInWithPopup, signOut, type User } from "firebas
 
 const API=import.meta.env.VITE_API_BASE_URL||"https://earthweather-api.onrender.com";
 type Current={time?:string;temperature_2m?:number;relative_humidity_2m?:number;apparent_temperature?:number;precipitation?:number;cloud_cover?:number;pressure_msl?:number;wind_speed_10m?:number;wind_direction_10m?:number;weather_code?:number};
-type Place={name:string;region:string;lat:number;lon:number;current?:Current;loading?:boolean;error?:boolean};
+type Place={name:string;region:string;lat:number;lon:number;country_code?:string;current?:Current;loading?:boolean;error?:boolean};
 type Storm={id:string;title:string;description?:string;link?:string;coordinates?:{lat:number;lon:number;date?:string}[]};
 type Story={title:string;url:string;source:string;published_at?:string;language?:string;image?:string};
 const CITIES:Place[]=[
@@ -15,6 +15,36 @@ const CITIES:Place[]=[
 {name:"Singapore",region:"Singapore",lat:1.3521,lon:103.8198},{name:"Cape Town",region:"South Africa",lat:-33.9249,lon:18.4241},
 {name:"São Paulo",region:"Brazil",lat:-23.5505,lon:-46.6333},{name:"Erode",region:"Tamil Nadu, India",lat:11.341,lon:77.7172}
 ];
+const GLOBAL_MAJOR_CITIES:Place[]=[
+{name:"New Delhi",region:"India",country_code:"IN",lat:28.6139,lon:77.209},{name:"Mumbai",region:"India",country_code:"IN",lat:19.076,lon:72.8777},{name:"Kolkata",region:"India",country_code:"IN",lat:22.5726,lon:88.3639},{name:"Chennai",region:"India",country_code:"IN",lat:13.0827,lon:80.2707},
+{name:"New York",region:"United States",country_code:"US",lat:40.7128,lon:-74.006},{name:"Los Angeles",region:"United States",country_code:"US",lat:34.0522,lon:-118.2437},{name:"Chicago",region:"United States",country_code:"US",lat:41.8781,lon:-87.6298},{name:"Houston",region:"United States",country_code:"US",lat:29.7604,lon:-95.3698},{name:"Miami",region:"United States",country_code:"US",lat:25.7617,lon:-80.1918},{name:"San Francisco",region:"United States",country_code:"US",lat:37.7749,lon:-122.4194},
+{name:"London",region:"United Kingdom",country_code:"GB",lat:51.5072,lon:-0.1276},{name:"Manchester",region:"United Kingdom",country_code:"GB",lat:53.4808,lon:-2.2426},{name:"Birmingham",region:"United Kingdom",country_code:"GB",lat:52.4862,lon:-1.8904},{name:"Edinburgh",region:"United Kingdom",country_code:"GB",lat:55.9533,lon:-3.1883},
+{name:"Dubai",region:"United Arab Emirates",country_code:"AE",lat:25.2048,lon:55.2708},{name:"Abu Dhabi",region:"United Arab Emirates",country_code:"AE",lat:24.4539,lon:54.3773},{name:"Sharjah",region:"United Arab Emirates",country_code:"AE",lat:25.3463,lon:55.4209},
+{name:"Singapore",region:"Singapore",country_code:"SG",lat:1.3521,lon:103.8198},
+{name:"Tokyo",region:"Japan",country_code:"JP",lat:35.6762,lon:139.6503},{name:"Osaka",region:"Japan",country_code:"JP",lat:34.6937,lon:135.5023},{name:"Fukuoka",region:"Japan",country_code:"JP",lat:33.5902,lon:130.4017},
+{name:"Beijing",region:"China",country_code:"CN",lat:39.9042,lon:116.4074},{name:"Shanghai",region:"China",country_code:"CN",lat:31.2304,lon:121.4737},{name:"Guangzhou",region:"China",country_code:"CN",lat:23.1291,lon:113.2644},{name:"Shenzhen",region:"China",country_code:"CN",lat:22.5431,lon:114.0579},
+{name:"Colombo",region:"Sri Lanka",country_code:"LK",lat:6.9271,lon:79.8612},{name:"Malé",region:"Maldives",country_code:"MV",lat:4.1755,lon:73.5093},{name:"Dhaka",region:"Bangladesh",country_code:"BD",lat:23.8103,lon:90.4125},{name:"Kathmandu",region:"Nepal",country_code:"NP",lat:27.7172,lon:85.324},{name:"Karachi",region:"Pakistan",country_code:"PK",lat:24.8607,lon:67.0011},{name:"Lahore",region:"Pakistan",country_code:"PK",lat:31.5204,lon:74.3587},
+{name:"Bangkok",region:"Thailand",country_code:"TH",lat:13.7563,lon:100.5018},{name:"Kuala Lumpur",region:"Malaysia",country_code:"MY",lat:3.139,lon:101.6869},{name:"Jakarta",region:"Indonesia",country_code:"ID",lat:-6.2088,lon:106.8456},{name:"Manila",region:"Philippines",country_code:"PH",lat:14.5995,lon:120.9842},{name:"Hanoi",region:"Vietnam",country_code:"VN",lat:21.0278,lon:105.8342},
+{name:"Sydney",region:"Australia",country_code:"AU",lat:-33.8688,lon:151.2093},{name:"Melbourne",region:"Australia",country_code:"AU",lat:-37.8136,lon:144.9631},{name:"Brisbane",region:"Australia",country_code:"AU",lat:-27.4698,lon:153.0251},{name:"Perth",region:"Australia",country_code:"AU",lat:-31.9505,lon:115.8605},
+{name:"Toronto",region:"Canada",country_code:"CA",lat:43.6532,lon:-79.3832},{name:"Vancouver",region:"Canada",country_code:"CA",lat:49.2827,lon:-123.1207},{name:"Montreal",region:"Canada",country_code:"CA",lat:45.5019,lon:-73.5674},
+{name:"Paris",region:"France",country_code:"FR",lat:48.8566,lon:2.3522},{name:"Berlin",region:"Germany",country_code:"DE",lat:52.52,lon:13.405},{name:"Madrid",region:"Spain",country_code:"ES",lat:40.4168,lon:-3.7038},{name:"Rome",region:"Italy",country_code:"IT",lat:41.9028,lon:12.4964},{name:"Amsterdam",region:"Netherlands",country_code:"NL",lat:52.3676,lon:4.9041},
+{name:"Cairo",region:"Egypt",country_code:"EG",lat:30.0444,lon:31.2357},{name:"Nairobi",region:"Kenya",country_code:"KE",lat:-1.2921,lon:36.8219},{name:"Cape Town",region:"South Africa",country_code:"ZA",lat:-33.9249,lon:18.4241},{name:"Lagos",region:"Nigeria",country_code:"NG",lat:6.5244,lon:3.3792},
+{name:"São Paulo",region:"Brazil",country_code:"BR",lat:-23.5505,lon:-46.6333},{name:"Mexico City",region:"Mexico",country_code:"MX",lat:19.4326,lon:-99.1332},{name:"Buenos Aires",region:"Argentina",country_code:"AR",lat:-34.6037,lon:-58.3816},{name:"Santiago",region:"Chile",country_code:"CL",lat:-33.4489,lon:-70.6693},
+{name:"Riyadh",region:"Saudi Arabia",country_code:"SA",lat:24.7136,lon:46.6753},{name:"Doha",region:"Qatar",country_code:"QA",lat:25.2854,lon:51.531},{name:"Istanbul",region:"Türkiye",country_code:"TR",lat:41.0082,lon:28.9784},{name:"Moscow",region:"Russia",country_code:"RU",lat:55.7558,lon:37.6173},{name:"Auckland",region:"New Zealand",country_code:"NZ",lat:-36.8509,lon:174.7645}
+];
+const distanceKm=(lat1:number,lon1:number,lat2:number,lon2:number)=>{
+ const rad=(value:number)=>value*Math.PI/180;
+ const dLat=rad(lat2-lat1),dLon=rad(lon2-lon1);
+ const a=Math.sin(dLat/2)**2+Math.cos(rad(lat1))*Math.cos(rad(lat2))*Math.sin(dLon/2)**2;
+ return 6371*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+};
+const selectCityGroups=(countryCode:string,lat:number,lon:number)=>{
+ const national=GLOBAL_MAJOR_CITIES.filter(city=>city.country_code===countryCode)
+  .sort((a,b)=>distanceKm(lat,lon,a.lat,a.lon)-distanceKm(lat,lon,b.lat,b.lon)).slice(0,4);
+ const international=GLOBAL_MAJOR_CITIES.filter(city=>city.country_code!==countryCode)
+  .sort((a,b)=>distanceKm(lat,lon,a.lat,a.lon)-distanceKm(lat,lon,b.lat,b.lon)).slice(0,4);
+ return {national,international};
+};
 const weatherLabel=(c?:number)=>c==null?"Weather update":c===0?"Clear skies":[1,2,3].includes(c)?"Partly cloudy":[45,48].includes(c)?"Foggy":[51,53,55,56,57].includes(c)?"Drizzle":[61,63,65,66,67,80,81,82].includes(c)?"Rain":[71,73,75,77,85,86].includes(c)?"Snow":[95,96,99].includes(c)?"Thunderstorms":"Variable conditions";
 const weatherScene=(c?:number,cloud?:number)=>{
  if(c!=null&&[95,96,99].includes(c))return "scene-thunder";
