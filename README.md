@@ -7,7 +7,7 @@ A global weather intelligence explorer built around a CesiumJS 3D globe, NASA sa
 - **3D Earth:** Cesium globe with OpenStreetMap basemap and NASA GIBS imagery layers.
 - **Satellite imagery:** NASA VIIRS daily true-colour imagery and NOAA GOES-East / GOES-West GeoColor and GOES-East infrared layers through NASA GIBS.
 - **Historical imagery playback:** Seven-day date selector / playback for the daily VIIRS product. Product acquisition times and tile availability vary; this is not a continuous geostationary video archive.
-- **Global wind flow:** 30-degree global samples from Open-Meteo 10 m wind speed and direction, rendered as animated particle paths. This is a coarse model-derived visualization, not direct station observations or a high-resolution operational wind analysis.
+- **Global wind flow:** 15-degree global samples from Open-Meteo 10 m wind speed and direction, rendered as animated particle paths. This is a coarse model-derived visualization, not direct station observations or a high-resolution operational wind analysis.
 - **Cloud movement:** Cloud-cover model samples advected using the model wind field. This is a simplified model visualization, not a photorealistic satellite cloud texture or a cloud-resolving forecast.
 - **Rainfall:** Global coarse current model precipitation overlay and location-based hourly precipitation probability / amount timeline.
 - **Atmospheric water cycle:** Relative humidity, dew point, cloud layers, precipitation and modeled evapotranspiration time series.
@@ -20,7 +20,7 @@ A global weather intelligence explorer built around a CesiumJS 3D globe, NASA sa
 
 | Layer / feature | Data source | What it means |
 |---|---|---|
-| Wind flow | Open-Meteo global forecast models | Coarse 30° model sample, particle paths interpolate the field |
+| Wind flow | Open-Meteo global forecast models | Coarse 15° model sample, particle paths interpolate the field |
 | Cloud movement | Open-Meteo cloud-cover + wind fields | Simplified advection visualization; not observed cloud pixels |
 | Rainfall forecast | Open-Meteo | Model precipitation and probability; local hourly series plus coarse global current field |
 | Humidity / evapotranspiration | Open-Meteo | Model-derived atmospheric and surface water-flux estimates |
