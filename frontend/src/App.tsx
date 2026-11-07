@@ -33,11 +33,12 @@ export default function App() {
       animation: false, timeline: false, geocoder: false, homeButton: true, sceneModePicker: false,
       navigationHelpButton: false, baseLayerPicker: false, fullscreenButton: false, infoBox: false,
       selectionIndicator: false, shouldAnimate: true,
-      imageryProvider: new Cesium.OpenStreetMapImageryProvider({ url: "https://tile.openstreetmap.org/" }),
+      baseLayer: false,
       terrainProvider: new Cesium.EllipsoidTerrainProvider()
     });
+    v.imageryLayers.addImageryProvider(new Cesium.OpenStreetMapImageryProvider({ url: "https://tile.openstreetmap.org/" }));
     v.scene.globe.enableLighting = true;
-    v.scene.skyAtmosphere.show = true;
+    if (v.scene.skyAtmosphere) v.scene.skyAtmosphere.show = true;
     v.scene.globe.showGroundAtmosphere = true;
     v.camera.setView({ destination: Cesium.Cartesian3.fromDegrees(15, 18, 25500000) });
     const nasa = new Cesium.UrlTemplateImageryProvider({
