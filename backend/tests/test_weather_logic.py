@@ -1,7 +1,7 @@
-import asyncio
 import unittest
 from unittest.mock import patch
 
+from fastapi import HTTPException
 from app import main as weather_api
 
 
@@ -12,9 +12,6 @@ def params_for(points: int) -> dict[str, str]:
 
 
 class WeatherProviderBatchTests(unittest.IsolatedAsyncioTestCase):
-    def setUp(self) -> None:
-        weather_api._current_provider_cache.clear()
-
     async def test_twelve_city_request_is_one_batch_and_preserves_order(self) -> None:
         calls: list[tuple[list[float], list[float]]] = []
 
@@ -35,48 +32,44 @@ class WeatherProviderBatchTests(unittest.IsolatedAsyncioTestCase):
             [float(index - 6) for index in range(12)],
         )
 
-    async def test_failed_multi_city_batch_uses_stale_cache_without_fanout(self) -> None:
-        now = asyncio.get_running_loop().time()
-        expected = [-6.0, -5.0, -4.0]
-        for index, temperature in enumerate(expected):
-            key = (temperature, float(index + 100))
-            weather_api._current_provider_cache[key] = (
-                now - 120,
-                {"current": {"temperature_2m": temperature}},
-            )
-        calls: list[int] = []
-
+    async def test_single_location_returns_one_report(self) -> None:
         async def fake_request(_client, latitudes, longitudes):
-            calls.append(len(latitudes))
-            raise RuntimeError("simulated batch failure")
+            self.assertEqual(latitudes, [-6.0])
+            self.assertEqual(longitudes, [100.0])
+            return [{"current": {"temperature_2m": 27.5, "weather_code": 1}}]
 
         with patch.object(weather_api, "_request_current_chunk", new=fake_request):
-            result = await weather_api._fetch_open_meteo_current(object(), params_for(3))
-
-        self.assertEqual(calls, [3])
-        self.assertEqual(
-            [row["current"]["temperature_2m"] for row in result],
-            expected,
-        )
-
-    async def test_stale_good_report_is_used_after_upstream_failure(self) -> None:
-        loop_now = asyncio.get_running_loop().time()
-        key = (-6.0, 100.0)
-        weather_api._current_provider_cache[key] = (
-            loop_now - 120,
-            {"current": {"temperature_2m": 27.5, "weather_code": 1}},
-        )
-
-        async def fail_request(_client, _latitudes, _longitudes):
-            raise RuntimeError("simulated provider outage")
-
-        with patch.object(weather_api, "_request_current_chunk", new=fail_request):
-            result = await weather_api._fetch_open_meteo_current(
-                object(), params_for(1)
-            )
+            result = await weather_api._fetch_open_meteo_current(object(), params_for(1))
 
         self.assertEqual(result["current"]["temperature_2m"], 27.5)
         self.assertEqual(result["current"]["weather_code"], 1)
+
+    async def test_upstream_failure_is_reported_without_stale_cache_fallback(self) -> None:
+        calls: list[int] = []
+
+        async def fail_request(_client, latitudes, _longitudes):
+            calls.append(len(latitudes))
+            raise RuntimeError("simulated provider outage")
+
+        with patch.object(weather_api, "_request_current_chunk", new=fail_request):
+            with self.assertRaises(HTTPException) as raised:
+                await weather_api._fetch_open_meteo_current(object(), params_for(3))
+
+        self.assertEqual(calls, [3])
+        self.assertEqual(raised.exception.status_code, 502)
+        self.assertEqual(raised.exception.detail, "Could not connect to Open-Meteo")
+
+    async def test_mismatched_coordinate_counts_are_rejected(self) -> None:
+        with self.assertRaises(HTTPException) as raised:
+            await weather_api._fetch_open_meteo_current(
+                object(), {"latitude": "10,11", "longitude": "70"}
+            )
+        self.assertEqual(raised.exception.status_code, 422)
+
+    async def test_more_than_thirty_locations_are_rejected(self) -> None:
+        with self.assertRaises(HTTPException) as raised:
+            await weather_api._fetch_open_meteo_current(object(), params_for(31))
+        self.assertEqual(raised.exception.status_code, 422)
 
 
 class WeatherGeographyTests(unittest.TestCase):
