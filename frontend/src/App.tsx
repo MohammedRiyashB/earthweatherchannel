@@ -178,12 +178,33 @@ const [section,setSection]=useState("Weather Report");const [page,setPage]=useSt
 
  useEffect(()=>{
   if(!local)return;
-  const {lat,lon,name,region}=local;
-  const refreshLocal=async()=>{try{const r=await fetch(`${API}/api/weather?latitude=${lat}&longitude=${lon}`,{cache:"no-store"});if(!r.ok)return;const d=await r.json();setLocal(prev=>{const next=prev?{...prev,name,region,lat,lon,current:d.current||prev.current,loading:false,error:false}:prev;if(next)writeCache("local",next);return next;});}catch{/* retain the last good location report */}};
+  const {lat,lon}=local;
+  let active=true;
+  const refreshLocal=async()=>{
+   const controller=new AbortController();
+   const timeout=window.setTimeout(()=>controller.abort(),12000);
+   try{
+    const response=await fetch(`${API}/api/weather?latitude=${lat}&longitude=${lon}`,{cache:"no-store",signal:controller.signal});
+    if(!response.ok)throw new Error(`Weather service returned HTTP ${response.status}`);
+    const data=await response.json();
+    if(!active)return;
+    setLocal(previous=>{
+     if(!previous||Math.abs(previous.lat-lat)>0.001||Math.abs(previous.lon-lon)>0.001)return previous;
+     const next={...previous,current:data.current||previous.current,loading:false,error:!data.current};
+     writeCache("local",next);return next;
+    });
+   }catch{
+    if(!active)return;
+    setLocal(previous=>{
+     if(!previous||Math.abs(previous.lat-lat)>0.001||Math.abs(previous.lon-lon)>0.001)return previous;
+     const next={...previous,loading:false,error:!previous.current};writeCache("local",next);return next;
+    });
+   }finally{window.clearTimeout(timeout);}
+  };
   void refreshLocal();
   const id=window.setInterval(()=>void refreshLocal(),60*1000);
-  return()=>window.clearInterval(id);
- },[local?.lat,local?.lon,local?.name,local?.region]);
+  return()=>{active=false;window.clearInterval(id);};
+ },[local?.lat,local?.lon]);
 
  const active=cities.filter(c=>c.current);
  const hottest=useMemo(()=>[...active].sort((a,b)=>(b.current?.temperature_2m??-100)-(a.current?.temperature_2m??-100))[0],[active]);
