@@ -7,7 +7,8 @@ This repository starts as an MVP foundation. It does **not** claim that every we
 
 ## Stack
 - Frontend: React, TypeScript, Vite, CesiumJS
-- Satellite imagery: NASA GIBS WMTS (public imagery; time availability varies)
+- Satellite imagery: NASA GIBS WMTS (VIIRS global daily imagery + GOES-East/West GeoColor and GOES-East infrared NRT layers where available)
+- Precipitation radar: RainViewer past radar frames (personal / educational use only; incomplete coverage; no free nowcast after 2026-01-01)
 - Global weather: Open-Meteo (model-based forecast/current conditions)
 - Backend: FastAPI with source metadata and weather proxy
 - US official alerts: NOAA/NWS API where supported (US coverage only)
@@ -49,4 +50,4 @@ Set `VITE_API_BASE_URL=http://localhost:8000` in `frontend/.env`.
 - Never use this site as the sole source for emergency decisions. Follow local meteorological authorities.
 
 ## Deployment
-Deploy the frontend as a static Vite site and the backend as a separate Python service. Configure the frontend API URL and enable HTTPS/CORS for the exact production domain.
+A Render Blueprint is provided in `render.yaml`. Review the service settings and set a real `EARTH_WEATHER_USER_AGENT` contact value before relying on NOAA/NWS requests. Deploy the frontend as a static Vite site and the backend as a separate Python service. Configure the frontend API URL and restrict backend CORS to the exact production domain.
