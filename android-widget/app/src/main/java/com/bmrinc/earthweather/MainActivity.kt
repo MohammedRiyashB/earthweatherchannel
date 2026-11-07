@@ -182,7 +182,9 @@ class MainActivity : ComponentActivity() {
                     morningBriefingHour = morningBriefingHour,
                     onMorningBriefing = { setMorningBriefing(it) },
                     onMorningHour = { morningBriefingHour = it; getSharedPreferences("earth_weather_app", MODE_PRIVATE).edit().putInt("morning_briefing_hour", it).apply(); if (morningBriefingEnabled) MorningBriefingWorker.schedule(this) },
-                    onSearch = { searchCities(cityQuery) }
+                    onSearch = { searchCities(cityQuery) },
+                    liveWeatherEnabled = liveWeatherEnabled,
+                    onLiveWeather = { setLiveWeatherNotifications(it) }
                 )
             }
         }
