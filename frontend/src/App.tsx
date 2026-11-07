@@ -52,22 +52,23 @@ function SatelliteDashboard(){
  const [region,setRegion]=useState("india");
  const [refresh,setRefresh]=useState(0);
  const [imageError,setImageError]=useState(false);
+ const [imageLoaded,setImageLoaded]=useState(false);
  const areas={india:{label:"India & Indian Ocean",bbox:"65,5,100,40"},asia:{label:"Asia-Pacific",bbox:"75,-15,155,55"},world:{label:"Global view",bbox:"-180,-75,180,75"}} as const;
  const area=areas[region as keyof typeof areas]||areas.india;
  const day=new Date().toISOString().slice(0,10);
  const imageUrl=`https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi?SERVICE=WMS&REQUEST=GetMap&VERSION=1.1.1&LAYERS=${encodeURIComponent(layer)}&STYLES=&SRS=EPSG:4326&BBOX=${area.bbox}&WIDTH=1200&HEIGHT=720&FORMAT=image/jpeg&TIME=${day}`;
  useEffect(()=>{let active=true;fetch(`${API}/api/satellites/catalog`,{cache:"no-store"}).then(r=>{if(!r.ok)throw new Error(`HTTP ${r.status}`);return r.json()}).then(d=>{if(active)setCatalog(d)}).catch(e=>{if(active)setCatalogError(e instanceof Error?e.message:"Satellite catalogue unavailable")});return()=>{active=false}},[refresh]);
- useEffect(()=>{setImageError(false)},[layer,region,refresh]);
+ useEffect(()=>{setImageError(false);setImageLoaded(false)},[layer,region,refresh]);
  const mission=layer.startsWith("MODIS_Terra")?"NASA Terra MODIS":layer.startsWith("MODIS_Aqua")?"NASA Aqua MODIS":"NASA / NOAA Suomi-NPP VIIRS";
  return <main className="news-main satellite-page">
   <div className="news-toolbar"><div><span className="eyebrow">DIRECT SATELLITE IMAGERY · NASA EOSDIS</span><h1>Satellite Earth Monitor</h1><p>Live public satellite imagery retrieved directly from NASA Global Imagery Browse Services (GIBS).</p></div><button className="refresh-button" onClick={()=>setRefresh(x=>x+1)}>↻ Refresh satellite data</button></div>
-  <div className="satellite-status"><span className="satellite-live-dot"/> NASA GIBS WMS <strong>{catalog?.live_imagery?.status==="live"?"CONNECTED":"CHECKING CONNECTION"}</strong><span>{catalog?.live_imagery?.retrieved_layers??"—"} live catalogue layers discovered</span></div>
+  <div className="satellite-status"><span className="satellite-live-dot"/> NASA GIBS WMS <strong>{catalog?.live_imagery?.status==="live"||imageLoaded?"CONNECTED":"CHECKING CONNECTION"}</strong><span>{catalog?.live_imagery?.retrieved_layers??"—"} live catalogue layers discovered</span></div>
   <section className="satellite-viewer">
    <div className="satellite-controls">
     <label>Satellite sensor<select value={layer} onChange={e=>setLayer(e.target.value)}><option value="VIIRS_SNPP_CorrectedReflectance_TrueColor">Suomi-NPP VIIRS · True colour</option><option value="MODIS_Terra_CorrectedReflectance_TrueColor">Terra MODIS · True colour</option><option value="MODIS_Aqua_CorrectedReflectance_TrueColor">Aqua MODIS · True colour</option></select></label>
     <label>Viewing region<select value={region} onChange={e=>setRegion(e.target.value)}><option value="india">India & Indian Ocean</option><option value="asia">Asia-Pacific</option><option value="world">Global view</option></select></label>
    </div>
-   <div className="satellite-image-frame">{imageError?<div className="satellite-image-error">Satellite image is temporarily unavailable for this layer or date. Try refreshing or selecting another sensor.</div>:<img key={imageUrl} src={imageUrl} alt={`${mission} satellite imagery over ${area.label}`} onError={()=>setImageError(true)}/>}<div className="satellite-image-caption"><span>{mission}</span><span>{area.label}</span><span>Requested observation date: {day} UTC</span></div></div>
+   <div className="satellite-image-frame">{imageError?<div className="satellite-image-error">Satellite image is temporarily unavailable for this layer or date. Try refreshing or selecting another sensor.</div>:<img key={imageUrl} src={imageUrl} alt={`${mission} satellite imagery over ${area.label}`} onLoad={()=>setImageLoaded(true)} onError={()=>setImageError(true)}/>}<div className="satellite-image-caption"><span>{mission}</span><span>{area.label}</span><span>Requested observation date: {day} UTC</span></div></div>
    <div className="satellite-image-meta"><span>Source: NASA EOSDIS GIBS · Public WMS imagery</span><a href="https://nasa-gibs.github.io/gibs-api-docs/" target="_blank" rel="noreferrer">GIBS documentation ↗</a></div>
   </section>
   <section className="satellite-info-grid"><article><span className="eyebrow">CONNECTED DATA FEED</span><h2>NASA GIBS</h2><p>Actual map imagery is requested from NASA's public WMS service. The selected layer is served by the named satellite instrument; this is not a simulated image.</p><a href="https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi?SERVICE=WMS&REQUEST=GetCapabilities&VERSION=1.3.0" target="_blank" rel="noreferrer">Live WMS capabilities ↗</a></article><article><span className="eyebrow">OBSERVATION LIMITATIONS</span><h2>Not a thermometer</h2><p>True-colour imagery shows clouds, land and ocean appearance. It does not directly provide local air temperature, relative humidity or surface wind. Those require separate calibrated satellite retrieval products or observation datasets.</p></article></section>
