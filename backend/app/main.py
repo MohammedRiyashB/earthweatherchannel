@@ -110,7 +110,7 @@ async def wind_grid() -> dict[str, Any]:
     params = {
         "latitude": ",".join(map(str, lats)),
         "longitude": ",".join(map(str, lons)),
-        "current": "wind_speed_10m,wind_direction_10m,wind_gusts_10m",
+        "current": "wind_speed_10m,wind_direction_10m,wind_gusts_10m,cloud_cover,relative_humidity_2m,precipitation",
         "timezone": "UTC",
     }
     try:
@@ -124,7 +124,7 @@ async def wind_grid() -> dict[str, Any]:
             current = row.get("current") or {}
             speed, direction = current.get("wind_speed_10m"), current.get("wind_direction_10m")
             if speed is not None and direction is not None:
-                points.append({"lat":lat,"lon":lon,"speed_kmh":speed,"direction_deg":direction,"gust_kmh":current.get("wind_gusts_10m")})
+                points.append({"lat":lat,"lon":lon,"speed_kmh":speed,"direction_deg":direction,"gust_kmh":current.get("wind_gusts_10m"),"cloud_cover_pct":current.get("cloud_cover"),"humidity_pct":current.get("relative_humidity_2m"),"precipitation_mm":current.get("precipitation")})
         return {"source":"Open-Meteo global numerical weather models","retrieved_at":utc_now(),"resolution_degrees":30,"points":points,"note":"Coarse global model samples. Particle paths interpolate between samples for visualization; not direct anemometer observations."}
     except (httpx.HTTPError, ValueError) as exc:
         raise HTTPException(status_code=502, detail=f"Global wind model unavailable: {exc.__class__.__name__}") from exc
