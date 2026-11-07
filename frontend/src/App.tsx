@@ -54,7 +54,7 @@ const solarPhase=(lat:number,lon:number,time?:string|number,isDay?:number)=>{
 };
 const icon=(c?:number)=>c===0?"☀":c===1?"🌤":c===2?"⛅":c===3?"☁":c!=null&&[45,48].includes(c)?"🌫":c!=null&&[95,96,99].includes(c)?"⛈":c!=null&&[71,73,75,77,85,86].includes(c)?"❄":c!=null&&[51,53,55,56,57,61,63,65,66,67,80,81,82].includes(c)?"🌧":"—";
 const stamp=(s?:string)=>{if(!s)return "—";const d=new Date(s);return Number.isNaN(d.getTime())?"Recently indexed":d.toLocaleString(undefined,{dateStyle:"medium",timeStyle:"short"});};
-const modelTime=(s?:string)=>{if(!s)return "—";const d=new Date(s.endsWith("Z")?s:s+"Z");return Number.isNaN(d.getTime())?"—":d.toLocaleString(undefined,{dateStyle:"medium",timeStyle:"short"});};
+const modelTime=(s?:string|number)=>{if(s==null)return "—";const d=typeof s==="number"?new Date(s<1e12?s*1000:s):new Date(s.endsWith("Z")?s:s+"Z");return Number.isNaN(d.getTime())?"—":d.toLocaleString(undefined,{dateStyle:"medium",timeStyle:"short"});};
 const formatMetric=(value?:number)=>typeof value==="number"&&Number.isFinite(value)?String(Number(value.toFixed(1))):"—";
 const published=(value?:string)=>{
  if(!value)return "Recently indexed";
