@@ -158,7 +158,7 @@ const [section,setSection]=useState("Weather Report");const [page,setPage]=useSt
    if(india.ok){const d=await india.json();setIndiaNews(d.articles||[]);writeCache("india-news",d.articles||[]);}if(world.ok){const d=await world.json();setWorldNews(d.articles||[]);writeCache("world-news",d.articles||[]);}
   }catch{setNotice("Some live weather or headline feeds are temporarily unavailable.");}
  };
- useEffect(()=>{void refreshPopularCities();void refreshFeeds();const newsId=window.setInterval(()=>void refreshFeeds(),5*60*1000);const clockId=window.setInterval(()=>setClock(new Date()),1000);return()=>{window.clearInterval(newsId);window.clearInterval(clockId)}},[]);
+ useEffect(()=>{if(!visitorLocation)void refreshPopularCities();void refreshFeeds();const newsId=window.setInterval(()=>void refreshFeeds(),5*60*1000);const clockId=window.setInterval(()=>setClock(new Date()),1000);return()=>{window.clearInterval(newsId);window.clearInterval(clockId)}},[]);
 
  useEffect(()=>{
   if(!local)return;
