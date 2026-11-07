@@ -99,6 +99,7 @@ class MainActivity : ComponentActivity() {
     private var cityResults by mutableStateOf<List<WeatherPlace>>(emptyList())
     private var searching by mutableStateOf(false)
     private var searchError by mutableStateOf("")
+    private var citySearchVersion = 0
     private var savedCities by mutableStateOf<List<WeatherPlace>>(emptyList())
     private var celsius by mutableStateOf(true)
     private var notificationsEnabled by mutableStateOf(false)
@@ -146,7 +147,7 @@ class MainActivity : ComponentActivity() {
                     onRefresh = { selectedPlace?.let { loadWeather(it) } ?: requestLocation() },
                     onSwipeCity = { swipeSavedCity(it) },
                     onDetectLocation = { requestLocation() },
-                    query = cityQuery, onQuery = { cityQuery = it },
+                    query = cityQuery, onQuery = { updateCityQuery(it) },
                     results = cityResults, searching = searching, searchError = searchError,
                     savedCities = savedCities,
                     onSelect = { choosePlace(it) }, onSave = { saveCity(it) }, onRemove = { removeCity(it) },
@@ -332,21 +333,34 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun updateCityQuery(value: String) {
+        cityQuery = value
+        citySearchVersion++
+        if (value.trim().length < 2) {
+            cityResults = emptyList()
+            searching = false
+            searchError = ""
+        } else {
+            cityResults = emptyList()
+        }
+    }
+
     private fun searchCities(query: String) {
         val clean = query.trim()
         if (clean.length < 2) {
             cityResults = emptyList(); searching = false; searchError = ""; return
         }
+        val requestVersion = citySearchVersion
         lifecycleScope.launch {
             searching = true
             searchError = ""
             val result = runCatching { EarthWeatherApi.search(clean) }
-            if (cityQuery.trim() == clean) {
+            if (requestVersion == citySearchVersion && cityQuery.trim() == clean) {
                 cityResults = result.getOrDefault(emptyList())
                 if (result.isFailure) searchError = result.exceptionOrNull()?.message ?: "Location search failed."
                 else if (cityResults.isEmpty()) searchError = "No matching cities found."
+                searching = false
             }
-            searching = false
         }
     }
 
