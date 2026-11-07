@@ -12,46 +12,27 @@ def params_for(points: int) -> dict[str, str]:
     return {"latitude": ",".join(latitudes), "longitude": ",".join(longitudes)}
 
 
-class WeatherProviderFailoverTests(unittest.IsolatedAsyncioTestCase):
-    async def test_primary_provider_is_selected_when_healthy(self):
+class OpenMeteoProviderTests(unittest.IsolatedAsyncioTestCase):
+    async def test_open_meteo_is_the_free_primary_provider(self):
         async def fake(_client, provider, lat, lon):
             return {"provider": provider, "current": {"temperature_2m": 28.0}}
-        with patch.dict(os.environ, {"WEATHERAPI_KEY":"x", "OPENWEATHER_API_KEY":"y", "METNORWAY_USER_AGENT":"EarthWeather test contact https://example.com"}), \
-             patch.object(weather_api, "_fetch_provider_current", new=fake):
+        with patch.object(weather_api, "_fetch_provider_current", new=fake):
             result = await weather_api._fetch_weather_current(object(), params_for(1))
-        self.assertEqual(result["provider"], "weatherapi")
+        self.assertEqual(result["provider"], "open-meteo")
         self.assertEqual(result["temperature_2m"], 28.0)
 
-    async def test_primary_failure_falls_back_to_secondary(self):
+    async def test_open_meteo_failure_returns_clear_503_without_silent_provider_switch(self):
         async def fake(_client, provider, lat, lon):
-            if provider == "weatherapi":
-                raise weather_api.httpx.ConnectError("primary down")
-            return {"provider": provider, "current": {"temperature_2m": 27.0}}
-        with patch.dict(os.environ, {"WEATHERAPI_KEY":"x", "OPENWEATHER_API_KEY":"y", "METNORWAY_USER_AGENT":"EarthWeather test contact https://example.com"}), \
-             patch.object(weather_api, "_fetch_provider_current", new=fake):
-            result = await weather_api._fetch_weather_current(object(), params_for(1))
-        self.assertEqual(result["provider"], "openweather")
-        self.assertEqual(result["temperature_2m"], 27.0)
-
-    async def test_both_paid_key_providers_down_falls_back_to_met_norway(self):
-        async def fake(_client, provider, lat, lon):
-            if provider != "metnorway":
-                raise weather_api.httpx.ConnectError("provider down")
-            return {"provider": provider, "current": {"temperature_2m": 26.0}}
-        with patch.dict(os.environ, {"WEATHERAPI_KEY":"x", "OPENWEATHER_API_KEY":"y", "METNORWAY_USER_AGENT":"EarthWeather test contact https://example.com"}), \
-             patch.object(weather_api, "_fetch_provider_current", new=fake):
-            result = await weather_api._fetch_weather_current(object(), params_for(1))
-        self.assertEqual(result["provider"], "metnorway")
-        self.assertEqual(result["temperature_2m"], 26.0)
-
-    async def test_all_unconfigured_providers_return_clear_503(self):
-        with patch.dict(os.environ, {"WEATHERAPI_KEY":"", "OPENWEATHER_API_KEY":"", "METNORWAY_USER_AGENT":""}, clear=False):
-            for key in ("WEATHERAPI_KEY", "OPENWEATHER_API_KEY", "METNORWAY_USER_AGENT"):
-                os.environ.pop(key, None)
+            raise weather_api.httpx.ConnectError("Open-Meteo unavailable")
+        with patch.object(weather_api, "_fetch_provider_current", new=fake):
             with self.assertRaises(HTTPException) as raised:
                 await weather_api._fetch_weather_current(object(), params_for(1))
         self.assertEqual(raised.exception.status_code, 503)
-        self.assertEqual(len(raised.exception.detail["provider_failures"]), 3)
+        self.assertEqual(raised.exception.detail["provider_failures"][0]["provider"], "open-meteo")
+
+    async def test_open_meteo_is_free_and_needs_no_environment_key(self):
+        with patch.dict(os.environ, {}, clear=True):
+            self.assertTrue(weather_api._provider_is_configured("open-meteo"))
 
     async def test_coordinate_count_and_ranges_are_validated(self):
         with self.assertRaises(HTTPException) as raised:
@@ -61,10 +42,34 @@ class WeatherProviderFailoverTests(unittest.IsolatedAsyncioTestCase):
     async def test_batch_keeps_coordinate_order(self):
         async def fake(_client, provider, lat, lon):
             return {"provider": provider, "current": {"temperature_2m": lat}}
-        with patch.dict(os.environ, {"WEATHERAPI_KEY":"x"}), patch.object(weather_api, "_fetch_provider_current", new=fake):
+        with patch.object(weather_api, "_fetch_provider_current", new=fake):
             result = await weather_api._fetch_weather_current(object(), params_for(3))
         self.assertEqual([row["current"]["temperature_2m"] for row in result], [-6.0, -5.0, -4.0])
 
+    async def test_open_meteo_adapter_maps_all_live_weather_fields(self):
+        class FakeResponse:
+            def raise_for_status(self): pass
+            def json(self):
+                return {
+                    "current": {"time":"2026-11-07T17:00","temperature_2m":25.8,"relative_humidity_2m":91,
+                        "apparent_temperature":31.2,"is_day":0,"precipitation":0.0,"rain":0.0,"showers":0.0,
+                        "weather_code":1,"cloud_cover":24,"pressure_msl":1014,"wind_speed_10m":5.9,
+                        "wind_direction_10m":337,"wind_gusts_10m":13.0},
+                    "hourly":{"time":["2026-11-07T17:00"],"rain":[0.2]},
+                }
+        class FakeClient:
+            async def get(self, url, params):
+                self.url=url; self.params=params; return FakeResponse()
+        client=FakeClient()
+        result=await weather_api._fetch_provider_current(client,"open-meteo",13.08,80.27)
+        current=result["current"]
+        self.assertEqual(current["temperature_2m"],25.8)
+        self.assertEqual(current["relative_humidity_2m"],91)
+        self.assertEqual(current["wind_speed_10m"],5.9)
+        self.assertEqual(current["wind_direction_10m"],337)
+        self.assertEqual(current["cloud_cover"],24)
+        self.assertEqual(current["rainfall_rate_mm_h"],0.2)
+        self.assertEqual(result["provider"],"open-meteo")
 
 class WeatherNormalizationTests(unittest.TestCase):
     def test_weatherapi_current_normalizes_to_common_schema(self):
