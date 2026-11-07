@@ -125,7 +125,7 @@ const [section,setSection]=useState("Weather Report");const [page,setPage]=useSt
     name:item.name,
     country:item.country,
     region:item.scope==="national"?`${item.country} · National`:item.scope==="regional"?`${item.country} · Regional reference`:`${item.country} · Nearby international`,
-    lat:item.lat,lon:item.lon,current:item.current||{},loading:false,error:!item.current
+    lat:item.lat,lon:item.lon,current:item.current||{},loading:false,error:!hasValidCurrent(item.current)
    }));
    setCities(rows);writeCache("cities",rows);setPersonalizedCities(true);writeCache("cities-personalized",true);const timestamp=payload.retrieved_at||new Date().toISOString();setUpdated(timestamp);writeCache("cities-updated",timestamp);
   }catch{
@@ -143,7 +143,7 @@ const [section,setSection]=useState("Weather Report");const [page,setPage]=useSt
    const payload=await response.json();
    if(!Array.isArray(payload.reports)||payload.reports.length!==CITIES.length)throw new Error("Incomplete popular city response");
    if(requestVersion!==cityRequestVersion.current)return;
-   const rows=CITIES.map((city,index)=>({...city,current:payload.reports[index]?.current||{},loading:false,error:!payload.reports[index]?.current}));setCities(rows);writeCache("cities",rows);
+   const rows=CITIES.map((city,index)=>({...city,current:payload.reports[index]?.current||{},loading:false,error:!hasValidCurrent(payload.reports[index]?.current)}));setCities(rows);writeCache("cities",rows);
    setPersonalizedCities(false);setUpdated(payload.retrieved_at||new Date().toISOString());
   }catch{
    // Keep cached reports; avoid a slow fan-out of 12 individual requests.
@@ -190,7 +190,8 @@ const [section,setSection]=useState("Weather Report");const [page,setPage]=useSt
     if(!active)return;
     setLocal(previous=>{
      if(!previous||Math.abs(previous.lat-lat)>0.001||Math.abs(previous.lon-lon)>0.001)return previous;
-     const next={...previous,current:data.current||previous.current,loading:false,error:!data.current};
+     const valid=hasValidCurrent(data.current);
+     const next={...previous,current:valid?data.current:previous.current,loading:false,error:!valid&&!previous.current};
      writeCache("local",next);return next;
     });
    }catch{
@@ -206,7 +207,8 @@ const [section,setSection]=useState("Weather Report");const [page,setPage]=useSt
   return()=>{active=false;window.clearInterval(id);};
  },[local?.lat,local?.lon]);
 
- const active=cities.filter(c=>c.current);
+ const hasValidCurrent=(value?:Current)=>typeof value?.temperature_2m==="number"&&Number.isFinite(value.temperature_2m);
+ const active=cities.filter(c=>hasValidCurrent(c.current));
  const hottest=useMemo(()=>[...active].sort((a,b)=>(b.current?.temperature_2m??-100)-(a.current?.temperature_2m??-100))[0],[active]);
  const headlines=newsRegion==="india"?indiaNews:worldNews;
  const nationalCities=cities.filter(city=>city.region.endsWith("· National"));
@@ -233,7 +235,7 @@ const [section,setSection]=useState("Weather Report");const [page,setPage]=useSt
       <div><h3>{local.name}</h3><p>{local.region}</p></div>
       <div className="local-temperature"><span>{icon(local.current?.weather_code)}</span><strong>{local.current?.temperature_2m!=null?Math.round(local.current.temperature_2m)+"°C":"—"}</strong><small>{weatherLabel(local.current?.weather_code)}</small></div>
      </div>
-     {local.loading&&!local.current&&<p className="local-weather-foot">Getting current weather for this location…</p>}{local.error&&!local.current&&<p className="local-weather-foot">Weather data is temporarily unavailable. Your detected location is still shown.</p>}<div className="local-weather-stats">
+     {local.loading&&!local.current&&<p className="local-weather-foot">Getting current weather for this location…</p>}{local.error&&!local.current&&<p className="local-weather-foot">Weather data is temporarily unavailable. Your detected location is still shown.</p>}{locationMessage&&<p className="local-weather-foot">{locationMessage}</p>}<div className="local-weather-stats">
       <div><span>Humidity</span><strong>{local.current?.relative_humidity_2m!=null?local.current.relative_humidity_2m+"%":"—"}</strong></div>
       <div><span>Wind</span><strong>{local.current?.wind_speed_10m!=null?local.current.wind_speed_10m+" km/h":"—"}</strong></div>
       <div><span>Cloud cover</span><strong>{local.current?.cloud_cover!=null?local.current.cloud_cover+"%":"—"}</strong></div>
