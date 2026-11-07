@@ -17,6 +17,60 @@ const CITIES:Place[]=[
 {name:"São Paulo",region:"Brazil",lat:-23.5505,lon:-46.6333},{name:"Erode",region:"Tamil Nadu, India",lat:11.341,lon:77.7172}
 ];
 
+const TOP_CITIES_BY_COUNTRY:Record<string,Place[]> = {
+ IN:[
+  {name:"New Delhi",region:"Delhi, India",country:"India",country_code:"IN",state:"Delhi",lat:28.6139,lon:77.209},
+  {name:"Kolkata",region:"West Bengal, India",country:"India",country_code:"IN",state:"West Bengal",lat:22.5726,lon:88.3639},
+  {name:"Mumbai",region:"Maharashtra, India",country:"India",country_code:"IN",state:"Maharashtra",lat:19.076,lon:72.8777},
+  {name:"Chennai",region:"Tamil Nadu, India",country:"India",country_code:"IN",state:"Tamil Nadu",lat:13.0827,lon:80.2707},
+  {name:"Lucknow",region:"Uttar Pradesh, India",country:"India",country_code:"IN",state:"Uttar Pradesh",lat:26.8467,lon:80.9462}
+ ],
+ US:[
+  {name:"New York",region:"New York, United States",country:"United States",country_code:"US",lat:40.7128,lon:-74.006},
+  {name:"Los Angeles",region:"California, United States",country:"United States",country_code:"US",state:"California",lat:34.0522,lon:-118.2437},
+  {name:"Chicago",region:"Illinois, United States",country:"United States",country_code:"US",state:"Illinois",lat:41.8781,lon:-87.6298},
+  {name:"Houston",region:"Texas, United States",country:"United States",country_code:"US",state:"Texas",lat:29.7604,lon:-95.3698},
+  {name:"San Francisco",region:"California, United States",country:"United States",country_code:"US",state:"California",lat:37.7749,lon:-122.4194}
+ ],
+ GB:[
+  {name:"London",region:"England, United Kingdom",country:"United Kingdom",country_code:"GB",state:"England",lat:51.5072,lon:-0.1276},
+  {name:"Manchester",region:"England, United Kingdom",country:"United Kingdom",country_code:"GB",state:"England",lat:53.4808,lon:-2.2426},
+  {name:"Birmingham",region:"England, United Kingdom",country:"United Kingdom",country_code:"GB",state:"England",lat:52.4862,lon:-1.8904},
+  {name:"Glasgow",region:"Scotland, United Kingdom",country:"United Kingdom",country_code:"GB",state:"Scotland",lat:55.8642,lon:-4.2518},
+  {name:"Liverpool",region:"England, United Kingdom",country:"United Kingdom",country_code:"GB",state:"England",lat:53.4084,lon:-2.9916}
+ ],
+ AE:[
+  {name:"Dubai",region:"United Arab Emirates",country:"United Arab Emirates",country_code:"AE",lat:25.2048,lon:55.2708},
+  {name:"Abu Dhabi",region:"United Arab Emirates",country:"United Arab Emirates",country_code:"AE",lat:24.4539,lon:54.3773},
+  {name:"Sharjah",region:"United Arab Emirates",country:"United Arab Emirates",country_code:"AE",lat:25.3463,lon:55.4209},
+  {name:"Ajman",region:"United Arab Emirates",country:"United Arab Emirates",country_code:"AE",lat:25.4052,lon:55.5136},
+  {name:"Al Ain",region:"United Arab Emirates",country:"United Arab Emirates",country_code:"AE",lat:24.1917,lon:55.7606}
+ ],
+ AU:[
+  {name:"Sydney",region:"New South Wales, Australia",country:"Australia",country_code:"AU",state:"New South Wales",lat:-33.8688,lon:151.2093},
+  {name:"Melbourne",region:"Victoria, Australia",country:"Australia",country_code:"AU",state:"Victoria",lat:-37.8136,lon:144.9631},
+  {name:"Brisbane",region:"Queensland, Australia",country:"Australia",country_code:"AU",state:"Queensland",country_code:"AU",lat:-27.4698,lon:153.0251},
+  {name:"Perth",region:"Western Australia, Australia",country:"Australia",country_code:"AU",state:"Western Australia",lat:-31.9505,lon:115.8605},
+  {name:"Adelaide",region:"South Australia, Australia",country:"Australia",country_code:"AU",state:"South Australia",lat:-34.9285,lon:138.6007}
+ ],
+ SG:[
+  {name:"Singapore",region:"Singapore",country:"Singapore",country_code:"SG",lat:1.3521,lon:103.8198}
+ ]
+};
+const WORLD_TOP_CITIES:Place[]=[
+ {name:"New York",region:"United States",country:"United States",country_code:"US",lat:40.7128,lon:-74.006},
+ {name:"Paris",region:"France",country:"France",country_code:"FR",lat:48.8566,lon:2.3522},
+ {name:"London",region:"United Kingdom",country:"United Kingdom",country_code:"GB",lat:51.5072,lon:-0.1276},
+ {name:"Tokyo",region:"Japan",country:"Japan",country_code:"JP",lat:35.6762,lon:139.6503},
+ {name:"Rome",region:"Italy",country:"Italy",country_code:"IT",lat:41.9028,lon:12.4964},
+ {name:"Dubai",region:"United Arab Emirates",country:"United Arab Emirates",country_code:"AE",lat:25.2048,lon:55.2708},
+ {name:"Moscow",region:"Russia",country:"Russia",country_code:"RU",lat:55.7558,lon:37.6173},
+ {name:"Sydney",region:"Australia",country:"Australia",country_code:"AU",lat:-33.8688,lon:151.2093},
+ {name:"Singapore",region:"Singapore",country:"Singapore",country_code:"SG",lat:1.3521,lon:103.8198},
+ {name:"Beijing",region:"China",country:"China",country_code:"CN",lat:39.9042,lon:116.4074},
+ {name:"Athens",region:"Greece",country:"Greece",country_code:"GR",lat:37.9838,lon:23.7275}
+];
+
 const CACHE_PREFIX="earth-weather-v2:";
 function readCache<T>(key:string,fallback:T):T{try{const raw=localStorage.getItem(CACHE_PREFIX+key);if(!raw)return fallback;const parsed=JSON.parse(raw);return parsed?.value??fallback;}catch{return fallback;}}
 function writeCache<T>(key:string,value:T){try{localStorage.setItem(CACHE_PREFIX+key,JSON.stringify({value,savedAt:Date.now()}));}catch{/* storage may be unavailable or full */}}
@@ -197,6 +251,12 @@ export default function App(){
  const [cities,setCities]=useState<Place[]>(()=>readCache<Place[]>("cities",CITIES.map(x=>({...x,loading:true}))));
  const [storms,setStorms]=useState<Storm[]>(()=>readCache<Storm[]>("storms",[]));
   const [updated,setUpdated]=useState<string>(()=>readCache<string>("cities-updated",""));const [busy,setBusy]=useState(false);const [query,setQuery]=useState("");
+ const [locationPickerOpen,setLocationPickerOpen]=useState(false);
+ const [locationSearchResults,setLocationSearchResults]=useState<Place[]>([]);
+ const [locationSearching,setLocationSearching]=useState(false);
+ const [locationSelectionPending,setLocationSelectionPending]=useState("");
+ const [locationSearchError,setLocationSearchError]=useState("");
+ const locationSearchVersion=useRef(0);
 const [section,setSection]=useState("Weather Report");const page:"home"|SitePageId=resolveSitePage(window.location.pathname)??"home";const [isSearchLocation,setIsSearchLocation]=useState<boolean>(()=>readCache<Place|null>("local",null)?.source==="search");
  const [user,setUser]=useState<User|null>(null);const [notice,setNotice]=useState("");
  const [notificationsEnabled,setNotificationsEnabled]=useState(()=>{
@@ -451,19 +511,114 @@ const [section,setSection]=useState("Weather Report");const page:"home"|SitePage
  const regionalCities=cities.filter(city=>city.region.endsWith("· Regional reference"));
  const internationalCities=cities.filter(city=>city.region.endsWith("· Nearby international"));
  const renderCityCards=(items:Place[])=>items.map(c=><article className={`city-card weather-scene ${weatherScene(c.current?.weather_code,c.current?.cloud_cover)} ${solarPhase(c.lat,c.lon,c.current?.time,c.current?.is_day)} ${cloudDensity(c.current?.cloud_cover)}`} key={c.name}><span className="weather-sky-art" aria-hidden="true"><i/><i/><i/></span><div className="city-top"><div><small>{c.region}</small><h3>{c.name}</h3></div><span className="weather-icon">{icon(c.current?.weather_code)}</span></div>{c.loading?<div className="city-loading">Loading report…</div>:c.error?<div className="city-loading">Report temporarily unavailable</div>:<><div className="city-temp">{Math.round(c.current?.temperature_2m??0)}<sup>°C</sup></div><div className="city-condition">{weatherLabel(c.current?.weather_code)}</div><div className="city-stats"><span>Humidity <b>{c.current?.relative_humidity_2m??"—"}%</b></span><span>Wind <b>{formatMetric(c.current?.wind_speed_10m)} km/h</b></span><span>Cloud <b>{c.current?.cloud_cover??"—"}%</b></span></div><div className="city-observed">{modelTime(c.current?.time)}</div></>}</article>);
- const search=async()=>{if(!query.trim())return;const requestVersion=++locationRequestVersion.current;try{const r=await fetchBounded(`https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=1&q=${encodeURIComponent(query)}`,{headers:{"Accept-Language":"en"}},10000);const d=await r.json();if(requestVersion!==locationRequestVersion.current)return;if(!d.length)throw new Error("No matching place found");const address=d[0].address||{};const country=address.country||d[0].display_name.split(",").map((part:string)=>part.trim()).filter(Boolean).pop();const state=address.state||address.region;const district=address.state_district||address.county||address.municipality;const p:Place={name:d[0].name||query,region:[state,country].filter(Boolean).join(", ")||d[0].display_name,source:"search",country,country_code:address.country_code?.toUpperCase(),state,district,lat:Number(d[0].lat),lon:Number(d[0].lon)};const w=await fetchBounded(`${API}/api/weather?latitude=${p.lat}&longitude=${p.lon}`,{},14000);if(requestVersion!==locationRequestVersion.current)return;if(!w.ok)throw new Error("Weather feed unavailable");const wd=await w.json();if(requestVersion!==locationRequestVersion.current)return;const selected={...p,current:wd.current||{}};setLocal(selected);writeCache("local",selected);setVisitorLocation(p);writeCache("visitor-location",p);setIsSearchLocation(true);setLocationStatus("ready");setLocationMessage("");setNotice("");}catch(e){if(requestVersion!==locationRequestVersion.current)return;setNotice(e instanceof Error?e.message:"Search failed.");}};
+ const currentLocation=local||visitorLocation;
+ const currentCountryCode=(currentLocation?.country_code||"IN").toUpperCase();
+ const topCities=TOP_CITIES_BY_COUNTRY[currentCountryCode]||WORLD_TOP_CITIES.slice(0,5);
+ const search=async()=>{
+  const term=query.trim();
+  if(term.length<2){setLocationSearchResults([]);setLocationSearchError("Enter at least two characters to search.");return;}
+  const requestVersion=++locationSearchVersion.current;
+  setLocationSearching(true);setLocationSearchError("");
+  try{
+   const response=await fetchBounded(`https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&limit=6&q=${encodeURIComponent(term)}`,{headers:{"Accept-Language":"en"}},12000);
+   if(!response.ok)throw new Error(`Location search returned HTTP ${response.status}`);
+   const data=await response.json();
+   if(requestVersion!==locationSearchVersion.current)return;
+   const results:Place[]=(Array.isArray(data)?data:[]).map((item:any)=>{
+    const address=item.address||{};
+    const country=address.country||"";
+    const state=address.state||address.region||address.province||"";
+    const district=address.state_district||address.county||address.municipality||"";
+    const name=item.name||address.city||address.town||address.village||address.suburb||district||term;
+    return {name,region:[state,country].filter(Boolean).join(", ")||item.display_name||country,lat:Number(item.lat),lon:Number(item.lon),country,country_code:address.country_code?.toUpperCase(),state,district,source:"search" as const};
+   }).filter((place:Place)=>Number.isFinite(place.lat)&&Number.isFinite(place.lon));
+   setLocationSearchResults(results);
+   if(results.length===0)setLocationSearchError("No matching locations found. Try another city or region.");
+  }catch(error){
+   if(requestVersion===locationSearchVersion.current)setLocationSearchError(error instanceof Error?error.message:"Location search is temporarily unavailable.");
+  }finally{
+   if(requestVersion===locationSearchVersion.current)setLocationSearching(false);
+  }
+ };
+ useEffect(()=>{
+  if(!locationPickerOpen)return;
+  const term=query.trim();
+  if(term.length<2){setLocationSearchResults([]);setLocationSearching(false);setLocationSearchError("");return;}
+  const timer=window.setTimeout(()=>{void search();},750);
+  return()=>{window.clearTimeout(timer);locationSearchVersion.current++;};
+ },[locationPickerOpen,query]);
+ const chooseLocation=async(place:Place)=>{
+  const requestVersion=++locationRequestVersion.current;
+  setLocationSelectionPending(place.name);setLocationSearchError("");
+  try{
+   const response=await fetchBounded(`${API}/api/weather?latitude=${place.lat}&longitude=${place.lon}`,{cache:"no-store"},16000);
+   if(!response.ok)throw new Error(`Weather feed returned HTTP ${response.status}`);
+   const data=await response.json();
+   if(requestVersion!==locationRequestVersion.current)return;
+   const selected:Place={...place,source:"search",current:data.current||{},loading:false,error:!hasValidCurrent(data.current)};
+   setLocal(selected);writeCache("local",selected);
+   const selectedLocation:Place={...place,source:"search"};
+   setVisitorLocation(selectedLocation);writeCache("visitor-location",selectedLocation);
+   setIsSearchLocation(true);setLocationStatus("ready");
+   setLocationMessage(hasValidCurrent(data.current)?"":"Weather data is temporarily unavailable for this location.");
+   setNotice("");setQuery("");setLocationSearchResults([]);setLocationPickerOpen(false);
+  }catch(error){
+   if(requestVersion===locationRequestVersion.current)setLocationSearchError(error instanceof Error?error.message:"Weather could not be loaded for this location.");
+  }finally{
+   if(requestVersion===locationRequestVersion.current)setLocationSelectionPending("");
+  }
+ };
+ useEffect(()=>{
+  if(!locationPickerOpen)return;
+  const previousOverflow=document.body.style.overflow;
+  document.body.style.overflow="hidden";
+  const handleKeyDown=(event:KeyboardEvent)=>{if(event.key==="Escape"){setLocationPickerOpen(false);setQuery("");setLocationSearchResults([]);}};
+  window.addEventListener("keydown",handleKeyDown);
+  return()=>{document.body.style.overflow=previousOverflow;window.removeEventListener("keydown",handleKeyDown);};
+ },[locationPickerOpen]);
  const signIn=async()=>{if(!auth)return;try{await signInWithPopup(auth,googleProvider)}catch{setNotice("Google sign-in could not be completed.")}};
  const countryTab=visitorLocation?.country||"Country";
  const stateTab=visitorLocation?.state||"State";
  const localTab=visitorLocation?.name?(visitorLocation?.district?`${visitorLocation.name} · ${visitorLocation.district}`:visitorLocation.name):(visitorLocation?.district||"Local");
  const newsTabs=[{key:"World",label:"World"},{key:"Country",label:countryTab},{key:"State",label:stateTab},{key:"Local",label:localTab}];
  return <div className="news-site">
-  <header className="masthead"><div className="masthead-row"><div className="brand-lockup"><img className="brand-wordmark" src="/logo.png" alt="EARTH WEATHER" width="1200" height="220" /></div><div className="masthead-actions">{user?<button onClick={()=>void signOut(auth!)}>{user.displayName||"Account"}</button>:<button onClick={()=>void signIn()}>Sign in</button>}</div></div></header>
+  {locationPickerOpen&&<div className="location-picker-overlay" role="dialog" aria-modal="true" aria-label="Search weather locations">
+   <div className="location-picker-shell">
+    <form className="location-picker-search" onSubmit={event=>{event.preventDefault();void search();}}>
+     <div className="location-picker-input-wrap">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.6"/><path d="m16 16 4.1 4.1"/></svg>
+      <input autoFocus value={query} onChange={event=>setQuery(event.target.value)} placeholder="Search" aria-label="Search city or region" autoComplete="off"/>
+     </div>
+     <button type="button" className="location-picker-cancel" onClick={()=>{setLocationPickerOpen(false);setQuery("");setLocationSearchResults([]);setLocationSearchError("");}}>Cancel</button>
+    </form>
+    {query.trim().length>=2?<section className="location-picker-results">
+     <p className="location-picker-heading">Search results</p>
+     {locationSearching&&<p className="location-picker-message">Searching locations…</p>}
+     {locationSelectionPending&&<p className="location-picker-message">Loading weather for {locationSelectionPending}…</p>}
+     {!locationSearching&&locationSearchResults.map(place=><button className="location-picker-result" type="button" key={`${place.name}-${place.lat}-${place.lon}`} onClick={()=>void chooseLocation(place)} disabled={Boolean(locationSelectionPending)}><span className="location-result-pin">⌖</span><span><strong>{place.name}</strong><small>{place.region}</small></span><span className="location-result-arrow">›</span></button>)}
+     {!locationSearching&&locationSearchError&&<p className="location-picker-message error">{locationSearchError}</p>}
+    </section>:<>
+     <section className="location-picker-section">
+      <p className="location-picker-heading">Current city</p>
+      {currentLocation?<button className="location-city-pill current" type="button" onClick={()=>void chooseLocation(currentLocation)} disabled={Boolean(locationSelectionPending)}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 10c0 5-8 11-8 11S4 15 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/></svg><span>{currentLocation.name}</span></button>:<button className="location-city-pill current" type="button" onClick={()=>{setLocationPickerOpen(false);detectLocalWeather();}}>◎ <span>Detect current location</span></button>}
+     </section>
+     <section className="location-picker-section">
+      <p className="location-picker-heading">Top cities · {currentLocation?.country||"Your region"}</p>
+      <div className="location-city-grid">{topCities.map(place=><button className="location-city-pill" type="button" key={`${place.name}-${place.country_code}`} onClick={()=>void chooseLocation(place)} disabled={Boolean(locationSelectionPending)}>{place.name}</button>)}</div>
+     </section>
+     <section className="location-picker-section world">
+      <p className="location-picker-heading">Top cities - World</p>
+      <div className="location-city-grid">{WORLD_TOP_CITIES.map(place=><button className="location-city-pill" type="button" key={`${place.name}-${place.country_code}`} onClick={()=>void chooseLocation(place)} disabled={Boolean(locationSelectionPending)}>{place.name}</button>)}</div>
+     </section>
+     {locationSelectionPending&&<p className="location-picker-message">Loading weather for {locationSelectionPending}…</p>}
+     {locationSearchError&&<p className="location-picker-message error">{locationSearchError}</p>}
+    </>}
+   </div>
+  </div>}
+  <header className="masthead"><div className="masthead-row"><div className="brand-lockup"><img className="brand-wordmark" src="/logo.png" alt="EARTH WEATHER" width="1200" height="220" /></div><div className="masthead-actions"><button className="header-location-search" type="button" aria-label="Search city or region" title="Search city or region" onClick={()=>{setQuery("");setLocationSearchResults([]);setLocationSearchError("");setLocationPickerOpen(true);}}><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.6"/><path d="m16 16 4.1 4.1"/></svg></button>{user?<button onClick={()=>void signOut(auth!)}>{user.displayName||"Account"}</button>:<button onClick={()=>void signIn()}>Sign in</button>}</div></div></header>
   <nav className="news-nav">{[{key:"Weather Report",label:"Weather Report"},...newsTabs,{key:"Satellite imagery",label:"Satellite imagery"},{key:"Satellite Report",label:"Satellite Report"}].map(item=><button className={section===item.key?"active":""} key={item.key} onClick={()=>setSection(item.key)}>{item.label}</button>)}</nav>
   {page==="home"?(section==="Satellite Report"?<SatelliteNumericalReport/>:section==="Satellite imagery"?<SatelliteDashboard/>:section!=="Weather Report"?<WeatherNewsPage section={section as "World"|"Country"|"State"|"Local"} location={visitorLocation}/>:<main className="news-main">
    {notice&&<div className="notice">{notice}</div>}
-   <form className="search-weather weather-search-top" onSubmit={e=>{e.preventDefault();void search()}}><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search city or region" aria-label="Search city or region"/><button type="submit">Search</button></form>
-
    <section className="local-weather-card" aria-live="polite">
     <div className="local-weather-heading">
      <div><span className="eyebrow">{isSearchLocation ? "SELECTED CITY" : "WEATHER NEAR YOU"}</span><h2>{isSearchLocation && local ? `Weather in ${local.name}` : "Your current location"}</h2><p>{isSearchLocation ? "Showing weather for the city you searched" : "Automatically detected using your device location"}</p></div>
