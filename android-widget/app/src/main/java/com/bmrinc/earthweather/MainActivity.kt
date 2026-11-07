@@ -500,7 +500,7 @@ private fun EarthWeatherApp(
         when (tab) {
             "Weather" -> WeatherScreen(state, place, Modifier.padding(padding), celsius, onRefresh, onTab, onSwipeCity)
             "Forecast" -> ForecastScreen(state, place, Modifier.padding(padding), celsius)
-            "Cities" -> CitiesScreen(place, savedCities, query, onQuery, results, searching, searchError, Modifier.padding(padding), onSelect, onSave, onRemove, onSearch, onDetectLocation)
+            "Cities" -> CitiesScreen(place, savedCities, query, onQuery, results, searching, searchError, Modifier.padding(padding), onSelect, onSave, onRemove, onSearch, onDetectLocation, { onTab("Weather") })
             "Radar" -> RadarScreen(state, place, Modifier.padding(padding))
             "LiveNotifications" -> LiveNotificationSettingsScreen(
                 place, savedCities, liveWeatherEnabled, onLiveWeather, onSelect, Modifier.padding(padding), { onTab("Settings") }
@@ -579,6 +579,21 @@ private fun WeatherScreen(
         Spacer(Modifier.height(16.dp))
         SectionHeader("Hourly forecast", "Next hours")
         HourlyStrip(state.hourly.take(12), celsius)
+        Spacer(Modifier.height(12.dp))
+        Card(
+            modifier = Modifier.fillMaxWidth().clickable { onTab("Radar") },
+            colors = CardDefaults.cardColors(containerColor = CardSurface),
+            shape = RoundedCornerShape(20.dp)
+        ) {
+            Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("🌧️", fontSize = 23.sp)
+                Column(Modifier.weight(1f).padding(start = 12.dp)) {
+                    Text("Weather radar", color = Ink, fontSize = 16.sp, fontFamily = FontFamily.Cursive)
+                    Text("View recent rainfall movement", color = Muted, fontSize = 10.sp)
+                }
+                Text("›", color = Sky, fontSize = 25.sp)
+            }
+        }
         Spacer(Modifier.height(16.dp))
         SectionHeader("Multi-day forecast", "15 days", { onTab("Forecast") })
         DailyPreview(state.daily.take(7), celsius)
@@ -824,14 +839,14 @@ private fun CitiesScreen(
     current: WeatherPlace?, saved: List<WeatherPlace>, query: String, onQuery: (String) -> Unit,
     results: List<WeatherPlace>, searching: Boolean, searchError: String, modifier: Modifier,
     onSelect: (WeatherPlace) -> Unit, onSave: (WeatherPlace) -> Unit,
-    onRemove: (WeatherPlace) -> Unit, onSearch: () -> Unit, onDetectLocation: () -> Unit
+    onRemove: (WeatherPlace) -> Unit, onSearch: () -> Unit, onDetectLocation: () -> Unit, onBack: () -> Unit
 ) {
     LaunchedEffect(query) { if (query.trim().length >= 2) { delay(500); onSearch() } }
     var showSearch by remember { mutableStateOf(true) }
     Box(modifier.fillMaxSize().background(NightBg)) {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 18.dp)) {
             Row(Modifier.fillMaxWidth().padding(top = 22.dp, bottom = 20.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text("‹", color = Ink, fontSize = 34.sp, modifier = Modifier.clickable { onDetectLocation() }.padding(end = 14.dp))
+                Text("‹", color = Ink, fontSize = 34.sp, modifier = Modifier.clickable { onBack() }.padding(end = 14.dp))
                 Text("Manage cities", color = Ink, fontSize = 25.sp, fontFamily = FontFamily.Cursive)
             }
             OutlinedTextField(
