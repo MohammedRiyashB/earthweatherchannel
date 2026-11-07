@@ -14,19 +14,21 @@ def params_for(points: int) -> dict[str, str]:
 
 class OpenMeteoProviderTests(unittest.IsolatedAsyncioTestCase):
     async def test_open_meteo_is_the_free_primary_provider(self):
-        async def fake(_client, provider, lat, lon):
-            return {"provider": provider, "current": {"temperature_2m": 28.0}}
-        with patch.object(weather_api, "_fetch_provider_current", new=fake):
-            result = await weather_api._fetch_weather_current(object(), params_for(1))
+        class FakeResponse:
+            def raise_for_status(self): pass
+            def json(self): return {"current":{"time":"2026-11-07T17:00","temperature_2m":28.0}}
+        class FakeClient:
+            async def get(self, url, params): return FakeResponse()
+        result = await weather_api._fetch_weather_current(FakeClient(), params_for(1))
         self.assertEqual(result["provider"], "open-meteo")
         self.assertEqual(result["temperature_2m"], 28.0)
 
     async def test_open_meteo_failure_returns_clear_503_without_silent_provider_switch(self):
-        async def fake(_client, provider, lat, lon):
-            raise weather_api.httpx.ConnectError("Open-Meteo unavailable")
-        with patch.object(weather_api, "_fetch_provider_current", new=fake):
-            with self.assertRaises(HTTPException) as raised:
-                await weather_api._fetch_weather_current(object(), params_for(1))
+        class FakeClient:
+            async def get(self, url, params):
+                raise weather_api.httpx.ConnectError("Open-Meteo unavailable")
+        with self.assertRaises(HTTPException) as raised:
+            await weather_api._fetch_weather_current(FakeClient(), params_for(1))
         self.assertEqual(raised.exception.status_code, 503)
         self.assertEqual(raised.exception.detail["provider_failures"][0]["provider"], "open-meteo")
 
