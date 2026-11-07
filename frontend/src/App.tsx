@@ -6,7 +6,6 @@ const API=import.meta.env.VITE_API_BASE_URL||"https://earthweather-api.onrender.
 type Current={time?:string;temperature_2m?:number;relative_humidity_2m?:number;apparent_temperature?:number;precipitation?:number;cloud_cover?:number;pressure_msl?:number;wind_speed_10m?:number;wind_direction_10m?:number;weather_code?:number};
 type Place={name:string;region:string;lat:number;lon:number;current?:Current;loading?:boolean;error?:boolean};
 type Storm={id:string;title:string;description?:string;link?:string;coordinates?:{lat:number;lon:number;date?:string}[]};
-type Source={id:string;name:string;kind:string;coverage:string;status:string;update:string;note:string};
 type Story={title:string;url:string;source:string;published_at?:string;language?:string;image?:string};
 const CITIES:Place[]=[
 {name:"New Delhi",region:"India",lat:28.6139,lon:77.209},{name:"Chennai",region:"India",lat:13.0827,lon:80.2707},
