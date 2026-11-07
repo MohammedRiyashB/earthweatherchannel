@@ -341,14 +341,14 @@ const [section,setSection]=useState("Weather Report");const [page,setPage]=useSt
      <button onClick={()=>{setPage("privacy");window.scrollTo({top:0,behavior:"smooth"})}}>Privacy Policy</button>
     </div>
    </nav>
-   <nav className="footer-provider-wall" aria-label="Related service websites">
-    <a href="https://www.google.com/" target="_blank" rel="noreferrer" aria-label="Google"><img src="/provider-logos/google.svg" alt="" /><span>Google</span></a>
-    <a href="https://firebase.google.com/" target="_blank" rel="noreferrer" aria-label="Firebase"><img src="/provider-logos/firebase.svg" alt="" /><span>Firebase</span></a>
-    <a href="https://open-meteo.com/" target="_blank" rel="noreferrer" aria-label="Open-Meteo"><img src="/provider-logos/open-meteo.svg" alt="" /><span>Open-Meteo</span></a>
-    <a href="https://www.openstreetmap.org/" target="_blank" rel="noreferrer" aria-label="OpenStreetMap"><img src="/provider-logos/openstreetmap.svg" alt="" /><span>OpenStreetMap</span></a>
-    <a href="https://www.nasa.gov/" target="_blank" rel="noreferrer" aria-label="NASA"><img src="/provider-logos/nasa.svg" alt="" /><span>NASA</span></a>
-    <a href="https://www.rainviewer.com/" target="_blank" rel="noreferrer" aria-label="RainViewer"><img src="/provider-logos/rainviewer.svg" alt="" /><span>RainViewer</span></a>
-    <a href="https://www.noaa.gov/" target="_blank" rel="noreferrer" aria-label="NOAA"><img src="/provider-logos/noaa.svg" alt="" /><span>NOAA</span></a>
+   <nav className="footer-provider-wall" aria-label="Provider websites">
+    <a className="partner-google" href="https://www.google.com/" target="_blank" rel="noreferrer" aria-label="Google" title="Google"><span>Google</span></a>
+    <a className="partner-firebase" href="https://firebase.google.com/" target="_blank" rel="noreferrer" aria-label="Firebase" title="Firebase"><span>Firebase</span></a>
+    <a className="partner-openmeteo" href="https://open-meteo.com/" target="_blank" rel="noreferrer" aria-label="Open-Meteo" title="Open-Meteo"><span>Open-Meteo</span></a>
+    <a className="partner-osm" href="https://www.openstreetmap.org/" target="_blank" rel="noreferrer" aria-label="OpenStreetMap" title="OpenStreetMap"><span>OpenStreetMap</span></a>
+    <a className="partner-nasa" href="https://www.nasa.gov/" target="_blank" rel="noreferrer" aria-label="NASA" title="NASA"><span>NASA</span></a>
+    <a className="partner-rainviewer" href="https://www.rainviewer.com/" target="_blank" rel="noreferrer" aria-label="RainViewer" title="RainViewer"><span>RainViewer</span></a>
+    <a className="partner-noaa" href="https://www.noaa.gov/" target="_blank" rel="noreferrer" aria-label="NOAA" title="NOAA"><span>NOAA</span></a>
    </nav>
    <div className="footer-copyright">© {new Date().getFullYear()} Earth Weather Channel. All rights reserved. <strong>BMR INC.</strong></div>
   </footer>
