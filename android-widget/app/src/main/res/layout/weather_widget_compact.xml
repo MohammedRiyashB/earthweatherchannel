@@ -1,0 +1,22 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+ android:id="@+id/compact_root" android:layout_width="match_parent" android:layout_height="match_parent"
+ android:orientation="vertical" android:padding="12dp" android:gravity="center_vertical"
+ android:background="@drawable/widget_background">
+ <TextView android:id="@+id/compact_city" android:layout_width="match_parent" android:layout_height="wrap_content"
+  android:text="Your city" android:textColor="#F1F1F2" android:textSize="11sp" android:textStyle="bold" android:maxLines="1"/>
+ <LinearLayout android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1"
+  android:orientation="horizontal" android:gravity="center_vertical">
+  <ImageView android:id="@+id/compact_icon" android:layout_width="46dp" android:layout_height="46dp"
+   android:src="@drawable/ic_weather_partly" android:contentDescription="Current weather"/>
+  <TextView android:id="@+id/compact_temperature" android:layout_width="0dp" android:layout_height="wrap_content"
+   android:layout_weight="1" android:text="--°" android:textColor="#FFFFFF" android:textSize="32sp"
+   android:textStyle="bold" android:gravity="end" android:includeFontPadding="false"/>
+ </LinearLayout>
+ <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+  android:orientation="horizontal" android:gravity="center_vertical">
+  <TextView android:id="@+id/compact_condition" android:layout_width="0dp" android:layout_height="wrap_content"
+   android:layout_weight="1" android:text="Weather" android:textColor="#D9E2E7" android:textSize="10sp" android:maxLines="1"/>
+  <TextView android:id="@+id/compact_humidity" android:layout_width="wrap_content" android:layout_height="wrap_content"
+   android:text="💧 --%" android:textColor="#F3F3F4" android:textSize="10sp"/>
+ </LinearLayout>
+</LinearLayout>
