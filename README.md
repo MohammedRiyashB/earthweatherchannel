@@ -7,12 +7,12 @@ A global weather intelligence explorer built around a CesiumJS 3D globe, NASA sa
 - **3D Earth:** Cesium globe with OpenStreetMap basemap and NASA GIBS imagery layers.
 - **Satellite imagery:** NASA VIIRS daily true-colour imagery and NOAA GOES-East / GOES-West GeoColor and GOES-East infrared layers through NASA GIBS.
 - **Historical imagery playback:** Seven-day date selector / playback for the daily VIIRS product. Product acquisition times and tile availability vary; this is not a continuous geostationary video archive.
-- **Global wind flow:** 15-degree global samples from Open-Meteo 10 m wind speed and direction, rendered as animated particle paths. This is a coarse model-derived visualization, not direct station observations or a high-resolution operational wind analysis.
+- **Global wind flow:** 15-degree global samples from weather-provider current wind fields, rendered as animated particle paths. This is a coarse model-derived visualization, not direct station observations or a high-resolution operational wind analysis.
 - **Cloud movement:** Cloud-cover model samples advected using the model wind field. This is a simplified model visualization, not a photorealistic satellite cloud texture or a cloud-resolving forecast.
 - **Rainfall:** Global coarse current model precipitation overlay and location-based hourly precipitation probability / amount timeline.
 - **Atmospheric water cycle:** Relative humidity, dew point, cloud layers, precipitation and modeled evapotranspiration time series.
 - **Severe-storm events:** NASA EONET active severe-storm event metadata, event locations and any available event geometry.
-- **Source health:** Backend probes Open-Meteo, NASA EONET, NASA GIBS and RainViewer; the UI refreshes health status every 60 seconds.
+- **Source health:** Backend probes WeatherAPI.com / OpenWeather / MET Norway, NASA EONET, NASA GIBS and RainViewer; the UI refreshes health status every 60 seconds.
 - **Local conditions:** Browser geolocation (permission required), current model conditions and hourly forecast.
 - **Radar history:** RainViewer past radar frames where radar coverage exists.
 
@@ -20,10 +20,10 @@ A global weather intelligence explorer built around a CesiumJS 3D globe, NASA sa
 
 | Layer / feature | Data source | What it means |
 |---|---|---|
-| Wind flow | Open-Meteo global forecast models | Coarse 15° model sample, particle paths interpolate the field |
-| Cloud movement | Open-Meteo cloud-cover + wind fields | Simplified advection visualization; not observed cloud pixels |
-| Rainfall forecast | Open-Meteo | Model precipitation and probability; local hourly series plus coarse global current field |
-| Humidity / evapotranspiration | Open-Meteo | Model-derived atmospheric and surface water-flux estimates |
+| Wind flow | WeatherAPI.com / OpenWeather / MET Norway global forecast models | Coarse 15° model sample, particle paths interpolate the field |
+| Cloud movement | WeatherAPI.com / OpenWeather / MET Norway cloud-cover + wind fields | Simplified advection visualization; not observed cloud pixels |
+| Rainfall forecast | WeatherAPI.com / OpenWeather / MET Norway | Model precipitation and probability; local hourly series plus coarse global current field |
+| Humidity / evapotranspiration | WeatherAPI.com / OpenWeather / MET Norway | Model-derived atmospheric and surface water-flux estimates |
 | Storm events | NASA EONET | Curated severe-storm event metadata; not a complete tropical-cyclone tracker or warning service |
 | Satellite imagery | NASA GIBS / NOAA GOES | Product-dependent imagery with different coverage and latency |
 | Radar history | RainViewer | Patchy historical radar only; no free nowcast |
@@ -78,11 +78,25 @@ The frontend supports Firebase Google Authentication, Firestore user profile / l
 
 Google sign-in uses a popup, which requires popups to be allowed by the browser. Once signed in, the app stores the user's last selected coordinates/current model conditions in their private Firestore user document and Realtime Database live-weather node. Location is only used after browser geolocation permission is granted.
 
+## Weather provider failover
+
+Current weather requests use this ordered provider chain:
+
+1. WeatherAPI.com (primary; requires `WEATHERAPI_KEY`)
+2. OpenWeather (secondary; requires `OPENWEATHER_API_KEY`)
+3. MET Norway Locationforecast (final fallback; requires a real identifying `METNORWAY_USER_AGENT`)
+
+The backend switches to the next provider on connection errors, timeouts, HTTP errors, quota/rate-limit responses, or invalid payloads. A provider is only considered successful when it returns a valid temperature for every requested coordinate in the batch. The API reports which provider supplied the response. If none is configured or reachable, it returns HTTP 503 with per-provider reasons rather than inventing or silently reusing stale conditions.
+
+Configure these variables in Render → Environment (and locally in `backend/.env`): `WEATHERAPI_KEY`, `OPENWEATHER_API_KEY`, and `METNORWAY_USER_AGENT`. The first two require free account/API-key registration. MET Norway requires an honest, contactable User-Agent and compliance with its request-rate and cache headers. Never commit API keys to GitHub.
+
+`/api/atmosphere` and `/api/wind-grid` currently return HTTP 503 because their previous model-only data products have no equivalent gridded/hourly adapter in this provider chain yet. Point current weather, featured cities, and bulk current weather use all three providers. Do not label those unavailable layers as live.
+
 ## Stack
 
 - Frontend: React, TypeScript, Vite, CesiumJS
 - Backend: FastAPI, HTTPX
-- Model data: Open-Meteo
+- Weather data: WeatherAPI.com → OpenWeather → MET Norway automatic failover
 - Satellite imagery: NASA GIBS / NOAA GOES products
 - Severe-storm event metadata: NASA EONET
 - Radar history: RainViewer
@@ -124,7 +138,7 @@ Set `VITE_API_BASE_URL=http://localhost:8000` in `frontend/.env`.
 ## Attribution and operations
 
 - NASA GIBS: https://www.earthdata.nasa.gov/eosdis/science-system-description/eosdis-components/gibs
-- Open-Meteo: https://open-meteo.com/ (review current terms for your deployment and commercial use)
+- WeatherAPI.com: https://www.weatherapi.com/ ; OpenWeather: https://openweathermap.org/api ; MET Norway: https://api.met.no/doc/TermsOfService
 - NASA EONET: https://eonet.gsfc.nasa.gov/docs/v3
 - IMD API portal: https://api.imd.gov.in/public/
 - OpenStreetMap: https://www.openstreetmap.org/copyright
