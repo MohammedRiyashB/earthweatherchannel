@@ -103,6 +103,29 @@ class WeatherNormalizationTests(unittest.TestCase):
         self.assertEqual(result["temperature_2m"], 24)
 
 
+class WeatherNewsReaderTests(unittest.TestCase):
+    def test_article_parser_extracts_title_metadata_image_and_paragraphs(self):
+        parser = weather_api._WeatherArticleParser()
+        parser.feed("""<html><head><title>Weather update</title>
+        <meta property='og:title' content='Heavy rain warning'>
+        <meta property='og:description' content='A weather alert for the region.'>
+        <meta property='og:image' content='https://news.example/image.jpg'></head>
+        <body><main><article><p>Authorities issued a weather alert after heavy rain affected several towns across the district.</p>
+        <p>Residents have been advised to avoid flooded roads and follow official weather updates.</p></article></main></body></html>""")
+        self.assertEqual(parser.meta["og:title"], "Heavy rain warning")
+        self.assertEqual(parser.meta["og:image"], "https://news.example/image.jpg")
+        self.assertEqual(len(parser.paragraphs), 2)
+        self.assertIn("flooded roads", parser.paragraphs[1])
+
+    def test_article_host_rejects_loopback_addresses(self):
+        async def check():
+            with self.assertRaises(HTTPException) as raised:
+                await weather_api._assert_public_article_host("http://127.0.0.1/private")
+            self.assertEqual(raised.exception.status_code, 403)
+        import asyncio
+        asyncio.run(check())
+
+
 class WeatherGeographyTests(unittest.TestCase):
     def test_distance_is_zero_for_same_coordinate(self):
         self.assertAlmostEqual(weather_api._distance_km(11.341,77.7172,11.341,77.7172),0.0,places=6)

@@ -4,7 +4,7 @@ import { onAuthStateChanged, signInWithPopup, signOut, type User } from "firebas
 
 const API=import.meta.env.VITE_API_BASE_URL||"https://earthweather-api.onrender.com";
 type Current={time?:string;temperature_2m?:number;relative_humidity_2m?:number;apparent_temperature?:number;precipitation?:number;cloud_cover?:number;pressure_msl?:number;wind_speed_10m?:number;wind_direction_10m?:number;weather_code?:number;source?:string;source_url?:string};
-type Place={name:string;region:string;lat:number;lon:number;country?:string;country_code?:string;accuracy?:number;source?: "gps"|"search";current?:Current;loading?:boolean;error?:boolean};
+type Place={name:string;region:string;lat:number;lon:number;country?:string;country_code?:string;state?:string;district?:string;accuracy?:number;source?: "gps"|"search";current?:Current;loading?:boolean;error?:boolean};
 type Storm={id:string;title:string;description?:string;link?:string;coordinates?:{lat:number;lon:number;date?:string}[]};
 type Story={title:string;url:string;source:string;published_at?:string;language?:string;image?:string};
 const CITIES:Place[]=[
@@ -91,13 +91,89 @@ function SatelliteNumericalReport(){
  <p className="feed-note">Model-analysis values are useful current-condition estimates, not direct thermometer or anemometer readings. Satellite product availability and latency vary by location and overpass.</p></main>;
 }
 
+
+type ArticleDetail={title:string;description?:string;image?:string|null;paragraphs?:string[];source_url?:string;source?:string;retrieved_at?:string;extraction_status?:string;note?:string};
+function WeatherNewsPage({section,location}:{section:"World"|"Country"|"State"|"Local";location:Place|null}){
+ const cacheKey=`weather-news:${section}:${location?.country_code||""}:${location?.state||""}:${location?.name||""}`;
+ const [stories,setStories]=useState<Story[]>(()=>readCache<Story[]>(cacheKey,[]));
+ const [loading,setLoading]=useState(true);
+ const [error,setError]=useState("");
+ const [updated,setUpdated]=useState("");
+ const [selected,setSelected]=useState<Story|null>(null);
+ const [article,setArticle]=useState<ArticleDetail|null>(null);
+ const [articleLoading,setArticleLoading]=useState(false);
+ const [articleError,setArticleError]=useState("");
+ const region=section.toLowerCase();
+ const title=section==="World"?"World Weather News":section==="Country"?`${location?.country||"Country"} Weather News`:section==="State"?`${location?.state||"State"} Weather News`:`${location?.name||location?.district||"Local"} Weather News`;
+ const missingLocation=(section==="Country"&&!location?.country)||(section==="State"&&!location?.state)||(section==="Local"&&!location?.name&&!location?.district);
+ const load=async()=>{
+  if(missingLocation){setLoading(false);setStories([]);setError("Detecting your location. Allow location access to load country, state and local weather news.");return;}
+  setLoading(true);
+  const params=new URLSearchParams({region,limit:"40"});
+  if(location?.country_code)params.set("country_code",location.country_code);
+  if(location?.country)params.set("country_name",location.country);
+  if(location?.state)params.set("state_name",location.state);
+  if(location?.name)params.set("local_name",location.name);
+  if(location?.district)params.set("district_name",location.district);
+  try{
+   const response=await fetchBounded(`${API}/api/weather-news?${params.toString()}`,{cache:"no-store"},22000);
+   if(!response.ok)throw new Error(`News service returned HTTP ${response.status}`);
+   const data=await response.json();
+   const nextStories=Array.isArray(data.articles)?data.articles:[];
+   setStories(nextStories);writeCache(cacheKey,nextStories);
+   setUpdated(data.retrieved_at||new Date().toISOString());
+   setError("");
+  }catch(e){setError(e instanceof Error?e.message:"Weather news is temporarily unavailable.");}
+  finally{setLoading(false);}
+ };
+ useEffect(()=>{setStories(readCache<Story[]>(cacheKey,[]));void load();const id=window.setInterval(()=>void load(),5*60*1000);return()=>window.clearInterval(id)},[section,location?.country_code,location?.country,location?.state,location?.district,location?.name]);
+ const openStory=async(story:Story)=>{
+  setSelected(story);setArticle(null);setArticleError("");setArticleLoading(true);
+  const params=new URLSearchParams({url:story.url,fallback_title:story.title});
+  try{
+   const response=await fetchBounded(`${API}/api/weather-news/article?${params.toString()}`,{cache:"no-store"},25000);
+   if(!response.ok)throw new Error(`Article reader returned HTTP ${response.status}`);
+   setArticle(await response.json());
+  }catch(e){setArticleError(e instanceof Error?e.message:"The article text could not be loaded. The publisher summary is shown instead.");}
+  finally{setArticleLoading(false);}
+ };
+ useEffect(()=>{if(!selected)return;const previous=document.body.style.overflow;document.body.style.overflow="hidden";const close=(event:KeyboardEvent)=>{if(event.key==="Escape")setSelected(null)};window.addEventListener("keydown",close);return()=>{document.body.style.overflow=previous;window.removeEventListener("keydown",close)}},[selected]);
+ return <main className="news-main weather-news-page">
+  <div className="news-toolbar"><div><span className="eyebrow">WEATHER-ONLY NEWS · AUTOMATICALLY UPDATED</span><h1>{title}</h1><p>Recent weather reports, forecasts, cyclones, rainfall, heat, floods and storm developments.</p></div><div className="news-refresh-meta"><span>{updated?`Updated ${stamp(updated)}`:"Checking latest reports…"}</span><button className="refresh-button" onClick={()=>void load()} disabled={loading}>↻ Refresh news</button></div></div>
+  {loading&&stories.length===0?<div className="weather-news-grid">{Array.from({length:6},(_,i)=><div className="weather-news-card news-loading-card" key={i}><div className="news-image-skeleton"/><div className="news-card-skeleton-line"/><div className="news-card-skeleton-line short"/></div>)}</div>:null}
+  {error&&<div className="empty-report">{error}</div>}
+  {!loading&&!error&&stories.length===0?<div className="empty-report">No weather-only articles were found for this area in the latest 24-hour search. New reports are checked automatically.</div>:null}
+  <section className="weather-news-grid">
+   {stories.map((story,index)=><article className="weather-news-card" key={story.url}>
+    <button className="weather-news-open" onClick={()=>void openStory(story)} aria-label={`Read ${story.title}`}>
+     <div className="weather-news-image">{story.image?<img src={`${API}/api/weather-news/image?url=${encodeURIComponent(story.image)}`} alt="" loading={index<4?"eager":"lazy"} onError={event=>{event.currentTarget.style.display="none";event.currentTarget.parentElement?.classList.add("image-unavailable")}}/>:<div className="news-image-placeholder"><span>WEATHER REPORT</span><strong>☁</strong></div>}</div>
+     <div className="weather-news-copy"><span className="weather-news-meta">{story.source} · {published(story.published_at)}{story.language?` · ${story.language}`:""}</span><h2>{story.title}</h2><span className="weather-news-read">Read on EARTH WEATHER <b>→</b></span></div>
+    </button>
+   </article>)}
+  </section>
+  <p className="feed-note">Weather news is sourced from publicly indexed publishers. Images are delivered from the publisher's article metadata. Stories open in EARTH WEATHER's reader with a short excerpt; the original publisher is linked inside the reader.</p>
+  {selected&&<div className="news-reader-backdrop" onMouseDown={event=>{if(event.target===event.currentTarget)setSelected(null)}}>
+   <article className="news-reader" role="dialog" aria-modal="true" aria-label="Weather news article">
+    <div className="news-reader-toolbar"><span>EARTH WEATHER · NEWS READER</span><button onClick={()=>setSelected(null)} aria-label="Close article">×</button></div>
+    {(article?.image||selected.image)&&<div className="news-reader-hero"><img src={`${API}/api/weather-news/image?url=${encodeURIComponent(article?.image||selected.image||"")}`} alt="" onError={event=>{event.currentTarget.style.display="none"}}/></div>}
+    <div className="news-reader-content"><div className="news-reader-meta">{article?.source||selected.source} · {published(selected.published_at)}</div><h1>{article?.title||selected.title}</h1>
+     {articleLoading?<div className="article-loading"><div/><div/><div/><div className="short"/></div>:null}
+     {articleError?<p className="article-reader-error">{articleError}</p>:null}
+     {article?.description&&<p className="news-reader-description">{article.description}</p>}
+     {!articleLoading&&article?.paragraphs?.length?article.paragraphs.map((paragraph,index)=><p className="news-reader-paragraph" key={index}>{paragraph}</p>):null}
+     {!articleLoading&&article&&!article.paragraphs?.length&&!article.description?<p className="news-reader-description">The publisher did not expose readable article text to the reader. You can still open the original story below.</p>:null}
+     <div className="news-reader-footer"><span>{article?.extraction_status==="publisher_excerpt"?"Publisher excerpt":"Publisher summary / limited text"}</span><a href={article?.source_url||selected.url} target="_blank" rel="noreferrer">Original publisher ↗</a></div>
+    </div>
+   </article>
+  </div>}
+ </main>;
+}
+
 export default function App(){
  const [cities,setCities]=useState<Place[]>(()=>readCache<Place[]>("cities",CITIES.map(x=>({...x,loading:true}))));
  const [storms,setStorms]=useState<Storm[]>(()=>readCache<Storm[]>("storms",[]));
- const [indiaNews,setIndiaNews]=useState<Story[]>(()=>readCache<Story[]>("india-news",[]));const [worldNews,setWorldNews]=useState<Story[]>(()=>readCache<Story[]>("world-news",[]));
- const [newsRegion,setNewsRegion]=useState<"india"|"world">("india");
- const [updated,setUpdated]=useState<string>(()=>readCache<string>("cities-updated",""));const [clock,setClock]=useState(new Date());const [busy,setBusy]=useState(false);const [query,setQuery]=useState("");
-const [section,setSection]=useState("Satellite Report");const [page,setPage]=useState<"home"|"about"|"terms"|"privacy">("home");const [isSearchLocation,setIsSearchLocation]=useState<boolean>(()=>readCache<Place|null>("local",null)?.source==="search");
+  const [updated,setUpdated]=useState<string>(()=>readCache<string>("cities-updated",""));const [clock,setClock]=useState(new Date());const [busy,setBusy]=useState(false);const [query,setQuery]=useState("");
+const [section,setSection]=useState("Weather Report");const [page,setPage]=useState<"home"|"about"|"terms"|"privacy">("home");const [isSearchLocation,setIsSearchLocation]=useState<boolean>(()=>readCache<Place|null>("local",null)?.source==="search");
  const [user,setUser]=useState<User|null>(null);const [notice,setNotice]=useState("");
  const [local,setLocal]=useState<Place|null>(()=>readCache<Place|null>("local",null));
  const [visitorLocation,setVisitorLocation]=useState<Place|null>(()=>readCache<Place|null>("visitor-location",null));
@@ -139,10 +215,10 @@ const [section,setSection]=useState("Satellite Report");const [page,setPage]=use
     .then(response=>{if(!response.ok)throw new Error("Nearby place service unavailable");return response.json();})
     .then(placeData=>{
      if(requestVersion!==locationRequestVersion.current)return;
-     const visitor:Place={name:placeData?.name||"Nearby area",region:placeData?.region||placeData?.country||"GPS location",lat,lon,accuracy,source:"gps",country:placeData?.country||undefined,country_code:placeData?.country_code||undefined};
+     const visitor:Place={name:placeData?.name||"Nearby area",region:placeData?.region||placeData?.country||"GPS location",lat,lon,accuracy,source:"gps",country:placeData?.country||undefined,country_code:placeData?.country_code||undefined,state:placeData?.state||undefined,district:placeData?.district||undefined};
      setLocal(previous=>{
       if(!previous||Math.abs(previous.lat-lat)>0.001||Math.abs(previous.lon-lon)>0.001)return previous;
-      const next={...previous,name:visitor.name,region:visitor.region,country:visitor.country,country_code:visitor.country_code,accuracy};
+      const next={...previous,name:visitor.name,region:visitor.region,country:visitor.country,country_code:visitor.country_code,state:visitor.state,district:visitor.district,accuracy};
       writeCache("local",next);return next;
      });
      if(visitor.country){setVisitorLocation(visitor);writeCache("visitor-location",visitor);}
@@ -207,21 +283,10 @@ const [section,setSection]=useState("Satellite Report");const [page,setPage]=use
   return()=>window.clearInterval(id);
  },[visitorLocation?.lat,visitorLocation?.lon,visitorLocation?.country,visitorLocation?.region]);
  const refreshFeeds=async()=>{
-  const urls=[`${API}/api/cyclones`,`${API}/api/weather-news?region=india&limit=30`,`${API}/api/weather-news?region=world&limit=30`];
-  const results=await Promise.allSettled(urls.map(url=>fetchBounded(url,{cache:"no-store"},10000)));
-  let failed=false;
-  for(let index=0;index<results.length;index++){
-   const result=results[index];
-   if(result.status!=="fulfilled"||!result.value.ok){failed=true;continue;}
-   try{
-    const data=await result.value.json();
-    if(index===0){setStorms(data.events||[]);writeCache("storms",data.events||[]);}
-    else if(index===1){setIndiaNews(data.articles||[]);writeCache("india-news",data.articles||[]);}
-    else{setWorldNews(data.articles||[]);writeCache("world-news",data.articles||[]);}
-   }catch{failed=true;}
-  }
-  if(failed)setNotice("Some live weather or headline feeds are temporarily unavailable; last successful reports are retained.");
-  else setNotice("");
+  try{
+   const response=await fetchBounded(`${API}/api/cyclones`,{cache:"no-store"},10000);
+   if(response.ok){const data=await response.json();setStorms(data.events||[]);writeCache("storms",data.events||[]);}
+  }catch{/* Keep the last successful severe-weather event report. */}
  };
  useEffect(()=>{void refreshFeeds();const newsId=window.setInterval(()=>void refreshFeeds(),5*60*1000);const clockId=window.setInterval(()=>setClock(new Date()),1000);return()=>{window.clearInterval(newsId);window.clearInterval(clockId)}},[]);
  useEffect(()=>{if(visitorLocation)return;void refreshPopularCities();const id=window.setInterval(()=>void refreshPopularCities(),5*60*1000);return()=>window.clearInterval(id)},[visitorLocation?.lat,visitorLocation?.lon,visitorLocation?.country]);
@@ -260,18 +325,20 @@ const [section,setSection]=useState("Satellite Report");const [page,setPage]=use
  const hasValidCurrent=(value?:Current)=>typeof value?.temperature_2m==="number"&&Number.isFinite(value.temperature_2m);
  const active=cities.filter(c=>hasValidCurrent(c.current));
  const hottest=useMemo(()=>[...active].sort((a,b)=>(b.current?.temperature_2m??-100)-(a.current?.temperature_2m??-100))[0],[active]);
- const headlines=newsRegion==="india"?indiaNews:worldNews;
  const nationalCities=cities.filter(city=>city.region.endsWith("· National"));
  const regionalCities=cities.filter(city=>city.region.endsWith("· Regional reference"));
  const internationalCities=cities.filter(city=>city.region.endsWith("· Nearby international"));
  const renderCityCards=(items:Place[])=>items.map(c=><article className={`city-card weather-scene ${weatherScene(c.current?.weather_code,c.current?.cloud_cover)}`} key={c.name}><span className="weather-sky-art" aria-hidden="true"><i/><i/><i/></span><div className="city-top"><div><small>{c.region}</small><h3>{c.name}</h3></div><span className="weather-icon">{icon(c.current?.weather_code)}</span></div>{c.loading?<div className="city-loading">Loading report…</div>:c.error?<div className="city-loading">Report temporarily unavailable</div>:<><div className="city-temp">{Math.round(c.current?.temperature_2m??0)}<sup>°C</sup></div><div className="city-condition">{weatherLabel(c.current?.weather_code)}</div><div className="city-stats"><span>Humidity <b>{c.current?.relative_humidity_2m??"—"}%</b></span><span>Wind <b>{c.current?.wind_speed_10m??"—"} km/h</b></span><span>Cloud <b>{c.current?.cloud_cover??"—"}%</b></span></div><div className="city-observed">Weather model · {c.current?.source||"Open-Meteo"} · {modelTime(c.current?.time)}</div></>}</article>);
- const search=async()=>{if(!query.trim())return;const requestVersion=++locationRequestVersion.current;try{const r=await fetchBounded(`https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(query)}`,{headers:{"Accept-Language":"en"}},10000);const d=await r.json();if(requestVersion!==locationRequestVersion.current)return;if(!d.length)throw new Error("No matching place found");const p={name:d[0].name||query,region:d[0].display_name,source:"search" as const,country:d[0].display_name.split(",").map((part:string)=>part.trim()).filter(Boolean).pop(),lat:Number(d[0].lat),lon:Number(d[0].lon)};const w=await fetchBounded(`${API}/api/weather?latitude=${p.lat}&longitude=${p.lon}`,{},14000);if(requestVersion!==locationRequestVersion.current)return;if(!w.ok)throw new Error("Weather feed unavailable");const wd=await w.json();if(requestVersion!==locationRequestVersion.current)return;setLocal({...p,current:wd.current||{}});writeCache("local",{...p,current:wd.current||{}});setIsSearchLocation(true);setLocationStatus("ready");setLocationMessage("");setNotice("");}catch(e){if(requestVersion!==locationRequestVersion.current)return;setNotice(e instanceof Error?e.message:"Search failed.");}};
+ const search=async()=>{if(!query.trim())return;const requestVersion=++locationRequestVersion.current;try{const r=await fetchBounded(`https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=1&q=${encodeURIComponent(query)}`,{headers:{"Accept-Language":"en"}},10000);const d=await r.json();if(requestVersion!==locationRequestVersion.current)return;if(!d.length)throw new Error("No matching place found");const address=d[0].address||{};const country=address.country||d[0].display_name.split(",").map((part:string)=>part.trim()).filter(Boolean).pop();const state=address.state||address.region;const district=address.state_district||address.county||address.municipality;const p:Place={name:d[0].name||query,region:[state,country].filter(Boolean).join(", ")||d[0].display_name,source:"search",country,country_code:address.country_code?.toUpperCase(),state,district,lat:Number(d[0].lat),lon:Number(d[0].lon)};const w=await fetchBounded(`${API}/api/weather?latitude=${p.lat}&longitude=${p.lon}`,{},14000);if(requestVersion!==locationRequestVersion.current)return;if(!w.ok)throw new Error("Weather feed unavailable");const wd=await w.json();if(requestVersion!==locationRequestVersion.current)return;const selected={...p,current:wd.current||{}};setLocal(selected);writeCache("local",selected);setVisitorLocation(p);writeCache("visitor-location",p);setIsSearchLocation(true);setLocationStatus("ready");setLocationMessage("");setNotice("");}catch(e){if(requestVersion!==locationRequestVersion.current)return;setNotice(e instanceof Error?e.message:"Search failed.");}};
  const signIn=async()=>{if(!auth)return;try{await signInWithPopup(auth,googleProvider)}catch{setNotice("Google sign-in could not be completed.")}};
+ const countryTab=visitorLocation?.country||"Country";
+ const stateTab=visitorLocation?.state||"State";
+ const localTab=visitorLocation?.name?(visitorLocation?.district?`${visitorLocation.name} · ${visitorLocation.district}`:visitorLocation.name):(visitorLocation?.district||"Local");
+ const newsTabs=[{key:"World",label:"World"},{key:"Country",label:countryTab},{key:"State",label:stateTab},{key:"Local",label:localTab}];
  return <div className="news-site">
-  <div className="breaking-strip"><div className="breaking-label">WEATHER BULLETIN</div><div className="ticker"><span>GLOBAL WEATHER DESK</span><i>•</i><span>LIVE MODEL UPDATES</span><i>•</i><span>INDIA & WORLD WEATHER HEADLINES</span><i>•</i><span>WEATHER CHECK EVERY 60 SECONDS</span></div><div className="utc-clock">{clock.toLocaleTimeString([], {hour:"2-digit",minute:"2-digit",second:"2-digit"})} LOCAL</div></div>
-  <header className="masthead"><div className="brand-lockup"><img className="brand-wordmark" src="/logo.png" alt="EARTH WEATHER" width="1200" height="220" /></div><div className="masthead-center"><span className="on-air"><b/> LIVE WEATHER DESK</span><small>Global reports · Forecasts · Weather headlines</small></div><div className="masthead-actions">{user?<button onClick={()=>void signOut(auth!)}>{user.displayName||"Account"}</button>:<button onClick={()=>void signIn()}>Sign in</button>}</div></header>
-  <nav className="news-nav">{["Satellite Report","Weather Report","World","Asia","India","Americas","Europe","Africa","Oceania","Satellite imagery","Forecast"].map(x=><button className={section===x?"active":""} key={x} onClick={()=>{setSection(x);if(x==="India"||x==="Asia")setNewsRegion("india");else if(x!=="Weather Report")setNewsRegion("world")}}>{x}</button>)}</nav>
-  {page==="home"?(section==="Satellite Report"?<SatelliteNumericalReport/>:section==="Satellite imagery"?<SatelliteDashboard/>:<main className="news-main">
+  <header className="masthead"><div className="masthead-clock" aria-label="Current local time">{clock.toLocaleTimeString([], {hour:"2-digit",minute:"2-digit",second:"2-digit"})}</div><div className="masthead-row"><div className="brand-lockup"><img className="brand-wordmark" src="/logo.png" alt="EARTH WEATHER" width="1200" height="220" /></div><div className="masthead-actions">{user?<button onClick={()=>void signOut(auth!)}>{user.displayName||"Account"}</button>:<button onClick={()=>void signIn()}>Sign in</button>}</div></div></header>
+  <nav className="news-nav">{[{key:"Weather Report",label:"Weather Report"},...newsTabs,{key:"Satellite imagery",label:"Satellite imagery"},{key:"Satellite Report",label:"Satellite Report"}].map(item=><button className={section===item.key?"active":""} key={item.key} onClick={()=>setSection(item.key)}>{item.label}</button>)}</nav>
+  {page==="home"?(section==="Satellite Report"?<SatelliteNumericalReport/>:section==="Satellite imagery"?<SatelliteDashboard/>:section!=="Weather Report"?<WeatherNewsPage section={section as "World"|"Country"|"State"|"Local"} location={visitorLocation}/>:<main className="news-main">
    {notice&&<div className="notice">{notice}</div>}
    <div className="news-toolbar"><div><span className="eyebrow">GLOBAL WEATHER COVERAGE</span><h1>Weather around the world</h1><p>Live weather conditions, forecasts and weather-only news from India and around the world.</p></div><form className="search-weather" onSubmit={e=>{e.preventDefault();void search()}}><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search city or region" aria-label="Search city or region"/><button type="submit">Search</button></form></div>
 
@@ -296,23 +363,7 @@ const [section,setSection]=useState("Satellite Report");const [page,setPage]=use
    </section>
 
    <section className="lead-grid">
-    <aside className="top-brief"><div className="section-heading"><h2>Weather briefing</h2><span>GLOBAL</span></div>{hottest&&<div className="brief-highlight"><small>WARMEST CITY IN THIS LIST · NOT YOUR LOCATION</small><b>{hottest.name}</b><strong>{Math.round(hottest.current?.temperature_2m??0)}°C</strong><span>{weatherLabel(hottest.current?.weather_code)}</span></div>}<div className="brief-line"><span>Active severe-storm events</span><b>{storms.length}</b></div><div className="brief-line"><span>Reporting locations</span><b>{active.length}/{cities.length}</b></div><div className="brief-line"><span>Weather headlines</span><b>{indiaNews.length+worldNews.length}</b></div><div className="brief-line"><span>Auto refresh</span><b>Local 60s · Cities 5m</b></div><button className="refresh-button" onClick={()=>{if(visitorLocation)void refreshWeather(visitorLocation);else void refreshPopularCities();void refreshFeeds()}} disabled={busy}>{busy?"Refreshing…":"↻ Refresh live reports"}</button></aside>
-   </section>
-   <section className="section-block">
-    <div className="section-heading">
-     <div><span className="eyebrow">WEATHER NEWS ONLY · PAST 24 HOURS</span><h2>Latest weather headlines</h2></div>
-     <div className="news-tabs">
-      <button className={newsRegion==="india"?"selected":""} onClick={()=>setNewsRegion("india")}>India</button>
-      <button className={newsRegion==="world"?"selected":""} onClick={()=>setNewsRegion("world")}>World</button>
-     </div>
-    </div>
-    <div className="headline-grid">
-     {headlines.length?headlines.slice(0,18).map((s,i)=><article className="headline-card" key={s.url}>
-      <div className="headline-index">{String(i+1).padStart(2,"0")}</div>
-      <div className="headline-content"><span>{s.source} · {published(s.published_at)}</span><h3><a href={s.url} target="_blank" rel="noreferrer">{s.title}</a></h3><small>{s.language||"Publisher report"}</small></div>
-     </article>):<div className="empty-report">Loading weather headlines or no matching reports were returned in the last 24 hours.</div>}
-    </div>
-    <p className="feed-note">Headlines are aggregated from publicly indexed news publishers through GDELT. This is not a complete feed from every TV channel or newspaper; availability depends on publisher indexing. Open the publisher link for the original article.</p>
+    <aside className="top-brief"><div className="section-heading"><h2>Weather briefing</h2><span>GLOBAL</span></div>{hottest&&<div className="brief-highlight"><small>WARMEST CITY IN THIS LIST · NOT YOUR LOCATION</small><b>{hottest.name}</b><strong>{Math.round(hottest.current?.temperature_2m??0)}°C</strong><span>{weatherLabel(hottest.current?.weather_code)}</span></div>}<div className="brief-line"><span>Active severe-storm events</span><b>{storms.length}</b></div><div className="brief-line"><span>Reporting locations</span><b>{active.length}/{cities.length}</b></div><div className="brief-line"><span>Auto refresh</span><b>Local 60s · Cities 5m</b></div><button className="refresh-button" onClick={()=>{if(visitorLocation)void refreshWeather(visitorLocation);else void refreshPopularCities();void refreshFeeds()}} disabled={busy}>{busy?"Refreshing…":"↻ Refresh live reports"}</button></aside>
    </section>
 
    <section className="section-block">
@@ -321,7 +372,7 @@ const [section,setSection]=useState("Satellite Report");const [page,setPage]=use
       <span className="eyebrow">{personalizedCities?"NATIONAL & INTERNATIONAL CITY REPORTS":"GLOBAL CITY WATCHLIST"}</span>
       <h2>{personalizedCities?"Weather for your country and nearby regions":"Live weather across the world"}</h2>
      </div>
-     <span className="updated-label">LAST CHECKED · {updated?stamp(updated):"LOADING"} · LOCAL</span>
+     <span className="updated-label">LAST CHECKED · {updated?stamp(updated):"LOADING"}</span>
     </div>
     {personalizedCities?<div className="city-report-groups">
      {nationalCities.length>0&&<div className="city-report-group"><div className="city-group-heading">National · {visitorLocation?.country||"Your country"}</div><div className="city-grid">{renderCityCards(nationalCities)}</div></div>}

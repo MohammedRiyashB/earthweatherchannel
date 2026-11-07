@@ -3,6 +3,11 @@ from typing import Any
 import asyncio
 import os
 import logging
+import ipaddress
+import re
+import socket
+from html.parser import HTMLParser
+from urllib.parse import urljoin, urlparse
 from email.utils import parsedate_to_datetime
 from collections import OrderedDict
 from contextlib import asynccontextmanager
@@ -735,11 +740,14 @@ async def reverse_location(
             or address.get("state") or payload.get("name") or "Nearby area"
         )
         state = address.get("state") or address.get("region")
+        district = address.get("state_district") or address.get("county") or address.get("municipality")
         country = address.get("country")
         region = ", ".join(part for part in (state, country) if part and part != place_name)
         result = {
             "name": place_name,
             "region": region or country or "GPS location",
+            "state": state,
+            "district": district,
             "country": country,
             "country_code": (address.get("country_code") or "").upper() or None,
             "source": "OpenStreetMap Nominatim",
@@ -825,53 +833,334 @@ async def radar() -> dict[str, Any]:
         raise HTTPException(status_code=502, detail="RainViewer radar metadata unavailable") from exc
 
 
+class _WeatherArticleParser(HTMLParser):
+    """Extract publisher metadata and readable paragraphs without executing page scripts."""
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.meta: dict[str, str] = {}
+        self.title_parts: list[str] = []
+        self.paragraphs: list[str] = []
+        self._title = False
+        self._article_depth = 0
+        self._main_depth = 0
+        self._paragraph_depth = 0
+        self._paragraph_parts: list[str] = []
+        self._script_depth = 0
+        self._script_parts: list[str] = []
+        self.json_article_body = ""
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        values = {key.lower(): (value or "") for key, value in attrs}
+        if tag.lower() == "meta":
+            key = (values.get("property") or values.get("name") or values.get("itemprop") or "").lower()
+            content = values.get("content", "").strip()
+            if key and content:
+                self.meta.setdefault(key, content)
+        elif tag.lower() == "title":
+            self._title = True
+        elif tag.lower() == "article":
+            self._article_depth += 1
+        elif tag.lower() == "main":
+            self._main_depth += 1
+        elif tag.lower() == "p":
+            self._paragraph_depth += 1
+            if self._paragraph_depth == 1:
+                self._paragraph_parts = []
+        elif tag.lower() == "script" and "ld+json" in values.get("type", "").lower():
+            self._script_depth += 1
+            self._script_parts = []
+
+    def handle_endtag(self, tag: str) -> None:
+        tag = tag.lower()
+        if tag == "title":
+            self._title = False
+        elif tag == "article":
+            self._article_depth = max(0, self._article_depth - 1)
+        elif tag == "main":
+            self._main_depth = max(0, self._main_depth - 1)
+        elif tag == "p" and self._paragraph_depth:
+            self._paragraph_depth -= 1
+            if self._paragraph_depth == 0:
+                value = re.sub(r"\s+", " ", " ".join(self._paragraph_parts)).strip()
+                if len(value) >= 45 and value not in self.paragraphs:
+                    self.paragraphs.append(value)
+        elif tag == "script" and self._script_depth:
+            self._script_depth -= 1
+            payload = " ".join(self._script_parts)
+            match = re.search(r'"articleBody"\s*:\s*"((?:\\.|[^"\\])*)"', payload, re.S)
+            if match and not self.json_article_body:
+                try:
+                    import json
+                    self.json_article_body = json.loads('"' + match.group(1) + '"')
+                except (ValueError, TypeError):
+                    self.json_article_body = match.group(1)
+
+    def handle_data(self, data: str) -> None:
+        text = re.sub(r"\s+", " ", data).strip()
+        if not text:
+            return
+        if self._title:
+            self.title_parts.append(text)
+        if self._paragraph_depth:
+            self._paragraph_parts.append(text)
+        if self._script_depth:
+            self._script_parts.append(data)
+
+
+async def _assert_public_article_host(url: str) -> None:
+    parsed = urlparse(url)
+    if parsed.scheme not in {"http", "https"} or not parsed.hostname or parsed.username or parsed.password:
+        raise HTTPException(status_code=422, detail="Article URL must be a public HTTP or HTTPS address")
+    if parsed.port not in (None, 80, 443):
+        raise HTTPException(status_code=422, detail="Non-standard article URL ports are not supported")
+    host = parsed.hostname.rstrip(".").lower()
+    if host in {"localhost", "metadata.google.internal"}:
+        raise HTTPException(status_code=403, detail="Private article hosts are not allowed")
+    try:
+        ip = ipaddress.ip_address(host)
+        addresses = [ip]
+    except ValueError:
+        try:
+            resolved = await asyncio.wait_for(
+                asyncio.to_thread(socket.getaddrinfo, host, parsed.port or (443 if parsed.scheme == "https" else 80), 0, socket.SOCK_STREAM),
+                timeout=4.0,
+            )
+            addresses = [ipaddress.ip_address(entry[4][0]) for entry in resolved]
+        except (OSError, asyncio.TimeoutError, ValueError) as exc:
+            raise HTTPException(status_code=502, detail="Publisher host could not be resolved") from exc
+    if not addresses or any(not address.is_global for address in addresses):
+        raise HTTPException(status_code=403, detail="Private or non-public article hosts are not allowed")
+
+
+_GDELT_ARTICLE_CACHE: dict[str, tuple[float, float, dict[str, Any]]] = {}
+_GDELT_CACHE_LOCK = asyncio.Lock()
+_GDELT_LAST_UPSTREAM = 0.0
+
+
 @app.get("/api/weather-news")
 async def weather_news(
-    region: str = Query("world", pattern="^(world|india)$"),
+    region: str = Query("world", pattern="^(world|country|state|local|india)$"),
     limit: int = Query(25, ge=1, le=50),
+    country_code: str | None = Query(None, min_length=2, max_length=3),
+    country_name: str | None = Query(None, max_length=80),
+    state_name: str | None = Query(None, max_length=100),
+    local_name: str | None = Query(None, max_length=100),
+    district_name: str | None = Query(None, max_length=100),
 ) -> dict[str, Any]:
-    """Recent weather-only headlines aggregated from publicly indexed news outlets via GDELT."""
-    query = '(weather OR forecast OR rainfall OR cyclone OR storm OR heatwave OR monsoon OR flood OR snowfall OR drought)'
-    if region == "india":
-        query += ' sourcecountry:IN'
+    """Weather-only stories scoped to the whole world, visitor country, state or nearby locality."""
+    weather_terms = '(weather OR forecast OR rainfall OR rain OR cyclone OR storm OR heatwave OR monsoon OR flood OR snowfall OR drought OR thunderstorm OR temperature OR hurricane OR typhoon OR meteorology)'
+    code = (country_code or "").strip().upper()
+    if code == "IN":
+        weather_terms = weather_terms[:-1] + ' OR मौसम OR बारिश OR चक्रवात OR बाढ़ OR तापमान OR तूफान OR வானிலை OR மழை OR புயல் OR வெள்ளம் OR வெப்பநிலை)'
+    scope_query = ""
+    if region in {"country", "india"}:
+        if code and code.isalpha():
+            scope_query = f" sourcecountry:{code}"
+        elif country_name:
+            scope_query = f' "{country_name.strip()}"'
+    elif region == "state":
+        if code and code.isalpha():
+            scope_query += f" sourcecountry:{code}"
+        if state_name and state_name.strip():
+            scope_query += f' "{state_name.strip()}"'
+    elif region == "local":
+        if code and code.isalpha():
+            scope_query += f" sourcecountry:{code}"
+        place_terms = [value.strip() for value in (local_name, district_name, state_name) if value and value.strip()]
+        if place_terms:
+            scope_query += " (" + " OR ".join(f'"{value}"' for value in place_terms[:3]) + ")"
     params = {
-        "query": query,
+        "query": weather_terms + scope_query,
         "mode": "ArtList",
         "format": "json",
         "sort": "DateDesc",
         "maxrecords": limit,
         "timespan": "24h",
-        "sourcelang": "english",
     }
+    cache_key = "|".join([region, str(limit), code, country_name or "", state_name or "", local_name or "", district_name or ""])
     try:
-        async with httpx.AsyncClient(timeout=20.0, follow_redirects=True) as client:
-            response = await client.get("https://api.gdeltproject.org/api/v2/doc/doc", params=params)
-            response.raise_for_status()
-            payload = response.json()
+        async with _GDELT_CACHE_LOCK:
+            now = asyncio.get_running_loop().time()
+            cached = _GDELT_ARTICLE_CACHE.get(cache_key)
+            if cached and cached[0] > now:
+                payload = cached[2]
+            else:
+                global _GDELT_LAST_UPSTREAM
+                wait_seconds = 5.0 - (now - _GDELT_LAST_UPSTREAM)
+                if wait_seconds > 0:
+                    await asyncio.sleep(wait_seconds)
+                _GDELT_LAST_UPSTREAM = asyncio.get_running_loop().time()
+                try:
+                    async with httpx.AsyncClient(timeout=20.0, follow_redirects=True) as client:
+                        response = await client.get("https://api.gdeltproject.org/api/v2/doc/doc", params=params)
+                        response.raise_for_status()
+                        payload = response.json()
+                except (httpx.HTTPError, ValueError):
+                    if cached and cached[1] > asyncio.get_running_loop().time():
+                        payload = cached[2]
+                    else:
+                        raise
+                else:
+                    stored_at = asyncio.get_running_loop().time()
+                    _GDELT_ARTICLE_CACHE[cache_key] = (stored_at + 5 * 60, stored_at + 30 * 60, payload)
+                    # Bound memory while preserving recently requested regional feeds.
+                    if len(_GDELT_ARTICLE_CACHE) > 100:
+                        for old_key, value in list(_GDELT_ARTICLE_CACHE.items()):
+                            if value[1] < stored_at or len(_GDELT_ARTICLE_CACHE) > 100:
+                                _GDELT_ARTICLE_CACHE.pop(old_key, None)
         articles = []
         for item in payload.get("articles", []):
             title = item.get("title")
             url = item.get("url")
             if not title or not url:
                 continue
+            image = item.get("socialimage")
+            if image:
+                image = urljoin(url, image)
+                if urlparse(image).scheme not in {"http", "https"}:
+                    image = None
             articles.append({
                 "title": title,
                 "url": url,
                 "source": item.get("domain") or item.get("source") or "News outlet",
                 "published_at": item.get("seendate"),
                 "language": item.get("language"),
-                "image": item.get("socialimage"),
+                "image": image,
             })
+        scope_names = {
+            "world": "World", "country": country_name or country_code or "Country",
+            "india": "India", "state": state_name or "State",
+            "local": local_name or district_name or "Local area",
+        }
         return {
             "region": region,
+            "scope_name": scope_names.get(region, region.title()),
             "source": "GDELT Global Knowledge Graph",
             "retrieved_at": utc_now(),
             "window": "Past 24 hours",
             "articles": articles,
-            "note": "Headlines are collected from publicly indexed news outlets and filtered for weather topics. Coverage depends on publisher indexing; this is not a complete feed from every television or newspaper channel. Open the original publisher for the full report.",
+            "note": "Weather-related stories are aggregated from indexed publishers. Coverage depends on publishers and location mentions; results are not a complete official news feed.",
         }
     except (httpx.HTTPError, ValueError) as exc:
         raise HTTPException(status_code=502, detail=f"Weather news feed unavailable: {exc.__class__.__name__}") from exc
+
+
+@app.get("/api/weather-news/image")
+async def weather_news_image(url: str = Query(..., min_length=12, max_length=2048)) -> Response:
+    """Safely proxy publisher lead images so cards and the reader can load them consistently."""
+    current_url = url
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(10.0, connect=4.0), follow_redirects=False, headers={
+            "User-Agent": "Mozilla/5.0 (compatible; EARTHWEATHER/1.0; +https://earthweatherchannel.web.app)",
+            "Accept": "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+        }) as client:
+            for _ in range(5):
+                await _assert_public_article_host(current_url)
+                async with client.stream("GET", current_url) as upstream:
+                    if upstream.status_code in {301, 302, 303, 307, 308}:
+                        location = upstream.headers.get("location")
+                        if not location:
+                            raise HTTPException(status_code=502, detail="Image host returned an invalid redirect")
+                        current_url = urljoin(str(upstream.url), location)
+                        continue
+                    if upstream.status_code >= 400:
+                        raise HTTPException(status_code=502, detail=f"Image host returned HTTP {upstream.status_code}")
+                    media_type = upstream.headers.get("content-type", "").split(";", 1)[0].strip().lower()
+                    if not media_type.startswith("image/"):
+                        raise HTTPException(status_code=415, detail="Publisher URL did not return an image")
+                    length = int(upstream.headers.get("content-length", "0") or 0)
+                    if length > 8 * 1024 * 1024:
+                        raise HTTPException(status_code=413, detail="Publisher image exceeds the 8 MB limit")
+                    chunks: list[bytes] = []
+                    total = 0
+                    async for chunk in upstream.aiter_bytes():
+                        total += len(chunk)
+                        if total > 8 * 1024 * 1024:
+                            raise HTTPException(status_code=413, detail="Publisher image exceeds the 8 MB limit")
+                        chunks.append(chunk)
+                    result = Response(content=b"".join(chunks), media_type=media_type)
+                    result.headers["Cache-Control"] = "public, max-age=3600, stale-while-revalidate=86400"
+                    result.headers["X-Content-Type-Options"] = "nosniff"
+                    return result
+        raise HTTPException(status_code=502, detail="Publisher image redirect limit exceeded")
+    except HTTPException:
+        raise
+    except (httpx.HTTPError, ValueError, OSError) as exc:
+        raise HTTPException(status_code=502, detail=f"Publisher image unavailable: {exc.__class__.__name__}") from exc
+
+
+@app.get("/api/weather-news/article")
+async def weather_news_article(
+    url: str = Query(..., min_length=12, max_length=2048),
+    fallback_title: str = Query("Weather report", max_length=300),
+) -> dict[str, Any]:
+    """Fetch a public publisher page and extract its readable text and lead image for the in-site reader."""
+    current_url = url
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(12.0, connect=4.0), follow_redirects=False, headers={
+            "User-Agent": "Mozilla/5.0 (compatible; EARTHWEATHER/1.0; +https://earthweatherchannel.web.app)",
+            "Accept": "text/html,application/xhtml+xml;q=0.9,*/*;q=0.5",
+        }) as client:
+            response = None
+            for _ in range(5):
+                await _assert_public_article_host(current_url)
+                response = await client.get(current_url)
+                if response.status_code in {301, 302, 303, 307, 308}:
+                    location = response.headers.get("location")
+                    if not location:
+                        break
+                    current_url = urljoin(str(response.url), location)
+                    continue
+                break
+            if response is None:
+                raise HTTPException(status_code=502, detail="Publisher did not return an article page")
+            if response.status_code >= 400:
+                raise HTTPException(status_code=502, detail=f"Publisher page returned HTTP {response.status_code}")
+            content_type = response.headers.get("content-type", "").lower()
+            if "html" not in content_type:
+                raise HTTPException(status_code=415, detail="This publisher link does not provide an HTML article")
+            source_html = response.text[:3_000_000]
+        parser = _WeatherArticleParser()
+        parser.feed(source_html)
+        title = parser.meta.get("og:title") or " ".join(parser.title_parts) or fallback_title
+        description = parser.meta.get("og:description") or parser.meta.get("description") or parser.meta.get("twitter:description") or ""
+        image = parser.meta.get("og:image") or parser.meta.get("twitter:image") or None
+        if image:
+            image = urljoin(current_url, image)
+            if urlparse(image).scheme not in {"http", "https"}:
+                image = None
+        paragraphs = parser.paragraphs
+        if not paragraphs and parser.json_article_body:
+            paragraphs = [re.sub(r"\s+", " ", parser.json_article_body).strip()]
+        paragraphs = [part for part in paragraphs if part and len(part) > 45][:80]
+        # Display only a short publisher excerpt in the reader; never republish a full third-party article.
+        excerpt_paragraphs: list[str] = []
+        remaining_words = 180
+        for paragraph in paragraphs:
+            words = paragraph.split()
+            if not words or remaining_words <= 0:
+                break
+            excerpt_words = words[:remaining_words]
+            excerpt_paragraphs.append(" ".join(excerpt_words))
+            remaining_words -= len(excerpt_words)
+        paragraphs = excerpt_paragraphs
+        excerpt_word_count = 180 - remaining_words
+        return {
+            "title": title[:500],
+            "description": description[:1500],
+            "image": image,
+            "paragraphs": paragraphs,
+            "source_url": current_url,
+            "source": urlparse(current_url).hostname or "Publisher",
+            "retrieved_at": utc_now(),
+            "extraction_status": "publisher_excerpt" if excerpt_word_count >= 60 else "summary_only",
+            "excerpt_word_count": excerpt_word_count,
+            "note": "EARTH WEATHER displays a short excerpt and publisher metadata for in-site reading. Open the original publisher for the complete article.",
+        }
+    except HTTPException:
+        raise
+    except (httpx.HTTPError, ValueError, UnicodeError) as exc:
+        raise HTTPException(status_code=502, detail=f"Article could not be loaded: {exc.__class__.__name__}") from exc
 
 
 SATELLITE_PROVIDER_CHECKS = [
