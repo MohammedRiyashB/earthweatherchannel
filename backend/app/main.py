@@ -165,7 +165,7 @@ async def _request_current_chunk(
             last_error = exc
             status_code = exc.response.status_code if isinstance(exc, httpx.HTTPStatusError) else None
             logger.warning(
-                "Open-Meteo upstream failure attempt=%s/3 status=%s error=%s locations=%s",
+                "Open-Meteo upstream failure attempt=%s/2 status=%s error=%s locations=%s",
                 attempt + 1, status_code, exc.__class__.__name__, len(latitudes),
             )
             if attempt < 1:
@@ -200,12 +200,11 @@ async def _fetch_open_meteo_current(client: httpx.AsyncClient, params: dict[str,
         else:
             pending_indices.append(index)
 
-    # Keep upstream query strings small, but run independent chunks concurrently.
-    # Sequential 35-second waits multiplied by many cities caused cards to remain
-    # in "Loading report…" for minutes when the upstream provider was slow.
+    # Send up to 12 locations per provider request to reduce round trips while
+    # keeping query size bounded. The semaphore limits concurrent upstream work.
     chunks = [pending_indices[i:i + 12] for i in range(0, len(pending_indices), 12)]
 
-    async def load_chunk(chunk: list[int]) -> tuple[list[int], list[dict[str, Any]] | None]:
+    async def load_chunk(chunk: list[int]) -> tuple[list[int], list[dict[str, Any] | None] | None]:
         chunk_lats = [latitudes[i] for i in chunk]
         chunk_lons = [longitudes[i] for i in chunk]
         try:
@@ -451,7 +450,8 @@ async def weather(
         cached = _weather_cache.get(cache_key)
     if cached and cached[0] > now:
         async with _weather_cache_lock:
-            _weather_cache.move_to_end(cache_key)
+            if cache_key in _weather_cache:
+                _weather_cache.move_to_end(cache_key)
         return cached[1]
 
     params = _current_weather_params([latitude], [longitude])
