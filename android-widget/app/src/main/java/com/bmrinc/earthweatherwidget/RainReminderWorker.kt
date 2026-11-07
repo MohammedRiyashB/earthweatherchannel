@@ -40,6 +40,7 @@ class RainReminderWorker(context: Context, params: WorkerParameters) : Coroutine
    connection.disconnect()
    val root = JSONObject(body)
    val hourly = root.optJSONArray("hourly") ?: return@withContext Result.success()
+   val threshold = prefs.getInt("rain_probability_threshold", 60).coerceIn(40, 90)
    var maximum = -1
    var firstRainTime = ""
    for (index in 0 until minOf(6, hourly.length())) {
@@ -50,7 +51,7 @@ class RainReminderWorker(context: Context, params: WorkerParameters) : Coroutine
      firstRainTime = item.optString("time")
     }
    }
-   if (maximum < 60) return@withContext Result.success()
+   if (maximum < threshold) return@withContext Result.success()
    val date = root.optString("timezone").ifBlank { "local" } + ":" + firstRainTime.take(10)
    val lastDate = prefs.getString("last_rain_reminder_date", "")
    if (lastDate == date) return@withContext Result.success()
@@ -67,8 +68,8 @@ class RainReminderWorker(context: Context, params: WorkerParameters) : Coroutine
    val notification = NotificationCompat.Builder(applicationContext, channelId)
     .setSmallIcon(R.drawable.ic_weather_rain)
     .setContentTitle("EARTH WEATHER · Rain expected")
-    .setContentText("Rain probability may reach " + maximum + "% in the next few hours.")
-    .setStyle(NotificationCompat.BigTextStyle().bigText("Forecast rain probability reaches " + maximum + "% around " + firstRainTime.replace("T", " ") + ". This is a model forecast, not a live nowcast."))
+    .setContentText("Rain probability may reach " + maximum + "% (your alert threshold is " + threshold + "%). ")
+    .setStyle(NotificationCompat.BigTextStyle().bigText("Forecast rain probability reaches " + maximum + "% around " + firstRainTime.replace("T", " ") + ". Your threshold is " + threshold + "%. This is a model forecast, not a live nowcast."))
     .setAutoCancel(true)
     .setContentIntent(pending)
     .build()
