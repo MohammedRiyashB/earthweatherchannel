@@ -21,6 +21,8 @@ export default function App() {
   const [message, setMessage] = useState("Choose Allow location to load local weather.");
   const [busy, setBusy] = useState(false);
   const [layerOn, setLayerOn] = useState(true);
+  const [selectedSatellite, setSelectedSatellite] = useState("VIIRS");
+  const satelliteLayer = useRef<Cesium.ImageryLayer | null>(null);
   const [panel, setPanel] = useState("overview");
 
   useEffect(() => {
@@ -44,9 +46,10 @@ export default function App() {
     });
     const layer = v.imageryLayers.addImageryProvider(nasa);
     layer.alpha = 0.86;
+    satelliteLayer.current = layer;
     (layer as Cesium.ImageryLayer & { _earthWeatherLayer?: boolean })._earthWeatherLayer = true;
     viewer.current = v;
-    return () => { v.destroy(); viewer.current = null; };
+    return () => { v.destroy(); viewer.current = null; satelliteLayer.current = null; };
   }, []);
 
   useEffect(() => {
@@ -65,7 +68,7 @@ export default function App() {
     finally { setBusy(false); }
   }, []);
 
-  const locate = () => {
+  const locate = useCallback(() => {
     if (!navigator.geolocation) { setMessage("Geolocation is not supported by this browser."); return; }
     setMessage("Waiting for location permission…");
     navigator.geolocation.getCurrentPosition(
@@ -73,17 +76,31 @@ export default function App() {
       e => setMessage(e.code === 1 ? "Location permission denied. The global globe still works." : "Could not determine location. Try again."),
       { enableHighAccuracy: true, timeout: 12000, maximumAge: 300000 }
     );
-  };
+  }, [loadWeather]);
 
-  const toggleSatellite = () => {
-    const v = viewer.current; if (!v) return;
-    const layers = v.imageryLayers;
-    for (let i = 0; i < layers.length; i++) {
-      const l = layers.get(i) as Cesium.ImageryLayer & { _earthWeatherLayer?: boolean };
-      if (l._earthWeatherLayer) l.show = !layerOn;
-    }
-    setLayerOn(!layerOn);
-  };
+  useEffect(() => { locate(); }, [locate]);
+
+  useEffect(() => {
+    const v = viewer.current;
+    if (!v || !satelliteLayer.current) return;
+    const configs: Record<string, {url:string; credit:string; max:number}> = {
+      VIIRS: { url: `https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/VIIRS_SNPP_CorrectedReflectance_TrueColor/default/${dateUTC(2)}/GoogleMapsCompatible_Level9/{z}/{y}/{x}.jpg`, credit: "NASA GIBS / VIIRS SNPP", max: 9 },
+      "GOES East": { url: "https://gibs.earthdata.nasa.gov/wmts/epsg3857/nrt/GOES-East_ABI_GeoColor/default/default/GoogleMapsCompatible_Level9/{z}/{y}/{x}.jpg", credit: "NASA GIBS / NOAA GOES-East ABI GeoColor", max: 9 },
+      "GOES West": { url: "https://gibs.earthdata.nasa.gov/wmts/epsg3857/nrt/GOES-West_ABI_GeoColor/default/default/GoogleMapsCompatible_Level9/{z}/{y}/{x}.jpg", credit: "NASA GIBS / NOAA GOES-West ABI GeoColor", max: 9 },
+      "GOES East IR": { url: "https://gibs.earthdata.nasa.gov/wmts/epsg3857/nrt/GOES-East_ABI_Band13_Clean_Infrared/default/default/GoogleMapsCompatible_Level9/{z}/{y}/{x}.jpg", credit: "NASA GIBS / NOAA GOES-East ABI Band 13 IR", max: 9 }
+    };
+    const cfg = configs[selectedSatellite];
+    if (!cfg) return;
+    const old = satelliteLayer.current;
+    v.imageryLayers.remove(old, false);
+    const provider = new Cesium.UrlTemplateImageryProvider({ url: cfg.url, maximumLevel: cfg.max, credit: cfg.credit });
+    const next = v.imageryLayers.addImageryProvider(provider);
+    next.alpha = 0.9;
+    next.show = layerOn;
+    satelliteLayer.current = next;
+  }, [selectedSatellite, layerOn]);
+
+  const toggleSatellite = () => setLayerOn(v => !v);
 
   const codeLabel = (code?: number) => {
     if (code == null) return "—";
@@ -114,10 +131,10 @@ export default function App() {
           <div className="globe-subtitle">Satellite imagery · atmospheric models · official alerts</div>
         </div>
         <div className="globe-controls">
-          <button className={layerOn ? "active" : ""} onClick={toggleSatellite}>◉ <span>NASA SATELLITE</span></button>
+          <select className="layer-select" aria-label="Satellite imagery layer" value={selectedSatellite} onChange={e => setSelectedSatellite(e.target.value)}><option value="VIIRS">NASA VIIRS · GLOBAL</option><option value="GOES East">GOES-19 · EAST</option><option value="GOES West">GOES-18 · WEST</option><option value="GOES East IR">GOES EAST · INFRARED</option></select><button className={layerOn ? "active" : ""} onClick={toggleSatellite}>◉ <span>{layerOn ? "LAYER ON" : "LAYER OFF"}</span></button>
           <button onClick={() => viewer.current?.camera.flyHome(2)}>◎ <span>GLOBAL VIEW</span></button>
         </div>
-        <div className="attribution">Base map © OpenStreetMap contributors · Imagery © NASA GIBS / VIIRS SNPP</div>
+        <div className="attribution">Base map © OpenStreetMap contributors · Imagery © NASA GIBS / NOAA</div>
       </div>
 
       <aside className="side-panel">
