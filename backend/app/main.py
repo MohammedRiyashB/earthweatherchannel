@@ -30,7 +30,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="EARTH WEATHER API",
-    version="0.3.0",
+    version="0.3.1",
     description="Uncached live weather API with pooled upstream connections.",
     lifespan=lifespan,
 )
@@ -83,12 +83,32 @@ def _meteo_params(latitudes: list[float], longitudes: list[float]) -> dict[str, 
     }
 
 @app.get("/")
-async def root() -> dict[str, str]:
-    return {"name":"EARTH WEATHER API","status":"ok","version":"0.2.0","docs":"/docs"}
+async def root(response: Response) -> dict[str, Any]:
+    """Expose an uncached deployment fingerprint and the public API docs."""
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    response.headers["Pragma"] = "no-cache"
+    revision = os.getenv("RENDER_GIT_COMMIT", "unknown")
+    return {
+        "service": "earth-weather-api",
+        "name": "EARTH WEATHER API",
+        "status": "ok",
+        "version": app.version,
+        "deployment_revision": revision[:12],
+        "docs": "/docs",
+        "openapi": "/openapi.json",
+    }
 
 @app.get("/health")
-async def health() -> dict[str, str]:
-    return {"status":"healthy","time":utc_now()}
+async def health(response: Response) -> dict[str, str]:
+    """Lightweight process health check; no upstream provider dependency."""
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    response.headers["Pragma"] = "no-cache"
+    return {
+        "status": "healthy",
+        "service": "earth-weather-api",
+        "version": app.version,
+        "time": utc_now(),
+    }
 
 @app.get("/api/sources")
 async def sources() -> list[dict[str, str]]:
