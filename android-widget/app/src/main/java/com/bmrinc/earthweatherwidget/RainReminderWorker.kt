@@ -20,6 +20,8 @@ import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
+import java.time.ZoneId
+import java.time.ZonedDateTime
 
 class RainReminderWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
  override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
@@ -41,6 +43,11 @@ class RainReminderWorker(context: Context, params: WorkerParameters) : Coroutine
    val root = JSONObject(body)
    val hourly = root.optJSONArray("hourly") ?: return@withContext Result.success()
    val threshold = prefs.getInt("rain_probability_threshold", 60).coerceIn(40, 90)
+   val startHour = prefs.getInt("rain_start_hour", 7).coerceIn(0, 22)
+   val endHour = prefs.getInt("rain_end_hour", 22).coerceIn(startHour + 1, 24)
+   val zone = runCatching { ZoneId.of(root.optString("timezone")) }.getOrDefault(ZoneId.systemDefault())
+   val localHour = ZonedDateTime.now(zone).hour
+   if (localHour < startHour || localHour >= endHour) return@withContext Result.success()
    var maximum = -1
    var firstRainTime = ""
    for (index in 0 until minOf(6, hourly.length())) {
