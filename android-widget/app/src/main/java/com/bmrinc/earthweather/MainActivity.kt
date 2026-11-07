@@ -744,7 +744,7 @@ private fun RadarScreen(state: DashboardState, place: WeatherPlace?, modifier: M
                             }
                         },
                         update = { webView ->
-                            val pathKey = selectedFrame.path
+                            val pathKey = selectedFrame.path + "@" + place.latitude + "," + place.longitude
                             if (webView.tag != pathKey) {
                                 webView.tag = pathKey
                                 val html = radarMapHtml(
@@ -765,13 +765,15 @@ private fun RadarScreen(state: DashboardState, place: WeatherPlace?, modifier: M
                         Spacer(Modifier.weight(1f))
                         TextButton(onClick = { frameIndex = (frameIndex + 1).coerceAtMost(frames.lastIndex); playing = false }, enabled = frameIndex < frames.lastIndex) { Text("Next ›", color = Color.White) }
                     }
-                    Slider(
-                        value = frameIndex.toFloat(),
-                        onValueChange = { frameIndex = it.toInt().coerceIn(0, frames.lastIndex); playing = false },
-                        valueRange = 0f..frames.lastIndex.coerceAtLeast(0).toFloat(),
-                        steps = (frames.size - 2).coerceAtLeast(0),
-                        enabled = frames.size > 1
-                    )
+                    if (frames.size > 1) {
+                        Slider(
+                            value = frameIndex.toFloat(),
+                            onValueChange = { frameIndex = it.toInt().coerceIn(0, frames.lastIndex); playing = false },
+                            valueRange = 0f..frames.lastIndex.toFloat(),
+                            steps = (frames.size - 2).coerceAtLeast(0),
+                            enabled = true
+                        )
+                    }
                     Text("RainViewer past radar frames · OpenStreetMap base map", color = Color.White.copy(alpha = .65f), fontSize = 9.sp)
                 }
             }
