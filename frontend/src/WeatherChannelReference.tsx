@@ -500,9 +500,12 @@ export function WeatherChannelPage({ mode, location, cities, storms, onNavigate 
   const aqi = typeof air?.current?.us_aqi === "number" ? Math.round(air.current.us_aqi) : null;
   const high = daily.temperature_2m_max?.[0], low = daily.temperature_2m_min?.[0];
   const rainChance = hourly.precipitation_probability?.[0] ?? daily.precipitation_probability_max?.[0];
-  const uvIndex = typeof current.uv_index === "number"
-    ? current.uv_index
-    : hourly.uv_index?.[currentHourIndex];
+  const dewPoint = typeof hourly.dew_point_2m?.[currentHourIndex] === "number"
+    ? hourly.dew_point_2m[currentHourIndex]
+    : current.dew_point_2m;
+  const uvIndex = typeof hourly.uv_index?.[currentHourIndex] === "number"
+    ? hourly.uv_index[currentHourIndex]
+    : current.uv_index;
   const visibility = hourly.visibility?.[currentHourIndex];
   const moonPhase = forecast?.astronomy?.phase
     ? forecast.astronomy.phase + (typeof forecast.astronomy.illumination_percent === "number" ? " · " + value(forecast.astronomy.illumination_percent) + "%" : "")
@@ -511,7 +514,7 @@ export function WeatherChannelPage({ mode, location, cities, storms, onNavigate 
     ["Wind", typeof current.wind_speed_10m === "number" ? value(current.wind_speed_10m,1) + " km/h" : "—", "↗"],
     ["Humidity", typeof current.relative_humidity_2m === "number" ? value(current.relative_humidity_2m) + "%" : "—", "◌"],
     ["Air Quality", aqi == null ? "—" : String(aqi), "◉"],
-    ["Dew Point", typeof current.dew_point_2m === "number" ? value(current.dew_point_2m,1) + "°" : "—", "◍"],
+    ["Dew Point", typeof dewPoint === "number" ? value(dewPoint,1) + "°" : "—", "◍"],
     ["Pressure", typeof current.pressure_msl === "number" ? value(current.pressure_msl,1) + " hPa" : "—", "⌁"],
     ["UV Index", typeof uvIndex === "number" ? value(uvIndex,1) : "—", "☼"],
     ["Visibility", typeof visibility === "number" ? value(visibility/1000,1) + " km" : "—", "◎"],
