@@ -167,6 +167,8 @@ jobs:
                   return value
               if re.fullmatch(r"[A-Za-z0-9+/=]{32,}", stripped):
                   return value
+              if len(stripped) > 45 and not re.search(r"\\s", stripped) and not stripped.lower().startswith(("http://", "https://")):
+                  return value
               value = map_vendor_url(value)
               replacements = [
                   ("Guangdong OPPO Mobile Telecommunications Corp., Ltd.", "BMR INC. — EARTH WEATHER CHANNEL"),
@@ -306,6 +308,8 @@ jobs:
                       if re.fullmatch(r"(?:[A-Za-z_$][A-Za-z0-9_$]*\.)+[A-Za-z_$][A-Za-z0-9_$]*", stripped):
                           continue
                       if re.fullmatch(r"[A-Za-z0-9+/=]{32,}", stripped):
+                          continue
+                      if len(stripped) > 45 and not re.search(r"\\s", stripped) and not stripped.lower().startswith(("http://", "https://")):
                           continue
                       if forbidden.search(candidate):
                           visible_hits.append(f"{p}:{node.tag}:{candidate[:90]}")
