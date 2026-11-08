@@ -39,6 +39,23 @@ jobs:
           test -f input/OppoWeather2/resources.arsc
           (cd input/OppoWeather2 && zip -q -r ../oppo-original.apk .)
           java -Xmx5g -jar apktool.jar d -f input/oppo-original.apk -o decoded
+      - name: Inspect exact launcher icon resources
+        run: |
+          python3 - <<'PY'
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+          root=Path("decoded")
+          manifest=ET.parse(root/"AndroidManifest.xml").getroot()
+          app=manifest.find("application")
+          ns="{http://schemas.android.com/apk/res/android}"
+          print("manifest icon:", app.get(ns+"icon") if app is not None else None)
+          print("manifest roundIcon:", app.get(ns+"roundIcon") if app is not None else None)
+          print("manifest logo:", app.get(ns+"logo") if app is not None else None)
+          for p in sorted((root/"res").rglob("*")):
+              if p.is_file() and any(k in p.name.lower() for k in ("icon","logo","weather_app","weather_icon")):
+                  print("ICON_CANDIDATE",p.relative_to(root),p.stat().st_size)
+          print("PNG directories:", sorted({str(p.parent.relative_to(root)) for p in (root/"res").rglob("*.png")}))
+          PY
       - name: Download the repository's applogo.png
         run: |
           curl -fL --retry 3 https://raw.githubusercontent.com/MohammedRiyashB/earthweatherchannel/main/applogo.png -o applogo.png
