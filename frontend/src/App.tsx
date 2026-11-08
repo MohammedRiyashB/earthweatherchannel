@@ -3,7 +3,8 @@ import { auth, firebaseReady, googleProvider } from "./firebase";
 import { onAuthStateChanged, signInWithPopup, signOut, type User } from "firebase/auth";
 import { FOOTER_GROUPS, resolveSitePage, SITE_PATHS, SitePageView, type SitePageId } from "./sitePages";
 import "./intelligence.css";
-import { WeatherChannelPage, WeatherChannelShell, type WeatherChannelMode } from "./WeatherChannelPages";
+import { WeatherChannelLayout, WeatherChannelPage, type WeatherChannelMode } from "./WeatherChannelReference";
+import "./weather-reference.css";
 
 const API=import.meta.env.VITE_API_BASE_URL||"https://earthweather-api.onrender.com";
 type Current={time?:string|number;is_day?:number;temperature_2m?:number;relative_humidity_2m?:number;apparent_temperature?:number;precipitation?:number;cloud_cover?:number;pressure_msl?:number;wind_speed_10m?:number;wind_direction_10m?:number;weather_code?:number;source?:string;source_url?:string};
@@ -674,11 +675,7 @@ const [section,setSection]=useState("Weather Report");const page:"home"|SitePage
   return()=>{document.body.style.overflow=previousOverflow;window.removeEventListener("keydown",handleKeyDown);};
  },[locationPickerOpen]);
  const signIn=async()=>{if(!auth)return;try{await signInWithPopup(auth,googleProvider)}catch{setNotice("Google sign-in could not be completed.")}};
- const countryTab=visitorLocation?.country||"Country";
- const stateTab=visitorLocation?.state||"State";
- const localTab=visitorLocation?.name?(visitorLocation?.district?`${visitorLocation.name} · ${visitorLocation.district}`:visitorLocation.name):(visitorLocation?.district||"Local");
- const newsTabs=[{key:"World",label:"World"},{key:"Country",label:countryTab},{key:"State",label:stateTab},{key:"Local",label:localTab}];
- return <div className="news-site weathercom-site">
+ return <div className={page==="home"?"earth-weather-site":"news-site"}>
   {locationPickerOpen&&<div className="location-picker-overlay" role="dialog" aria-modal="true" aria-label="Search weather locations">
    <div className="location-picker-shell">
     <form className="location-picker-search" onSubmit={event=>{event.preventDefault();void search();}}>
@@ -712,20 +709,23 @@ const [section,setSection]=useState("Weather Report");const page:"home"|SitePage
     </>}
    </div>
   </div>}
-  
-  <WeatherChannelShell active={page==="home"?section:String(page)} location={local}
-   onNavigate={setSection}
-   onSearchLocation={()=>{setQuery("");setLocationSearchResults([]);setLocationSearchError("");setLocationPickerOpen(true);}}
-   onSignIn={()=>void (user?signOut(auth!):signIn())}
-   userLabel={user?.displayName||"Sign in"}>
-   {page==="home"?
-    ((["Weather Report","Hourly","10 Day","Radar","Air Quality","Allergy","Cold & Flu","Storm reports"] as string[]).includes(section)
-      ?<WeatherChannelPage mode={section as WeatherChannelMode} location={local} cities={cities} storms={storms} onNavigate={setSection} onSearchLocation={()=>{setQuery("");setLocationSearchResults([]);setLocationSearchError("");setLocationPickerOpen(true);}}/>
+  {page==="home"?<WeatherChannelLayout
+    active={section}
+    location={local}
+    onNavigate={setSection}
+    onSearchLocation={()=>{setQuery("");setLocationSearchResults([]);setLocationSearchError("");setLocationPickerOpen(true);}}
+    onAccount={()=>{if(user)void signOut(auth!);else void signIn();}}
+    accountName={user?.displayName||null}
+   >
+    {(["Weather Report","Hourly","10 Day","Radar","Air Quality","Allergy","Storm reports"] as string[]).includes(section)
+      ?<WeatherChannelPage mode={section as WeatherChannelMode} location={local} cities={cities} storms={storms} onNavigate={setSection}/>
       :section==="Satellite Report"?<SatelliteNumericalReport/>
       :section==="Satellite imagery"?<SatelliteDashboard/>
-      :<WeatherNewsPage section={section as "World"|"Country"|"State"|"Local"} location={visitorLocation}/>)
-    :<main className="news-main info-page"><SitePageView slug={page}/></main>}
-  </WeatherChannelShell>
+      :<WeatherNewsPage section={section as "World"|"Country"|"State"|"Local"} location={visitorLocation}/>} 
+   </WeatherChannelLayout>:<>
+    <header className="masthead"><div className="masthead-row"><div className="brand-lockup"><img className="brand-wordmark" src="/logo.png" alt="EARTH WEATHER" width="1200" height="220"/></div><div className="masthead-actions"><button className="header-location-search" type="button" aria-label="Search city or region" title="Search city or region" onClick={()=>{setQuery("");setLocationSearchResults([]);setLocationSearchError("");setLocationPickerOpen(true);}}><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.6"/><path d="m16 16 4.1 4.1"/></svg></button>{user?<button className="masthead-account-button" onClick={()=>void signOut(auth!)}>{user.displayName||"Account"}</button>:<button className="masthead-account-button" onClick={()=>void signIn()}>Sign in</button>}</div></div></header>
+    <main className="news-main info-page"><SitePageView slug={page}/></main>
+   </>}
   <footer className="news-footer">
    <div className="footer-heading">
     <img className="footer-logo" src="/logo.png" alt="EARTH WEATHER logo" />
