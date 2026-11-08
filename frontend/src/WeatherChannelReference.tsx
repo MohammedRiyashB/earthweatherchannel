@@ -479,6 +479,17 @@ export function WeatherChannelPage({ mode, location, cities, storms, onNavigate 
     }
     return result;
   }, [location?.lat, location?.lon, zoom]);
+  const markerPosition = useMemo(() => {
+    if (!location) return { left: "50%", top: "50%" };
+    const n = 2 ** zoom;
+    const lat = Math.max(-85.0511, Math.min(85.0511, location.lat)) * Math.PI / 180;
+    const tileX = (location.lon + 180) / 360 * n;
+    const tileY = (1 - Math.asinh(Math.tan(lat)) / Math.PI) / 2 * n;
+    return {
+      left: ((1 + tileX - Math.floor(tileX)) / 3 * 100) + "%",
+      top: ((1 + tileY - Math.floor(tileY)) / 3 * 100) + "%"
+    };
+  }, [location?.lat, location?.lon, zoom]);
 
   const provider = forecast?.source?.provider === "metnorway"
     ? "Connected global weather-model service"
@@ -622,7 +633,7 @@ export function WeatherChannelPage({ mode, location, cities, storms, onNavigate 
           <img className="absolute inset-0 h-full w-full object-cover" src={"https://tile.openstreetmap.org/"+zoom+"/"+tile.x+"/"+tile.y+".png"} alt="" loading="lazy"/>
           <img className="absolute inset-0 h-full w-full object-cover opacity-80 mix-blend-multiply" src={(radar.host||"")+frame.path+"/256/"+zoom+"/"+tile.x+"/"+tile.y+"/2/1_1.png"} alt="" loading="lazy"/>
         </div>)}
-        <span aria-label={location.name + " map location"} title={location.name} className="absolute left-1/2 top-1/2 z-10 h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-[3px] border-white bg-blue-600 shadow-[0_1px_8px_rgba(0,0,0,0.55)]"/>
+        <span aria-label={location.name + " map location"} title={location.name} style={markerPosition} className="absolute z-10 h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-[3px] border-white bg-blue-600 shadow-[0_1px_8px_rgba(0,0,0,0.55)]"/>
       </div>}
       {(!radar||!frame||!location)&&!radarLoading&&!radarError&&<div className="absolute inset-0 grid place-items-center text-sm text-gray-500">Radar coverage unavailable.</div>}
       <span className="absolute left-3 top-3 z-20 rounded-lg border border-white/20 bg-[rgba(55,55,55,0.72)] px-3 py-2 text-sm font-bold tracking-wide text-white shadow-lg backdrop-blur-sm">{radarFrameTime}</span>
