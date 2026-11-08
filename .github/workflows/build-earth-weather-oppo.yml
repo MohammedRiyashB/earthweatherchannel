@@ -447,7 +447,40 @@ jobs:
             exit 1
           fi
           # Remove only stale JAR-signature files carried over from the source APK.
-          zip -q -d earth-weather-unsigned.apk 'META-INF/*.SF' 'META-INF/*.RSA' 'META-INF/*.DSA' 'META-INF/*.EC' 'META-INF/MANIFEST.MF' || true
+          mapfile -t STALE_SIGNATURE_FILES < <(zipinfo -1 earth-weather-unsigned.apk | awk 'BEGIN{IGNORECASE=1} $0=="META-INF/MANIFEST.MF" || ($0 ~ /^META-INF\\/[^/]+\\.(SF|RSA|DSA|EC)$/)')
+          if [ "${#STALE_SIGNATURE_FILES[@]}" -gt 0 ]; then
+            printf 'Removing stale signature entry: %s\\n' "${STALE_SIGNATURE_FILES[@]}"
+            zip -q -d earth-weather-unsigned.apk "${STALE_SIGNATURE_FILES[@]}"
+          fi
+          if zipinfo -1 earth-weather-unsigned.apk | grep -Ei '^META-INF/[^/]+\\.(SF|RSA|DSA|EC)$|^META-INF/MANIFEST\\.MF
+      - name: Align and sign APK
+        run: |
+          set -euo pipefail
+          BT="$ANDROID_HOME/build-tools/35.0.0"
+          keytool -genkeypair -v -keystore earthweather-debug.jks -storepass android -alias earthweather -keypass android -dname "CN=Earth Weather,O=BMR Inc,C=IN" -keyalg RSA -keysize 2048 -validity 10000
+          "$BT/zipalign" -f -p 4 earth-weather-unsigned.apk earth-weather-aligned.apk
+          "$BT/zipalign" -c -v 4 earth-weather-aligned.apk
+          "$BT/apksigner" sign --v1-signing-enabled true --v2-signing-enabled true --v3-signing-enabled true --ks earthweather-debug.jks --ks-key-alias earthweather --ks-pass pass:android --key-pass pass:android --out EarthWeather.apk earth-weather-aligned.apk
+          "$BT/apksigner" verify --verbose --print-certs EarthWeather.apk
+          "$BT/aapt" dump badging EarthWeather.apk | tee apk-badging.txt
+          grep -q "package: name='com.bmrinc.earthweather.app'" apk-badging.txt
+          grep -q "application-label:'Earth Weather'" apk-badging.txt
+          test "$(stat -c%s EarthWeather.apk)" -gt 20000000
+          sha256sum EarthWeather.apk | tee apk-sha256.txt
+      - name: Upload full UI APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: earth-weather-standalone-full-oppo-ui-debug
+          path: |
+            EarthWeather.apk
+            apk-badging.txt
+            apk-sha256.txt
+          if-no-files-found: error
+          retention-days: 14
+; then
+            echo "Stale source signature metadata was not removed."
+            exit 1
+          fi
           unzip -t earth-weather-unsigned.apk | tail -2
       - name: Align and sign APK
         run: |
