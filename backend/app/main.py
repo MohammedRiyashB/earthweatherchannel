@@ -237,36 +237,43 @@ async def _fetch_provider_current(client: httpx.AsyncClient, provider: str, lat:
         current = _normalize_openweather(response.json())
     else:
         ua = METNORWAY_USER_AGENT
-        cache_key = (round(lat, 4), round(lon, 4))
+        # Coarse coordinate bucketing avoids excessive upstream calls from GPS jitter.
+        cache_key = (round(lat, 2), round(lon, 2))
+        loop_time = asyncio.get_running_loop().time()
         async with _METNORWAY_CACHE_LOCK:
             cached = _METNORWAY_CACHE.get(cache_key)
-            if cached and cached[0] > asyncio.get_running_loop().time():
-                current = dict(cached[1])
-            else:
-                response = await client.get(METNORWAY_COMPACT, params={"lat":f"{lat:.4f}","lon":f"{lon:.4f}"}, headers={"User-Agent":ua,"Accept":"application/json"})
-                response.raise_for_status()
-                current = _normalize_metnorway(response.json())
-                current["source"] = "MET Norway Locationforecast model analysis"
-                current["source_url"] = "https://api.met.no/weatherapi/locationforecast/2.0/documentation"
-                expires = response.headers.get("expires")
-                cache_control = response.headers.get("cache-control", "")
-                max_age = None
-                for directive in cache_control.split(","):
-                    directive = directive.strip().lower()
-                    if directive.startswith("max-age="):
-                        try: max_age = int(directive.split("=",1)[1])
-                        except ValueError: pass
-                ttl = max_age if max_age is not None else 600
-                if expires:
-                    try:
-                        ttl = max(0, (parsedate_to_datetime(expires) - datetime.now(timezone.utc)).total_seconds())
-                    except (TypeError, ValueError, OverflowError):
-                        pass
-                # MET Norway asks global clients not to repeat identical Locationforecast
-                # requests more often than every three hours; honour longer Expires values.
-                ttl = max(3 * 60 * 60, ttl)
-                if ttl > 0:
-                    _METNORWAY_CACHE[cache_key] = (asyncio.get_running_loop().time() + ttl, dict(current))
+            current = dict(cached[1]) if cached and cached[0] > loop_time else None
+
+        # Never hold the shared cache lock during network I/O: distinct locations
+        # can be fetched concurrently by the country/world city report.
+        if current is None:
+            response = await client.get(
+                METNORWAY_COMPACT,
+                params={"lat":f"{cache_key[0]:.2f}","lon":f"{cache_key[1]:.2f}"},
+                headers={"User-Agent":ua,"Accept":"application/json"},
+            )
+            response.raise_for_status()
+            current = _normalize_metnorway(response.json())
+            current["source"] = "MET Norway Locationforecast model analysis"
+            current["source_url"] = "https://api.met.no/weatherapi/locationforecast/2.0/documentation"
+            expires = response.headers.get("expires")
+            cache_control = response.headers.get("cache-control", "")
+            max_age = None
+            for directive in cache_control.split(","):
+                directive = directive.strip().lower()
+                if directive.startswith("max-age="):
+                    try: max_age = int(directive.split("=",1)[1])
+                    except ValueError: pass
+            ttl = max_age if max_age is not None else 600
+            if expires:
+                try:
+                    ttl = max(0, (parsedate_to_datetime(expires) - datetime.now(timezone.utc)).total_seconds())
+                except (TypeError, ValueError, OverflowError):
+                    pass
+            # Respect MET Norway's minimum three-hour interval for global forecast requests.
+            ttl = max(3 * 60 * 60, ttl)
+            async with _METNORWAY_CACHE_LOCK:
+                _METNORWAY_CACHE[cache_key] = (asyncio.get_running_loop().time() + ttl, dict(current))
     if not isinstance(current.get("temperature_2m"), (int,float)):
         raise ValueError(f"{provider} returned no valid temperature")
     return {"current":current,"provider":provider}

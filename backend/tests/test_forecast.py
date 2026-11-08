@@ -59,7 +59,7 @@ class ForecastAdapterTests(unittest.IsolatedAsyncioTestCase):
             async def get(self, url, params, headers=None):
                 self.url = url
                 self.params = params
-                return FakeResponse(open_meteo_payload())
+                return FakeResponse(met_payload)
         client = Client()
         result = await fetch_forecast(client, 13.08, 80.27, days=2, timezone_name="Asia/Kolkata")
         self.assertEqual(result["source"]["provider"], "metnorway")
@@ -109,11 +109,11 @@ class ForecastAdapterTests(unittest.IsolatedAsyncioTestCase):
             def __init__(self):
                 self.calls = 0
 
-            async def get(self, url, params):
+            async def get(self, url, params, headers=None):
                 self.calls += 1
                 if self.calls == 1:
                     return FakeResponse({"reason": "invalid forecast"})
-                return FakeResponse(met_payload)
+                return FakeResponse(open_meteo_payload())
 
         result = await fetch_forecast(Client(), 11.34, 77.72, days=2)
 

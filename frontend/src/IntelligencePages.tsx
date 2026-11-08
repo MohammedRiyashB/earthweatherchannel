@@ -237,7 +237,7 @@ export function EarthWeatherIntelligencePage({
       requests.push(
         fetch(`${API}/api/weather?${params.toString()}`, { cache: "no-store" })
           .then((response) => { if (!response.ok) throw new Error(`Current weather HTTP ${response.status}`); return response.json(); })
-          .then((data) => { if (active) setWeather(data.current || null); })
+          .then((data) => { if (active) setWeather({ ...(data.current || {}), _providerSource: data.source?.name || data.source?.provider || "" }); })
           .catch(() => { if (active) setWeather(null); })
       );
     } else {
@@ -277,7 +277,7 @@ export function EarthWeatherIntelligencePage({
             <span>Wind <strong>{metric(current.wind_speed_10m)} km/h</strong></span>
             <span>Pressure <strong>{metric(current.pressure_msl, 0)} hPa</strong></span>
           </div>
-          <small>{typeof current.source === "string" ? current.source : "No verified current weather response yet."}</small>
+          <small>{typeof current._providerSource === "string" && current._providerSource ? sourceLabel(current._providerSource) : "No verified current weather response yet."}</small>
         </article>
         <article className="intelligence-card">
           <span className="eyebrow">SEVERE EVENT CATALOGUE</span>
