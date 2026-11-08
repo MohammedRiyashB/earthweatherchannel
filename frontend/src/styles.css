@@ -1112,3 +1112,57 @@
  .site-page-bottom{align-items:flex-start;flex-direction:column}
  .footer-group a{font-size:13px}
 }
+
+
+/* EARTH WEATHER forecast-first responsive experience */
+.wx-quick-nav{position:sticky;top:0;z-index:30;display:flex;justify-content:center;gap:4px;padding:0 max(18px,calc((100% - 1280px)/2));background:#fff;border-bottom:1px solid #e4e9ed;box-shadow:0 3px 12px #18384b0a;overflow-x:auto;scrollbar-width:none}
+.wx-quick-nav button{flex:0 0 auto;border:0;border-bottom:3px solid transparent;background:transparent;padding:15px 19px 12px;color:#40596a;font-size:12px;font-weight:750;cursor:pointer}
+.wx-quick-nav button:first-child{border-bottom-color:#147da5;color:#126e92}
+.wx-quick-nav button:hover{color:#087ba8;border-bottom-color:#087ba8}
+.wx-forecast-shell{margin:24px 0 30px;padding:23px 24px;background:#fff;border:1px solid #e2e8ec;border-radius:8px;box-shadow:0 5px 20px #173b5010}
+.wx-forecast-heading{display:flex;justify-content:space-between;align-items:center;gap:18px}
+.wx-forecast-heading h2{font-family:Manrope,sans-serif;font-size:25px;letter-spacing:-.7px;color:#1b3447;margin:5px 0}
+.wx-forecast-heading p{margin:0;color:#738391;font-size:12px}
+.wx-kicker{font-size:9px;font-weight:850;letter-spacing:1.7px;color:#1481a7}
+.wx-forecast-heading button{border:1px solid #d6e1e7;border-radius:5px;background:#fff;color:#24536c;padding:10px 14px;font-size:11px;font-weight:750}
+.wx-forecast-source{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:17px 0 8px;padding:10px 12px;background:#f5f8fa;color:#647887;font-size:10px}
+.wx-source-dot{width:7px;height:7px;border-radius:50%;background:#20a477;box-shadow:0 0 0 3px #20a47720}
+.wx-source-status{margin-left:auto;font-size:8px;letter-spacing:1px;font-weight:850;color:#398064}
+.wx-forecast-section{margin-top:22px}
+.wx-subhead{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px}
+.wx-subhead h3{font-family:Manrope,sans-serif;font-size:17px;color:#213b4d;margin:0}
+.wx-subhead span{font-size:10px;color:#82909a}
+.wx-hourly-rail{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(92px,1fr);gap:8px;overflow-x:auto;padding:2px 1px 12px;scrollbar-width:thin}
+.wx-hour{display:flex;flex-direction:column;align-items:center;gap:9px;min-width:0;padding:13px 8px;background:#f8fafb;border:1px solid #e7edf0;border-radius:6px}
+.wx-hour>span{font-size:10px;color:#70818c;font-weight:700}
+.wx-hour>b{font-size:24px;line-height:1.2}
+.wx-hour>strong{font-family:Manrope,sans-serif;font-size:23px;color:#245a76}
+.wx-hour>small{font-size:9px;color:#7e8c95;white-space:nowrap}
+.wx-daily-list{border:1px solid #e6ecef;border-radius:6px;overflow:hidden}
+.wx-day{display:grid;grid-template-columns:1.05fr 42px 1.1fr .9fr 1fr;align-items:center;gap:10px;padding:13px 15px;border-bottom:1px solid #edf1f3}
+.wx-day:last-child{border-bottom:0}
+.wx-day>strong:first-child{font-size:12px;color:#30495a}
+.wx-day>b{font-size:22px;text-align:center}
+.wx-day>span,.wx-day>small{font-size:10px;color:#7b8993}
+.wx-day-temps{font-family:Manrope,sans-serif;font-size:15px;color:#225d7a;text-align:right}
+.wx-day-temps i{font-style:normal;color:#a1acb3;font-weight:400}
+.wx-forecast-message{padding:15px;background:#f6f9fa;border:1px solid #e6ecef;color:#71818a;font-size:11px}
+@media(max-width:680px){
+ .wx-quick-nav{justify-content:flex-start;padding:0 10px}
+ .wx-quick-nav button{padding:14px 14px 11px;font-size:11px}
+ .wx-forecast-shell{margin:18px 0 23px;padding:17px 13px;border-radius:7px}
+ .wx-forecast-heading h2{font-size:21px}
+ .wx-forecast-heading p{font-size:11px}
+ .wx-hourly-rail{grid-auto-columns:86px;gap:7px}
+ .wx-day{grid-template-columns:minmax(66px,1fr) 28px minmax(0,1.1fr) minmax(0,.9fr);gap:6px;padding:12px 9px}
+ .wx-day>span{display:none}
+ .wx-day>b{font-size:20px}
+ .wx-day>small{font-size:9px}
+ .wx-day-temps{font-size:13px}
+}
+@media(min-width:900px){
+ .weather-dashboard-grid{display:grid;grid-template-columns:minmax(0,1.08fr) minmax(0,.92fr);gap:20px;align-items:stretch}
+ .local-weather-card{margin:22px 0 0;border-radius:8px;padding:24px}
+ .weather-earth-panel{margin:22px 0 0;border-radius:8px;overflow:hidden}
+ .wx-forecast-shell{padding:27px 30px}
+}
