@@ -227,10 +227,13 @@ function WeatherSprite({ code }: { code: unknown }) {
   const kind = code === 0 ? "clear" : typeof code === "number" && [61,63,65,66,67,80,81,82,95,96,99].includes(code) ? "rain"
     : typeof code === "number" && [71,73,75,77,85,86].includes(code) ? "snow"
     : typeof code === "number" && [45,48].includes(code) ? "fog" : "cloud";
+  const spriteSet = 'image-set(url("/_next/static/immutable/media/weather-bg-sprite.2ol3vhh5gt8dk.webp") type("image/webp"), url("/_next/static/immutable/media/weather-bg-sprite.32wix_aaq3qmi.jpg") type("image/jpeg"))';
   const style = {
+    backgroundImage: spriteSet,
+    backgroundRepeat: "no-repeat",
     backgroundSize: "1031.25% 1266.6667%",
     backgroundPosition: positions[kind],
-    "--wx-sprite-set": 'image-set(url("/_next/static/immutable/media/weather-bg-sprite.2ol3vhh5gt8dk.webp") type("image/webp"), url("/_next/static/immutable/media/weather-bg-sprite.32wix_aaq3qmi.jpg") type("image/jpeg"))'
+    "--wx-sprite-set": spriteSet
   } as CSSProperties;
   return <div className="WeatherSprite-module__Z3SuQq__sprite absolute inset-0" style={style} aria-hidden="true"/>;
 }
