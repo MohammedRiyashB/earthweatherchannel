@@ -50,24 +50,26 @@ class FakeResponse:
 
 
 class ForecastAdapterTests(unittest.IsolatedAsyncioTestCase):
-    async def test_primary_open_meteo_returns_hourly_and_daily_arrays(self):
+    async def test_primary_met_norway_returns_hourly_and_daily_arrays(self):
+        met_payload = {"properties":{"timeseries":[
+            {"time":"2026-11-08T06:00:00Z","data":{"instant":{"details":{"air_temperature":28.0,"relative_humidity":70,"wind_speed":3.0,"wind_from_direction":180,"cloud_area_fraction":20}},"next_1_hours":{"summary":{"symbol_code":"clearsky_day"},"details":{"precipitation_amount":0.0}}}},
+            {"time":"2026-11-08T07:00:00Z","data":{"instant":{"details":{"air_temperature":29.0,"relative_humidity":68,"wind_speed":4.0,"wind_from_direction":190,"cloud_area_fraction":25}},"next_1_hours":{"summary":{"symbol_code":"rain"},"details":{"precipitation_amount":0.5}}}},
+        ]}}
         class Client:
-            async def get(self, url, params):
+            async def get(self, url, params, headers=None):
                 self.url = url
                 self.params = params
-                return FakeResponse(open_meteo_payload())
-
+                return FakeResponse(met_payload)
         client = Client()
         result = await fetch_forecast(client, 13.08, 80.27, days=2, timezone_name="Asia/Kolkata")
-
-        self.assertEqual(result["source"]["provider"], "open-meteo")
-        self.assertEqual(result["current"]["temperature_2m"], 30.1)
+        self.assertEqual(result["source"]["provider"], "metnorway")
+        self.assertEqual(result["current"]["temperature_2m"], 28.0)
         self.assertEqual(len(result["hourly"]["time"]), 2)
-        self.assertEqual(len(result["daily"]["time"]), 2)
-        self.assertEqual(client.params["forecast_days"], 2)
-        self.assertEqual(client.params["timezone"], "Asia/Kolkata")
+        self.assertEqual(len(result["daily"]["time"]), 1)
+        self.assertEqual(client.params["lat"], 13.08)
+        self.assertEqual(client.params["lon"], 80.27)
 
-    async def test_open_meteo_invalid_payload_falls_back_to_met_norway(self):
+    async def test_met_norway_invalid_payload_falls_back_to_open_meteo(self):
         met_payload = {
             "properties": {
                 "timeseries": [
@@ -107,19 +109,17 @@ class ForecastAdapterTests(unittest.IsolatedAsyncioTestCase):
             def __init__(self):
                 self.calls = 0
 
-            async def get(self, url, params):
+            async def get(self, url, params, headers=None):
                 self.calls += 1
                 if self.calls == 1:
                     return FakeResponse({"reason": "invalid forecast"})
-                return FakeResponse(met_payload)
+                return FakeResponse(open_meteo_payload())
 
         result = await fetch_forecast(Client(), 11.34, 77.72, days=2)
 
-        self.assertEqual(result["source"]["provider"], "metnorway")
-        self.assertEqual(result["current"]["temperature_2m"], 28.0)
-        self.assertEqual(result["hourly"]["temperature_2m"], [28.0, 29.0])
-        self.assertEqual(result["daily"]["temperature_2m_max"], [29.0])
-        self.assertEqual(result["fallback_reason"], "open-meteo:ValueError")
+        self.assertEqual(result["source"]["provider"], "open-meteo")
+        self.assertEqual(result["current"]["temperature_2m"], 30.1)
+        self.assertEqual(result["fallback_reason"], "metnorway:ValueError")
 
     async def test_met_norway_empty_forecast_is_rejected(self):
         with self.assertRaises(ValueError):
@@ -127,7 +127,7 @@ class ForecastAdapterTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_all_forecast_providers_down_returns_explicit_failure(self):
         class Client:
-            async def get(self, url, params):
+            async def get(self, url, params, headers=None):
                 raise httpx.ConnectError("offline")
 
         with self.assertRaises(ForecastUnavailable):

@@ -13,6 +13,8 @@ services:
         value: 3.12.3
       - key: EARTH_WEATHER_USER_AGENT
         value: "EARTH-WEATHER/0.1 (replace-with-your-monitored-contact)"
+      - key: METNORWAY_USER_AGENT
+        value: "EARTH-WEATHER/1.0 (+https://earthweatherchannel.web.app)"
       - key: CORS_ORIGINS
         value: "https://earthweatherchannel.web.app,https://earthweatherchannel.firebaseapp.com,https://earth-weather-web.onrender.com"
 

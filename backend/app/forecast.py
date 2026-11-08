@@ -1,18 +1,28 @@
 """Hourly and daily weather forecast adapters for EARTH WEATHER.
 
-Open-Meteo is the primary forecast source. MET Norway Locationforecast is used
-as a clearly-labelled fallback. Missing values remain null/omitted; values are
-never fabricated or labelled as satellite observations.
+MET Norway Locationforecast is the primary forecast source. Open-Meteo is a
+clearly-labelled fallback. MET Norway worldwide requests are cached according
+to provider guidance. Missing values remain null; forecasts are never labelled
+as satellite observations.
 """
 from __future__ import annotations
 
 from collections import defaultdict
+from copy import deepcopy
 from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
+import asyncio
+import os
+import time
 from typing import Any
 
 import httpx
 
 OPEN_METEO_URL = "https://api.open-meteo.com/v1/forecast"
+METNORWAY_USER_AGENT = os.getenv("METNORWAY_USER_AGENT", "EARTH-WEATHER/1.0 (+https://earthweatherchannel.web.app)")
+_FORECAST_CACHE: dict[tuple[float, float, int, str], tuple[float, dict[str, Any]]] = {}
+_FORECAST_CACHE_LOCK = asyncio.Lock()
+_METNORWAY_MIN_CACHE_SECONDS = 3 * 60 * 60
 METNORWAY_URL = "https://api.met.no/weatherapi/locationforecast/2.0/complete"
 
 CURRENT_FIELDS = (
@@ -111,14 +121,16 @@ def _normalize_met_norway(payload: dict[str, Any], latitude: float, longitude: f
         details = ((data.get("instant") or {}).get("details") or {})
         next_hour = data.get("next_1_hours") or {}
         next_six = data.get("next_6_hours") or {}
-        summary = next_hour.get("summary") or next_six.get("summary") or {}
-        precip_details = next_hour.get("details") or next_six.get("details") or {}
+        next_period = next_hour or next_six or data.get("next_12_hours") or {}
+        summary = next_period.get("summary") or {}
+        precip_details = next_period.get("details") or {}
         symbol = summary.get("symbol_code")
         row = {
             "time": timestamp,
             "temperature_2m": details.get("air_temperature"),
             "relative_humidity_2m": details.get("relative_humidity"),
-            "apparent_temperature": details.get("air_temperature"),
+            "apparent_temperature": details.get("apparent_air_temperature", details.get("air_temperature")),
+            "precipitation_probability": precip_details.get("probability_of_precipitation"),
             "precipitation": precip_details.get("precipitation_amount"),
             "rain": precip_details.get("precipitation_amount"),
             "weather_code": _met_symbol_to_wmo(symbol),
@@ -208,7 +220,43 @@ async def fetch_forecast(
     days: int = 7,
     timezone_name: str = "auto",
 ) -> dict[str, Any]:
-    """Return validated hourly/daily forecast with explicit provider provenance."""
+    """Return cached MET Norway forecast first, with a validated Open-Meteo fallback."""
+    # MET Norway advises no more than four coordinate decimals; bucketing to 2
+    # decimals also prevents a moving GPS fix from defeating the cache.
+    cache_key = (round(latitude, 2), round(longitude, 2), days, timezone_name)
+    async with _FORECAST_CACHE_LOCK:
+        cached = _FORECAST_CACHE.get(cache_key)
+        if cached and cached[0] > time.monotonic():
+            return deepcopy(cached[1])
+
+    errors: list[str] = []
+    try:
+        response = await client.get(
+            METNORWAY_URL,
+            params={"lat": cache_key[0], "lon": cache_key[1]},
+            headers={"User-Agent": METNORWAY_USER_AGENT, "Accept": "application/json"},
+        )
+        response.raise_for_status()
+        payload = response.json()
+        if not isinstance(payload, dict):
+            raise ValueError("MET Norway returned a non-object response")
+        forecast = _normalize_met_norway(payload, cache_key[0], cache_key[1], days)
+        headers = getattr(response, "headers", {}) or {}
+        ttl = float(_METNORWAY_MIN_CACHE_SECONDS)
+        expires = headers.get("expires")
+        if expires:
+            try:
+                ttl = max(ttl, (parsedate_to_datetime(expires) - datetime.now(timezone.utc)).total_seconds())
+            except (TypeError, ValueError, OverflowError):
+                pass
+        forecast["source"]["cache_seconds"] = int(ttl)
+        forecast["source"]["last_modified"] = headers.get("last-modified")
+        async with _FORECAST_CACHE_LOCK:
+            _FORECAST_CACHE[cache_key] = (time.monotonic() + ttl, deepcopy(forecast))
+        return forecast
+    except (httpx.HTTPError, ValueError, TypeError, KeyError) as exc:
+        errors.append(f"metnorway:{exc.__class__.__name__}")
+
     params = {
         "latitude": latitude,
         "longitude": longitude,
@@ -221,8 +269,6 @@ async def fetch_forecast(
         "wind_speed_unit": "kmh",
         "precipitation_unit": "mm",
     }
-    errors: list[str] = []
-
     try:
         response = await client.get(OPEN_METEO_URL, params=params)
         response.raise_for_status()
@@ -236,23 +282,14 @@ async def fetch_forecast(
         }
         payload["source"] = {
             "provider": "open-meteo",
-            "name": "Open-Meteo multi-model forecast",
+            "name": "Open-Meteo multi-model forecast · fallback",
             "url": "https://open-meteo.com/en/docs",
         }
+        payload["fallback_reason"] = errors[0]
+        async with _FORECAST_CACHE_LOCK:
+            _FORECAST_CACHE[cache_key] = (time.monotonic() + 10 * 60, deepcopy(payload))
         return payload
     except (httpx.HTTPError, ValueError, TypeError, KeyError) as exc:
         errors.append(f"open-meteo:{exc.__class__.__name__}")
-
-    try:
-        response = await client.get(METNORWAY_URL, params={"lat": latitude, "lon": longitude})
-        response.raise_for_status()
-        payload = response.json()
-        if not isinstance(payload, dict):
-            raise ValueError("MET Norway returned a non-object response")
-        fallback = _normalize_met_norway(payload, latitude, longitude, days)
-        fallback["fallback_reason"] = errors[0]
-        return fallback
-    except (httpx.HTTPError, ValueError, TypeError, KeyError) as exc:
-        errors.append(f"metnorway:{exc.__class__.__name__}")
 
     raise ForecastUnavailable("; ".join(errors))

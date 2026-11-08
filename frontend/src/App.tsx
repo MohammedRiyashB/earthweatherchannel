@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { auth, firebaseReady, googleProvider } from "./firebase";
 import { onAuthStateChanged, signInWithPopup, signOut, type User } from "firebase/auth";
 import { FOOTER_GROUPS, resolveSitePage, SITE_PATHS, SitePageView, type SitePageId } from "./sitePages";
+import { AdvancedForecastCenter, EarthWeatherIntelligencePage, GlobalStormIntelligence } from "./IntelligencePages";
+import "./intelligence.css";
 
 const API=import.meta.env.VITE_API_BASE_URL||"https://earthweather-api.onrender.com";
 type Current={time?:string|number;is_day?:number;temperature_2m?:number;relative_humidity_2m?:number;apparent_temperature?:number;precipitation?:number;cloud_cover?:number;pressure_msl?:number;wind_speed_10m?:number;wind_direction_10m?:number;weather_code?:number;source?:string;source_url?:string};
@@ -122,7 +124,7 @@ const published=(value?:string)=>{
  }
  return Number.isNaN(date.getTime())?"Recently indexed":date.toLocaleString(undefined,{dateStyle:"medium",timeStyle:"short"});
 };
-type SatelliteLayer={id:string;title:string;formats?:string[];tile_templates?:string[]};
+type SatelliteLayer={id:string;title:string;formats?:string[];tile_templates?:string[];default_time?:string|null;time_extent?:string|null};
 function SatelliteDashboard(){
  const [layer,setLayer]=useState("VIIRS_SNPP_CorrectedReflectance_TrueColor");
  const [catalog,setCatalog]=useState<any>(null);
@@ -133,25 +135,34 @@ function SatelliteDashboard(){
  const [imageLoaded,setImageLoaded]=useState(false);
  const areas={india:{label:"India & Indian Ocean",bbox:"65,5,100,40"},asia:{label:"Asia-Pacific",bbox:"75,-15,155,55"},world:{label:"Global view",bbox:"-180,-75,180,75"}} as const;
  const area=areas[region as keyof typeof areas]||areas.india;
- const day=new Date().toISOString().slice(0,10);
- const imageUrl=`https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi?SERVICE=WMS&REQUEST=GetMap&VERSION=1.1.1&LAYERS=${encodeURIComponent(layer)}&STYLES=&SRS=EPSG:4326&BBOX=${area.bbox}&WIDTH=1200&HEIGHT=720&FORMAT=image/jpeg&TIME=${day}`;
+ const layers:SatelliteLayer[]=(catalog?.live_imagery?.layers||[]) as SatelliteLayer[];
+ const imageryLayers=layers.filter(item=>/true.?color|corrected.?reflectance|geocolor|visible/i.test(`${item.id} ${item.title}`)).slice(0,40);
+ const fallbackLayers:SatelliteLayer[]=[
+  {id:"VIIRS_SNPP_CorrectedReflectance_TrueColor",title:"Suomi-NPP VIIRS · True colour"},
+  {id:"MODIS_Terra_CorrectedReflectance_TrueColor",title:"Terra MODIS · True colour"},
+  {id:"MODIS_Aqua_CorrectedReflectance_TrueColor",title:"Aqua MODIS · True colour"}
+ ];
+ const options=imageryLayers.length?imageryLayers:fallbackLayers;
+ const selectedMeta=layers.find(item=>item.id===layer);
+ const selectedTitle=selectedMeta?.title||options.find(item=>item.id===layer)?.title||layer;
+ const imageUrl=`https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi?SERVICE=WMS&REQUEST=GetMap&VERSION=1.1.1&LAYERS=${encodeURIComponent(layer)}&STYLES=&SRS=EPSG:4326&BBOX=${area.bbox}&WIDTH=1200&HEIGHT=720&FORMAT=image/jpeg`;
  useEffect(()=>{let active=true;fetch(`${API}/api/satellites/catalog`,{cache:"no-store"}).then(r=>{if(!r.ok)throw new Error(`HTTP ${r.status}`);return r.json()}).then(d=>{if(active)setCatalog(d)}).catch(e=>{if(active)setCatalogError(e instanceof Error?e.message:"Satellite catalogue unavailable")});return()=>{active=false}},[refresh]);
  useEffect(()=>{setImageError(false);setImageLoaded(false)},[layer,region,refresh]);
- const mission=layer.startsWith("MODIS_Terra")?"NASA Terra MODIS":layer.startsWith("MODIS_Aqua")?"NASA Aqua MODIS":"NASA / NOAA Suomi-NPP VIIRS";
+ const catalogueTime=selectedMeta?.default_time||"NASA GIBS default valid acquisition time";
  return <main className="news-main satellite-page">
-  <div className="news-toolbar"><div><span className="eyebrow">DIRECT SATELLITE IMAGERY · NASA EOSDIS</span><h1>Satellite Earth Monitor</h1><p>Live public satellite imagery retrieved directly from NASA Global Imagery Browse Services (GIBS).</p></div><button className="refresh-button" onClick={()=>setRefresh(x=>x+1)}>↻ Refresh satellite data</button></div>
-  <div className="satellite-status"><span className="satellite-live-dot"/> NASA GIBS WMS <strong>{catalog?.live_imagery?.status==="live"||imageLoaded?"CONNECTED":"CHECKING CONNECTION"}</strong><span>{catalog?.live_imagery?.retrieved_layers??"—"} live catalogue layers discovered</span></div>
+  <div className="news-toolbar"><div><span className="eyebrow">NASA EOSDIS · MULTI-MISSION IMAGERY</span><h1>Satellite Intelligence 2.0</h1><p>Time-aware satellite imagery discovery with mission selection, regional views and verified catalogue metadata.</p></div><button className="refresh-button" onClick={()=>setRefresh(x=>x+1)}>↻ Refresh satellite intelligence</button></div>
+  <div className="satellite-status"><span className="satellite-live-dot"/><strong>NASA GIBS WMTS / WMS</strong><strong>{catalog?.live_imagery?.status==="live"||imageLoaded?"CONNECTED":"CHECKING CONNECTION"}</strong><span>{catalog?.live_imagery?.retrieved_layers??"—"} live catalogue layers discovered</span></div>
   <section className="satellite-viewer">
    <div className="satellite-controls">
-    <label>Satellite sensor<select value={layer} onChange={e=>setLayer(e.target.value)}><option value="VIIRS_SNPP_CorrectedReflectance_TrueColor">Suomi-NPP VIIRS · True colour</option><option value="MODIS_Terra_CorrectedReflectance_TrueColor">Terra MODIS · True colour</option><option value="MODIS_Aqua_CorrectedReflectance_TrueColor">Aqua MODIS · True colour</option></select></label>
+    <label>Satellite product<select value={layer} onChange={e=>setLayer(e.target.value)}>{options.map(item=><option key={item.id} value={item.id}>{item.title}</option>)}</select></label>
     <label>Viewing region<select value={region} onChange={e=>setRegion(e.target.value)}><option value="india">India & Indian Ocean</option><option value="asia">Asia-Pacific</option><option value="world">Global view</option></select></label>
    </div>
-   <div className="satellite-image-frame">{imageError?<div className="satellite-image-error">Satellite image is temporarily unavailable for this layer or date. Try refreshing or selecting another sensor.</div>:<img key={imageUrl} src={imageUrl} alt={`${mission} satellite imagery over ${area.label}`} onLoad={()=>setImageLoaded(true)} onError={()=>setImageError(true)}/>}<div className="satellite-image-caption"><span>{mission}</span><span>{area.label}</span><span>Requested observation date: {day} UTC</span></div></div>
-   <div className="satellite-image-meta"><span>Source: NASA EOSDIS GIBS · Public WMS imagery</span><a href="https://nasa-gibs.github.io/gibs-api-docs/" target="_blank" rel="noreferrer">GIBS documentation ↗</a></div>
+   <div className="satellite-image-frame">{imageError?<div className="satellite-image-error">Satellite image is temporarily unavailable for this product or region. Try another layer or refresh the catalogue.</div>:<img key={imageUrl} src={imageUrl} alt={`${selectedTitle} satellite imagery over ${area.label}`} onLoad={()=>setImageLoaded(true)} onError={()=>setImageError(true)}/>}<div className="satellite-image-caption"><span>{selectedTitle}</span><span>{area.label}</span><span>Layer time: {catalogueTime}</span></div></div>
+   <div className="satellite-image-meta"><span>Source: NASA EOSDIS GIBS · server-selected valid imagery time</span><a href="https://nasa-gibs.github.io/gibs-api-docs/" target="_blank" rel="noreferrer">GIBS documentation ↗</a></div>
   </section>
-  <section className="satellite-info-grid"><article><span className="eyebrow">CONNECTED DATA FEED</span><h2>NASA GIBS</h2><p>Actual map imagery is requested from NASA's public WMS service. The selected layer is served by the named satellite instrument; this is not a simulated image.</p><a href="https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi?SERVICE=WMS&REQUEST=GetCapabilities&VERSION=1.3.0" target="_blank" rel="noreferrer">Live WMS capabilities ↗</a></article><article><span className="eyebrow">OBSERVATION LIMITATIONS</span><h2>Not a thermometer</h2><p>True-colour imagery shows clouds, land and ocean appearance. It does not directly provide local air temperature, relative humidity or surface wind. Those require separate calibrated satellite retrieval products or observation datasets.</p></article></section>
+  <section className="satellite-info-grid"><article><span className="eyebrow">LIVE CATALOGUE METADATA</span><h2>{selectedTitle}</h2><p>{selectedMeta?.time_extent? `Available time range: ${selectedMeta.time_extent}` : "Acquisition dates are product-dependent and may vary with satellite coverage and processing latency."}</p><p>{selectedMeta?.default_time? `Catalogue default acquisition: ${selectedMeta.default_time}` : "The NASA service selects its valid default acquisition when no TIME parameter is supplied."}</p><a href="https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi?SERVICE=WMS&REQUEST=GetCapabilities&VERSION=1.3.0" target="_blank" rel="noreferrer">Live WMS capabilities ↗</a></article><article><span className="eyebrow">OBSERVATION LIMITATIONS</span><h2>Imagery, not a thermometer</h2><p>True-colour imagery shows clouds, land and ocean appearance. It does not directly provide local air temperature, relative humidity or surface wind. Numerical fields require a separate calibrated retrieval or weather-model dataset.</p></article></section>
   {catalogError&&<p className="feed-note">Satellite catalogue status could not be checked: {catalogError}. The public NASA image endpoint is loaded independently.</p>}
-  <p className="feed-note">Imagery availability depends on satellite overpass, processing latency, cloud conditions, product coverage and NASA service availability. NASA GIBS is the only live satellite imagery integration currently confirmed in this dashboard; other satellite programmes are not marked connected until their data endpoints are actually integrated and tested.</p>
+  <p className="feed-note">NASA GIBS imagery availability depends on acquisition, overpass, processing latency, geographic coverage and product-specific time dimensions. This page does not label unconnected missions as live data sources.</p>
  </main>;
 }
 
@@ -581,7 +592,7 @@ const [section,setSection]=useState("Weather Report");const page:"home"|SitePage
  const countryTab=visitorLocation?.country||"Country";
  const stateTab=visitorLocation?.state||"State";
  const localTab=visitorLocation?.name?(visitorLocation?.district?`${visitorLocation.name} · ${visitorLocation.district}`:visitorLocation.name):(visitorLocation?.district||"Local");
- const newsTabs=[{key:"World",label:"World"},{key:"Country",label:countryTab},{key:"State",label:stateTab},{key:"Local",label:localTab}];
+ const newsTabs=[{key:"World",label:"World"},{key:"Earth Weather Intelligence",label:"Earth Weather Intelligence"},{key:"Country",label:countryTab},{key:"State",label:stateTab},{key:"Local",label:localTab}];
  return <div className="news-site">
   {locationPickerOpen&&<div className="location-picker-overlay" role="dialog" aria-modal="true" aria-label="Search weather locations">
    <div className="location-picker-shell">
@@ -617,8 +628,8 @@ const [section,setSection]=useState("Weather Report");const page:"home"|SitePage
    </div>
   </div>}
   <header className="masthead"><div className="masthead-row"><div className="brand-lockup"><img className="brand-wordmark" src="/logo.png" alt="EARTH WEATHER" width="1200" height="220" /></div><div className="masthead-actions"><button className="header-location-search" type="button" aria-label="Search city or region" title="Search city or region" onClick={()=>{setQuery("");setLocationSearchResults([]);setLocationSearchError("");setLocationPickerOpen(true);}}><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.6"/><path d="m16 16 4.1 4.1"/></svg></button>{user?<button className="masthead-account-button" onClick={()=>void signOut(auth!)}>{user.displayName||"Account"}</button>:<button className="masthead-account-button" onClick={()=>void signIn()}>Sign in</button>}</div></div></header>
-  <nav className="news-nav">{[{key:"Weather Report",label:"Weather Report"},...newsTabs,{key:"Satellite imagery",label:"Satellite imagery"},{key:"Satellite Report",label:"Satellite Report"}].map(item=><button className={section===item.key?"active":""} key={item.key} onClick={()=>setSection(item.key)}>{item.label}</button>)}</nav>
-  {page==="home"?(section==="Satellite Report"?<SatelliteNumericalReport/>:section==="Satellite imagery"?<SatelliteDashboard/>:section!=="Weather Report"?<WeatherNewsPage section={section as "World"|"Country"|"State"|"Local"} location={visitorLocation}/>:<main className="news-main">
+  <nav className="news-nav">{[{key:"Weather Report",label:"Weather Report"},...newsTabs,{key:"Satellite imagery",label:"Satellite Intelligence 2.0"},{key:"Satellite Report",label:"Satellite Report"}].map(item=><button className={section===item.key?"active":""} key={item.key} onClick={()=>setSection(item.key)}>{item.label}</button>)}</nav>
+  {page==="home"?(section==="Satellite Report"?<SatelliteNumericalReport/>:section==="Satellite imagery"?<SatelliteDashboard/>:section==="Earth Weather Intelligence"?<EarthWeatherIntelligencePage latitude={(local||visitorLocation||undefined)?.lat} longitude={(local||visitorLocation||undefined)?.lon} placeName={(local||visitorLocation||undefined)?.name}/>:section!=="Weather Report"?<WeatherNewsPage section={section as "World"|"Country"|"State"|"Local"} location={visitorLocation}/>:<main className="news-main">
    {notice&&<div className="notice">{notice}</div>}
    <section className="local-weather-card" aria-live="polite">
     <div className="local-weather-heading">
@@ -643,6 +654,8 @@ const [section,setSection]=useState("Weather Report");const page:"home"|SitePage
     <aside className="top-brief"><div className="section-heading"><h2>Weather briefing</h2><span>GLOBAL</span></div>{hottest&&<div className="brief-highlight"><small>WARMEST CITY IN THIS LIST · NOT YOUR LOCATION</small><b>{hottest.name}</b><strong>{Math.round(hottest.current?.temperature_2m??0)}°C</strong><span>{weatherLabel(hottest.current?.weather_code)}</span></div>}<div className="brief-line"><span>Active severe-storm events</span><b>{storms.length}</b></div><div className="brief-line"><span>Reporting locations</span><b>{active.length}/{cities.length}</b></div><div className="brief-line"><span>Auto refresh</span><b>Local 60s · Cities 5m</b></div><button className="refresh-button" onClick={()=>{if(visitorLocation)void refreshWeather(visitorLocation);else void refreshPopularCities();void refreshFeeds()}} disabled={busy}>{busy?"Refreshing…":"↻ Refresh live reports"}</button></aside>
    </section>
 
+   <AdvancedForecastCenter latitude={(local||visitorLocation||undefined)?.lat} longitude={(local||visitorLocation||undefined)?.lon} placeName={(local||visitorLocation||undefined)?.name}/>
+
    <section className="section-block">
     <div className="section-heading">
      <div>
@@ -661,6 +674,7 @@ const [section,setSection]=useState("Weather Report");const page:"home"|SitePage
    <section className="section-block"><div><div className="section-heading"><div><span className="eyebrow">SEVERE WEATHER WATCH</span><h2>Storm & event reports</h2></div><span className="source-tag">NASA EONET</span></div>{storms.length?storms.slice(0,8).map(s=><article className="event-row" key={s.id}><div className="event-mark">!</div><div><h3>{s.title}</h3><p>{s.description||"A severe-weather event is listed in the NASA EONET event catalogue."}</p><small>EVENT CATALOGUE · {s.coordinates?.length||0} mapped positions</small></div>{s.link&&<a href={s.link} target="_blank" rel="noreferrer">Source ↗</a>}</article>):<div className="empty-report">No active severe-storm event entries were returned by the current event feed. This does not mean there is no severe weather.</div>}</div>
     
    </section>
+    <GlobalStormIntelligence storms={storms}/>
   </main>)
   :<main className="news-main info-page"><SitePageView slug={page}/></main>}
   <footer className="news-footer">

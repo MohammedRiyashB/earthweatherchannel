@@ -1,0 +1,74 @@
+.intelligence-page{min-height:60vh}
+.intelligence-section{background:transparent}
+.intelligence-heading{align-items:center}
+.intelligence-heading h2{margin-top:5px}
+.intelligence-heading p{font-size:11px;color:#7a8993;margin:6px 0 0}
+.intelligence-refresh{width:auto;min-width:150px;margin:0;padding:10px 14px}
+.intelligence-sourcebar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:15px 0;padding:12px 14px;background:#fff;border:1px solid #e2e8ec;color:#687985;font-size:10px}
+.intelligence-sourcebar strong{color:#304957;font-size:11px}
+.intelligence-sourcebar a{margin-left:auto;color:#286783;text-decoration:none;font-weight:700}
+.intelligence-status{display:inline-flex;align-items:center;padding:5px 8px;border-radius:3px;background:#edf1f3;color:#6c7c85;font-size:8px;letter-spacing:.65px;font-weight:800;text-transform:uppercase;white-space:nowrap}
+.intelligence-status.is-live{background:#e7f4ec;color:#347452}
+.intelligence-status.is-warning{background:#fff2df;color:#986024}
+.intelligence-status.is-muted{background:#edf1f3;color:#74828b}
+.forecast-hourly-wrap{margin-top:19px}
+.intelligence-subheading{display:flex;justify-content:space-between;align-items:end;gap:12px;margin:18px 0 10px}
+.intelligence-subheading h2,.intelligence-subheading h3{font-family:Manrope,sans-serif;color:#21394a;font-size:16px;margin:4px 0}
+.intelligence-subheading>span,.intelligence-subheading>small{font-size:9px;color:#86939c}
+.forecast-hourly{display:grid;grid-auto-columns:minmax(112px,1fr);grid-auto-flow:column;gap:8px;overflow-x:auto;padding:2px 1px 10px;scrollbar-width:thin}
+.forecast-hour{background:#fff;border:1px solid #e2e8ec;padding:12px 10px;display:flex;flex-direction:column;gap:8px;min-width:0}
+.forecast-hour small{font-size:9px;color:#82909a}
+.forecast-hour strong{font-family:Manrope,sans-serif;font-size:24px;color:#225c79}
+.forecast-hour>span{font-size:10px;color:#4e626e;min-height:24px}
+.forecast-daily-heading{margin-top:20px}
+.forecast-daily{background:#fff;border:1px solid #e2e8ec}
+.forecast-day{display:grid;grid-template-columns:minmax(110px,1fr) minmax(90px,.7fr) minmax(150px,1fr);align-items:center;gap:12px;padding:12px 15px;border-bottom:1px solid #edf0f2}
+.forecast-day:last-child{border-bottom:0}
+.forecast-day>div{display:flex;flex-direction:column;gap:4px}
+.forecast-day>div strong{font-size:11px;color:#344d5b}
+.forecast-day small{font-size:9px;color:#83919a}
+.forecast-day>strong{font-family:Manrope,sans-serif;font-size:16px;color:#215b79}
+.forecast-day>strong span{font-weight:500;color:#82909a}
+.intelligence-footnote{font-size:9px;line-height:1.65;color:#86939b;margin:12px 0 0}
+.intelligence-message{padding:15px;background:#fff;border:1px solid #e2e8ec;color:#71818b;font-size:11px;line-height:1.6}
+.intelligence-muted{font-size:9px;color:#83919a;margin:4px 0 10px}
+.intelligence-locationbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:#fff;border:1px solid #e1e7eb;padding:13px 16px;margin:0 0 16px}
+.intelligence-locationbar>span{font-size:8px;letter-spacing:1px;font-weight:800;color:#bd4c43}
+.intelligence-locationbar>strong{font-size:12px;color:#2c4858}
+.intelligence-locationbar>small{font-size:9px;color:#87949b}
+.intelligence-overview-grid{display:grid;grid-template-columns:1.35fr 1fr 1fr;gap:12px}
+.intelligence-card{background:#fff;border:1px solid #e1e7eb;padding:18px;min-width:0}
+.intelligence-card h2{font-family:Manrope,sans-serif;font-size:35px;color:#225d7a;margin:10px 0 2px}
+.intelligence-card p{font-size:11px;color:#667984;margin:5px 0 12px}
+.intelligence-card>small{display:block;font-size:9px;line-height:1.6;color:#87949c}
+.intelligence-metric-pair{display:flex;gap:14px;flex-wrap:wrap;border-top:1px solid #edf0f2;padding-top:10px;margin:10px 0}
+.intelligence-metric-pair span{font-size:9px;color:#88949b}
+.intelligence-metric-pair strong{display:block;color:#344e5c;font-size:12px;margin-top:4px}
+.intelligence-panel{background:#fff;border:1px solid #e1e7eb;padding:19px;margin-top:17px}
+.intelligence-panel .intelligence-subheading{margin-top:0}
+.intelligence-panel .intelligence-subheading h2{font-size:19px;margin:5px 0 0}
+.intelligence-pipeline{display:grid;grid-template-columns:1fr auto 1fr;gap:12px;align-items:center;margin:14px 0}
+.intelligence-pipeline>div:not(.pipeline-arrow){background:#f3f7f8;border:1px solid #e5ecef;padding:13px}
+.intelligence-pipeline small,.intelligence-pipeline strong,.intelligence-pipeline span{display:block}
+.intelligence-pipeline small{font-size:8px;color:#bd4c43;letter-spacing:1px;font-weight:800}
+.intelligence-pipeline strong{font-size:11px;color:#304c5b;margin:6px 0}
+.intelligence-pipeline span{font-size:9px;color:#83919a}
+.pipeline-arrow{color:#8b9aa2;font-size:18px}
+.intelligence-source-list{border-top:1px solid #edf0f2}
+.intelligence-source-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 2px;border-bottom:1px solid #edf0f2}
+.intelligence-source-row>div:first-child strong,.intelligence-source-row>div:first-child small{display:block}
+.intelligence-source-row>div:first-child strong{font-size:10px;color:#334d5c;text-transform:capitalize}
+.intelligence-source-row>div:first-child small{font-size:8px;color:#87939b;margin-top:4px}
+.intelligence-source-meta{display:flex;align-items:center;gap:9px;flex-wrap:wrap;justify-content:flex-end}
+.intelligence-source-meta>span:not(.intelligence-status){font-size:9px;color:#7e8c95}
+.intelligence-storms{margin-top:30px}
+.intelligence-storm-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+.intelligence-storm-row{display:flex;align-items:flex-start;gap:11px;background:#fff;border:1px solid #e2e8ec;padding:13px}
+.storm-mark{width:25px;height:25px;display:grid;place-items:center;flex:none;border-radius:50%;background:#fff1e8;color:#bc603f;font-size:12px;font-weight:800}
+.storm-copy{flex:1;min-width:0}
+.storm-copy strong{font-size:11px;color:#304957}
+.storm-copy p{font-size:9px;line-height:1.55;color:#798891;margin:5px 0}
+.storm-copy small{font-size:8px;color:#9aa4aa}
+.intelligence-storm-row>a{font-size:9px;color:#286783;text-decoration:none;white-space:nowrap}
+@media(max-width:780px){.intelligence-overview-grid{grid-template-columns:1fr 1fr}.intelligence-weather-card{grid-column:1/-1}.intelligence-storm-list{grid-template-columns:1fr}}
+@media(max-width:560px){.intelligence-heading{align-items:flex-start;flex-direction:column}.intelligence-refresh{min-width:0}.intelligence-sourcebar{align-items:flex-start;flex-direction:column}.intelligence-sourcebar a{margin-left:0}.forecast-day{grid-template-columns:1fr auto}.forecast-day>small{grid-column:1/-1}.intelligence-pipeline{grid-template-columns:1fr}.pipeline-arrow{transform:rotate(90deg);justify-self:center}.intelligence-overview-grid{grid-template-columns:1fr}.intelligence-weather-card{grid-column:auto}.intelligence-panel{padding:14px}.intelligence-source-row{align-items:flex-start;flex-direction:column}.intelligence-source-meta{justify-content:flex-start}}

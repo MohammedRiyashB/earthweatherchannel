@@ -27,7 +27,7 @@ async def lifespan(app: FastAPI):
         limits=httpx.Limits(max_connections=40, max_keepalive_connections=20, keepalive_expiry=30.0),
         follow_redirects=True,
         headers={
-            "User-Agent": "EARTH-WEATHER/1.0 (+https://earthweatherchannel.web.app)",
+            "User-Agent": os.getenv("METNORWAY_USER_AGENT", "EARTH-WEATHER/1.0 (+https://earthweatherchannel.web.app)"),
             "Accept": "application/json",
         },
     )
@@ -39,8 +39,8 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="EARTH WEATHER API",
-    version="0.3.1",
-    description="Uncached live weather API with pooled upstream connections.",
+    version="0.4.0",
+    description="MET Norway-first weather intelligence API with forecast, satellite and storm data.",
     lifespan=lifespan,
 )
 app.add_middleware(
@@ -57,7 +57,7 @@ logger = logging.getLogger("earthweather.weather")
 WEATHERAPI_CURRENT = "https://api.weatherapi.com/v1/current.json"
 OPENWEATHER_CURRENT = "https://api.openweathermap.org/data/2.5/weather"
 METNORWAY_COMPACT = "https://api.met.no/weatherapi/locationforecast/2.0/compact"
-WEATHER_PROVIDER_ORDER = ("open-meteo", "metnorway")
+WEATHER_PROVIDER_ORDER = ("metnorway", "open-meteo")
 METNORWAY_USER_AGENT = os.getenv("METNORWAY_USER_AGENT", "EARTH-WEATHER/1.0 (https://earthweatherchannel.web.app)")
 OPEN_METEO_FORECAST = "https://api.open-meteo.com/v1/forecast"
 _METNORWAY_CACHE: dict[tuple[float, float], tuple[float, dict[str, Any]]] = {}
@@ -66,8 +66,8 @@ EONET_EVENTS = "https://eonet.gsfc.nasa.gov/api/v3/events"
 RAINVIEWER = "https://api.rainviewer.com/public/weather-maps.json"
 NASA_GIBS_CAPABILITIES = "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/1.0.0/WMTSCapabilities.xml"
 SOURCES = [
-    {"id":"open-meteo","name":"Open-Meteo","kind":"live current weather model analysis","coverage":"Global","status":"primary-connected","update":"Provider model update cadence; current endpoint uses 15-minute model data where available","note":"Free API, no key required for non-commercial use. Temperature, humidity, wind, cloud and precipitation are explicitly model-analysis fields, not direct satellite observations. Attribution: CC BY 4.0."},
-    {"id":"metnorway","name":"MET Norway Locationforecast","kind":"backup global weather-model analysis","coverage":"Global","status":"fallback-connected","update":"Model update cadence; forecast timeseries","note":"Used only if Open-Meteo is unavailable or rate-limited. Values are labelled with the actual provider; not direct satellite observations."},
+    {"id":"metnorway","name":"MET Norway Locationforecast","kind":"primary global weather-model analysis","coverage":"Global","status":"primary-connected","update":"Updated by model cycle; worldwide requests should be cached for at least three hours","note":"Primary weather source for EARTH WEATHER. Uses an identified User-Agent and provider cache headers; values are model analysis, not direct station observations."},
+    {"id":"open-meteo","name":"Open-Meteo","kind":"fallback global weather-model analysis","coverage":"Global","status":"fallback-connected","update":"Provider model update cadence","note":"Free API fallback when MET Norway is unavailable or returns invalid data. Values are model-analysis fields, not direct satellite observations. Attribution: CC BY 4.0."},
     {"id":"nasa-gibs","name":"NASA GIBS / VIIRS / GOES imagery","kind":"satellite imagery","coverage":"Product-dependent global and geostationary regions","status":"connected","update":"Daily to near-real-time, product-dependent","note":"Imagery tiles are time/product dependent; not every layer is globally continuous or instantaneous."},
     {"id":"nasa-eonet","name":"NASA EONET severe-storm events","kind":"curated natural-event metadata","coverage":"Global curated events","status":"connected","update":"Near-real-time curation; not a complete cyclone warning feed","note":"Tracks/events appear only when curated and may not include every active tropical cyclone."},
     {"id":"rainviewer","name":"RainViewer radar","kind":"precipitation radar tiles","coverage":"Patchy radar network","status":"connected","update":"Past frames, about 10-minute cadence where available","note":"Historical radar only; incomplete coverage and no free nowcast. Transparent tiles do not mean guaranteed dry weather."},
@@ -167,11 +167,12 @@ def _normalize_metnorway(payload: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("MET Norway returned no forecast timeseries")
     item = series[0]
     details = ((item.get("data") or {}).get("instant") or {}).get("details") or {}
-    next_hour = (item.get("data") or {}).get("next_1_hours") or {}
+    forecast_data = item.get("data") or {}
+    next_hour = forecast_data.get("next_1_hours") or forecast_data.get("next_6_hours") or forecast_data.get("next_12_hours") or {}
     summary = next_hour.get("summary") or {}
     code = summary.get("symbol_code")
     return {"temperature_2m":details.get("air_temperature"),"relative_humidity_2m":details.get("relative_humidity"),
-        "apparent_temperature":details.get("air_temperature"),"precipitation":(next_hour.get("details") or {}).get("precipitation_amount",0),
+        "apparent_temperature":details.get("apparent_air_temperature", details.get("air_temperature")),"precipitation":(next_hour.get("details") or {}).get("precipitation_amount",0),
         "cloud_cover":details.get("cloud_area_fraction"),"pressure_msl":details.get("air_pressure_at_sea_level"),
         "wind_speed_10m":(details.get("wind_speed",0) or 0)*3.6,"wind_direction_10m":details.get("wind_from_direction"),
         "wind_gusts_10m":(details.get("wind_speed_of_gust",0) or 0)*3.6,"weather_code":_metnorway_wmo(code),
@@ -236,40 +237,51 @@ async def _fetch_provider_current(client: httpx.AsyncClient, provider: str, lat:
         current = _normalize_openweather(response.json())
     else:
         ua = METNORWAY_USER_AGENT
-        cache_key = (round(lat, 4), round(lon, 4))
+        # Coarse coordinate bucketing avoids excessive upstream calls from GPS jitter.
+        cache_key = (round(lat, 2), round(lon, 2))
+        loop_time = asyncio.get_running_loop().time()
         async with _METNORWAY_CACHE_LOCK:
             cached = _METNORWAY_CACHE.get(cache_key)
-            if cached and cached[0] > asyncio.get_running_loop().time():
-                current = dict(cached[1])
-            else:
-                response = await client.get(METNORWAY_COMPACT, params={"lat":f"{lat:.4f}","lon":f"{lon:.4f}"}, headers={"User-Agent":ua,"Accept":"application/json"})
-                response.raise_for_status()
-                current = _normalize_metnorway(response.json())
-                current["source"] = "MET Norway Locationforecast model analysis"
-                current["source_url"] = "https://api.met.no/weatherapi/locationforecast/2.0/documentation"
-                expires = response.headers.get("expires")
-                cache_control = response.headers.get("cache-control", "")
-                max_age = None
-                for directive in cache_control.split(","):
-                    directive = directive.strip().lower()
-                    if directive.startswith("max-age="):
-                        try: max_age = int(directive.split("=",1)[1])
-                        except ValueError: pass
-                ttl = max_age if max_age is not None else 600
-                if expires:
-                    try:
-                        ttl = max(0, (parsedate_to_datetime(expires) - datetime.now(timezone.utc)).total_seconds())
-                    except (TypeError, ValueError, OverflowError):
-                        pass
-                if ttl > 0:
-                    _METNORWAY_CACHE[cache_key] = (asyncio.get_running_loop().time() + ttl, dict(current))
+            current = dict(cached[1]) if cached and cached[0] > loop_time else None
+
+        # Never hold the shared cache lock during network I/O: distinct locations
+        # can be fetched concurrently by the country/world city report.
+        if current is None:
+            response = await client.get(
+                METNORWAY_COMPACT,
+                params={"lat":f"{cache_key[0]:.2f}","lon":f"{cache_key[1]:.2f}"},
+                headers={"User-Agent":ua,"Accept":"application/json"},
+            )
+            response.raise_for_status()
+            current = _normalize_metnorway(response.json())
+            current["source"] = "MET Norway Locationforecast model analysis"
+            current["source_url"] = "https://api.met.no/weatherapi/locationforecast/2.0/documentation"
+            response_headers = getattr(response, "headers", {}) or {}
+            expires = response_headers.get("expires")
+            cache_control = response_headers.get("cache-control", "")
+            max_age = None
+            for directive in cache_control.split(","):
+                directive = directive.strip().lower()
+                if directive.startswith("max-age="):
+                    try: max_age = int(directive.split("=",1)[1])
+                    except ValueError: pass
+            ttl = max_age if max_age is not None else 600
+            if expires:
+                try:
+                    ttl = max(0, (parsedate_to_datetime(expires) - datetime.now(timezone.utc)).total_seconds())
+                except (TypeError, ValueError, OverflowError):
+                    pass
+            # Respect MET Norway's minimum three-hour interval for global forecast requests.
+            ttl = max(3 * 60 * 60, ttl)
+            async with _METNORWAY_CACHE_LOCK:
+                _METNORWAY_CACHE[cache_key] = (asyncio.get_running_loop().time() + ttl, dict(current))
     if not isinstance(current.get("temperature_2m"), (int,float)):
         raise ValueError(f"{provider} returned no valid temperature")
     return {"current":current,"provider":provider}
 
 
 async def _fetch_weather_rows(client: httpx.AsyncClient, latitudes: list[float], longitudes: list[float]) -> list[dict[str, Any]]:
-    """Use free Open-Meteo first, then identified MET Norway model data if the primary is unavailable."""
+    """Use MET Norway first, then Open-Meteo if the primary is unavailable."""
     if not latitudes or len(latitudes) != len(longitudes) or len(latitudes) > 30:
         raise HTTPException(status_code=422, detail="Provide 1–30 matching latitude and longitude values")
     if any(not -90 <= v <= 90 for v in latitudes) or any(not -180 <= v <= 180 for v in longitudes):
@@ -280,7 +292,7 @@ async def _fetch_weather_rows(client: httpx.AsyncClient, latitudes: list[float],
             failures.append({"provider":provider,"reason":"not_configured"})
             continue
         try:
-            # Open-Meteo supports multi-coordinate responses; use one upstream call per city batch.
+            # Open-Meteo supports multi-coordinate responses; MET Norway is fetched per point.
             if provider == "open-meteo":
                 response = await asyncio.wait_for(client.get(OPEN_METEO_FORECAST, params={
                     "latitude": ",".join(str(x) for x in latitudes),
@@ -414,44 +426,56 @@ async def satellite_catalog() -> dict[str, Any]:
 
 @app.get("/api/health/sources")
 async def source_health() -> dict[str, Any]:
-    """Live lightweight probes. A successful HTTP response means reachable, not scientifically validated."""
+    """Check active weather providers and supporting satellite/event feeds."""
     checks = [
-        ("weatherapi", WEATHERAPI_CURRENT, {"key":os.getenv("WEATHERAPI_KEY",""),"q":"0,0"}),
-        ("openweather", OPENWEATHER_CURRENT, {"appid":os.getenv("OPENWEATHER_API_KEY",""),"lat":0,"lon":0}),
-        ("metnorway", METNORWAY_COMPACT, {"lat":"0.0000","lon":"0.0000"}),
-        ("nasa-eonet", EONET_EVENTS, {"category":"severeStorms","status":"open","limit":1}),
+        ("metnorway", METNORWAY_COMPACT, {"lat": "0.0000", "lon": "0.0000"}),
+        ("open-meteo", OPEN_METEO_FORECAST, {"latitude": 0, "longitude": 0, "current": "temperature_2m"}),
+        ("nasa-eonet", EONET_EVENTS, {"category": "severeStorms", "status": "open", "limit": 1}),
         ("rainviewer", RAINVIEWER, None),
         ("nasa-gibs", NASA_GIBS_CAPABILITIES, None),
     ]
+    roles = {
+        "metnorway": "primary-weather",
+        "open-meteo": "fallback-weather",
+        "nasa-eonet": "storm-event-metadata",
+        "rainviewer": "past-radar-frames",
+        "nasa-gibs": "satellite-imagery-catalogue",
+    }
+
     async def probe(client: httpx.AsyncClient, item: tuple[str, str, dict | None]) -> dict[str, Any]:
         source_id, url, params = item
-        if source_id in {"weatherapi", "openweather", "metnorway"} and not _provider_is_configured(source_id):
-            return {"id":source_id,"status":"not_configured","checked_at":utc_now()}
+        headers = {"User-Agent": METNORWAY_USER_AGENT, "Accept": "application/json"} if source_id == "metnorway" else None
         started = datetime.now(timezone.utc)
         try:
-            headers = {"User-Agent":os.environ["METNORWAY_USER_AGENT"]} if source_id == "metnorway" else None
             response = await client.get(url, params=params, headers=headers)
             elapsed = (datetime.now(timezone.utc) - started).total_seconds() * 1000
             response.raise_for_status()
-            return {"id":source_id,"status":"online","http_status":response.status_code,"latency_ms":round(elapsed),"checked_at":utc_now()}
+            return {"id": source_id, "role": roles[source_id], "status": "online",
+                    "http_status": response.status_code, "latency_ms": round(elapsed), "checked_at": utc_now()}
         except httpx.HTTPStatusError as exc:
             status_code = exc.response.status_code
-            retry_after = exc.response.headers.get("retry-after")
-            return {
-                "id": source_id,
-                "status": "rate_limited" if status_code == 429 else "degraded",
-                "http_status": status_code,
-                "retry_after": retry_after,
-                "error": "upstream_rate_limit" if status_code == 429 else "upstream_http_error",
-                "checked_at": utc_now(),
-            }
+            return {"id": source_id, "role": roles[source_id],
+                    "status": "rate_limited" if status_code == 429 else "degraded",
+                    "http_status": status_code, "retry_after": exc.response.headers.get("retry-after"),
+                    "error": "upstream_rate_limit" if status_code == 429 else "upstream_http_error",
+                    "checked_at": utc_now()}
         except httpx.TimeoutException:
-            return {"id": source_id, "status": "degraded", "error": "timeout", "checked_at": utc_now()}
+            return {"id": source_id, "role": roles[source_id], "status": "degraded", "error": "timeout", "checked_at": utc_now()}
         except httpx.HTTPError as exc:
-            return {"id": source_id, "status": "degraded", "error": exc.__class__.__name__, "checked_at": utc_now()}
-    async with httpx.AsyncClient(timeout=10.0, follow_redirects=True, headers={"User-Agent":os.getenv("METNORWAY_USER_AGENT", "EARTH-WEATHER/1.0")}) as client:
+            return {"id": source_id, "role": roles[source_id], "status": "degraded",
+                    "error": exc.__class__.__name__, "checked_at": utc_now()}
+
+    async with httpx.AsyncClient(
+        timeout=10.0, follow_redirects=True,
+        headers={"User-Agent": METNORWAY_USER_AGENT, "Accept": "application/json"},
+    ) as client:
         results = await asyncio.gather(*(probe(client, item) for item in checks))
-    return {"checked_at":utc_now(),"checks":results,"note":"Reachability checks only; they do not certify data freshness, coverage or accuracy."}
+    return {
+        "checked_at": utc_now(),
+        "weather_pipeline": {"primary": "metnorway", "fallback": "open-meteo", "order": list(WEATHER_PROVIDER_ORDER)},
+        "checks": results,
+        "note": "Reachability checks only; they do not certify freshness, coverage or forecast accuracy. RainViewer supplies past radar frames, not a nowcast.",
+    }
 
 # Small curated set of major-city reference points. The selected set is based on
 # the visitor's detected country and geographic proximity, not a fixed global list.
@@ -1331,13 +1355,13 @@ async def satellite_weather_report(latitude: float, longitude: float) -> dict[st
     if not (-90 <= latitude <= 90 and -180 <= longitude <= 180):
         raise HTTPException(status_code=422, detail="Invalid latitude/longitude")
     current = await _fetch_weather_current(app.state.weather_http, {"latitude":str(latitude),"longitude":str(longitude)})
-    provider = current.pop("provider", "open-meteo")
+    provider = current.pop("provider", "metnorway")
     nasa_token = bool(os.getenv("NASA_EARTHDATA_TOKEN"))
     rainfall_label = "Rainfall next 1h" if provider == "metnorway" else "Rainfall rate"
     rainfall_unit = "mm" if provider == "metnorway" else "mm/h"
     rainfall_description = "Model forecast accumulation for the next hour" if provider == "metnorway" else "Model-analysis rainfall amount over the preceding hour"
     parameters = [
-        {"id":"air_temperature","label":"Air temperature","value":current.get("temperature_2m"),"unit":"°C","status":"live" if current.get("temperature_2m") is not None else "unavailable","source":{"name":current.get("source", "Open-Meteo multi-model weather analysis"),"type":"weather-model analysis","url":current.get("source_url", "https://open-meteo.com/en/docs")},"observation_time":current.get("time")},
+        {"id":"air_temperature","label":"Air temperature","value":current.get("temperature_2m"),"unit":"°C","status":"live" if current.get("temperature_2m") is not None else "unavailable","source":{"name":current.get("source", "MET Norway Locationforecast model analysis"),"type":"weather-model analysis","url":current.get("source_url", "https://api.met.no/weatherapi/locationforecast/2.0/documentation")},"observation_time":current.get("time")},
         {"id":"relative_humidity","label":"Relative humidity","value":current.get("relative_humidity_2m"),"unit":"%","status":"live" if current.get("relative_humidity_2m") is not None else "unavailable","source":{"name":current.get("source", "Open-Meteo multi-model weather analysis"),"type":"weather-model analysis","url":current.get("source_url", "https://open-meteo.com/en/docs")},"observation_time":current.get("time")},
         {"id":"wind_speed","label":"Wind speed","value":current.get("wind_speed_10m"),"unit":"km/h","status":"live" if current.get("wind_speed_10m") is not None else "unavailable","source":{"name":current.get("source", "Open-Meteo multi-model weather analysis"),"type":"weather-model analysis at 10 m","url":current.get("source_url", "https://open-meteo.com/en/docs")},"observation_time":current.get("time")},
         {"id":"wind_direction","label":"Wind direction","value":current.get("wind_direction_10m"),"unit":"°","status":"live" if current.get("wind_direction_10m") is not None else "unavailable","source":{"name":current.get("source", "Open-Meteo multi-model weather analysis"),"type":"weather-model analysis at 10 m","url":current.get("source_url", "https://open-meteo.com/en/docs")},"observation_time":current.get("time")},
