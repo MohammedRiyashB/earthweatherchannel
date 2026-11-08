@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
-"""Extract only the public Weather.com page-style resources from the checked-in reference ZIP.
+"""Extract the original public Weather.com layout assets from the user's full capture ZIP.
 
-No Weather.com brand logos, JavaScript application bundles, trackers, or vendor scripts
-are copied into the EARTH WEATHER app. We retain the reference CSS, font faces and
-weather-background sprites only; React and the EARTH WEATHER backend provide behaviour.
+Only the three page CSS bundles, Inter font files and weather-background sprites are
+extracted. Proprietary application JavaScript, tracking code, vendor scripts and
+Weather.com logos are not copied. EARTH WEATHER React components and APIs provide
+the app behaviour and brand.
 """
 from pathlib import Path
 from zipfile import BadZipFile, ZipFile
 
 ROOT = Path(__file__).resolve().parents[1]
-ARCHIVE = ROOT / "weathercom-reference.zip"
+ARCHIVE = ROOT / "WEATHER-COM-FRONTEND.zip"
 DEST = ROOT / "frontend" / "public" / "_next" / "static" / "immutable"
 CSS_FILES = (
     "0j_ujswapoou6.css",
@@ -19,7 +20,7 @@ CSS_FILES = (
 SPRITE_PREFIX = "weather-bg-sprite."
 
 if not ARCHIVE.is_file():
-    raise SystemExit(f"Required public UI capture is missing: {ARCHIVE}")
+    raise SystemExit(f"Required full UI capture is missing: {ARCHIVE}")
 
 try:
     with ZipFile(ARCHIVE) as archive:
@@ -30,9 +31,12 @@ try:
 
         css_paths = {}
         for filename in CSS_FILES:
-            matches = [name for name in names if name.endswith("/_next/static/immutable/chunks/" + filename)]
+            matches = [
+                name for name in names
+                if name.endswith("/_next/static/immutable/chunks/" + filename)
+            ]
             if not matches:
-                raise SystemExit(f"Reference ZIP is missing the original CSS bundle: {filename}")
+                raise SystemExit(f"Full UI ZIP is missing the original CSS bundle: {filename}")
             css_paths[filename] = matches[0]
 
         prefixes = {
@@ -42,6 +46,7 @@ try:
         if len(prefixes) != 1:
             raise SystemExit("The three original CSS bundles do not share one immutable asset root.")
         prefix = prefixes.pop()
+
         selected = list(css_paths.values())
         selected.extend(
             name for name in names
@@ -62,12 +67,12 @@ try:
 
         if extracted < 12:
             raise SystemExit(
-                f"Only {extracted} CSS/font/sprite assets were extracted; expected 12 or more."
+                f"Only {extracted} CSS/font/sprite assets were extracted; expected at least 12."
             )
 except BadZipFile as exc:
-    raise SystemExit(f"The checked-in UI reference is not a valid ZIP: {exc}") from exc
+    raise SystemExit(f"The full UI reference is not a valid ZIP: {exc}") from exc
 
 print(
-    f"Extracted {extracted} original reference CSS/font/sprite assets "
-    f"from {ARCHIVE.name}; Weather.com logo and JS are intentionally excluded."
+    f"Extracted {extracted} original page CSS/font/sprite assets "
+    f"from {ARCHIVE.name}; brand logos and application JS are intentionally excluded."
 )
