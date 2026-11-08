@@ -10,7 +10,7 @@ from pathlib import Path
 from zipfile import BadZipFile, ZipFile
 
 ROOT = Path(__file__).resolve().parents[1]
-ARCHIVE = ROOT / "WEATHER-COM-FRONTEND.zip"
+ARCHIVE = ROOT / "weathercom-reference.zip"
 DEST = ROOT / "frontend" / "public" / "_next" / "static" / "immutable"
 CSS_FILES = (
     "0j_ujswapoou6.css",

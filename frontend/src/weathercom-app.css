@@ -17,3 +17,34 @@
 .weathercom-site .news-toolbar h1,.weathercom-site .news-toolbar p,.weathercom-site .news-toolbar .eyebrow{color:#202020}
 .weathercom-site .footer-logo{max-width:170px;height:auto}
 @media(max-width:767px){.weathercom-site .news-footer{padding:26px 14px!important}.weathercom-site .weather-news-page,.weathercom-site .satellite-page,.weathercom-site .satellite-report-page{padding:16px 12px 38px}}
+
+/* Reference capture: central forecast column + right-side utilities. */
+.wx-weather-content-grid{
+  display:grid;
+  grid-template-columns:minmax(0,1fr);
+  grid-template-areas:"contentTop" "main" "sidebar" "contentBottom";
+  gap:24px;
+  width:100%;
+  max-width:1280px;
+  margin:0 auto;
+  padding:16px;
+}
+@media(min-width:768px){
+  .wx-weather-content-grid{
+    grid-template-columns:minmax(0,1fr) minmax(0,340px);
+    grid-template-areas:"contentTop contentTop" "main sidebar" "contentBottom contentBottom";
+    padding:16px 24px;
+  }
+}
+.wx-weather-site .wx-mobile-drawer nav{min-height:100%;padding-top:20px}
+.wx-weather-site .wx-mobile-drawer nav>div:first-child{justify-content:flex-start;padding-left:18px}
+.wx-weather-site .wx-mobile-drawer nav ul button{height:48px;flex-direction:row;justify-content:flex-start;padding-left:16px}
+.wx-weather-site .wx-mobile-drawer nav ul button>svg{margin-right:12px}
+.wx-weather-site .wx-mobile-drawer nav ul button>span{font-size:14px}
+@media(max-width:767px){
+  .wx-weather-content-grid{padding:12px;gap:24px}
+  .wx-weather-site .wx-mobile-drawer nav ul{padding-left:10px;padding-right:10px}
+}
+.wx-weather-site .wx-icon-weather{display:inline-flex;align-items:center;justify-content:center;line-height:1}
+.wx-weather-site :focus-visible{outline:2px solid #003399;outline-offset:3px}
+.wx-weather-site .news-footer{background:#fff!important}
