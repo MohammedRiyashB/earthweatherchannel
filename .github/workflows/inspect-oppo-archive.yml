@@ -49,3 +49,10 @@ jobs:
           path: |
             archive-report.json
             archive-file-list.txt
+      - name: Preserve original archive for rebuild analysis
+        uses: actions/upload-artifact@v4
+        with:
+          name: oppo-ui-ux-source-archive
+          path: Uifprweather.zip
+          if-no-files-found: error
+          retention-days: 7
