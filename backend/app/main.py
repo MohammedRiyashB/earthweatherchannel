@@ -61,8 +61,9 @@ WEATHER_PROVIDER_ORDER = ("metnorway", "open-meteo")
 METNORWAY_USER_AGENT = os.getenv("METNORWAY_USER_AGENT", "EARTH-WEATHER/1.0 (https://earthweatherchannel.web.app)")
 OPEN_METEO_FORECAST = "https://api.open-meteo.com/v1/forecast"
 OPEN_METEO_AIR_QUALITY = "https://air-quality-api.open-meteo.com/v1/air-quality"
-_METNORWAY_CACHE: dict[tuple[float, float], tuple[float, dict[str, Any]]] = {}
+_METNORWAY_CACHE: OrderedDict[tuple[float, float], tuple[float, dict[str, Any]]] = OrderedDict()
 _METNORWAY_CACHE_LOCK = asyncio.Lock()
+_METNORWAY_CACHE_MAX_ENTRIES = 512
 EONET_EVENTS = "https://eonet.gsfc.nasa.gov/api/v3/events"
 RAINVIEWER = "https://api.rainviewer.com/public/weather-maps.json"
 NASA_GIBS_CAPABILITIES = "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/1.0.0/WMTSCapabilities.xml"
@@ -243,8 +244,15 @@ async def _fetch_provider_current(client: httpx.AsyncClient, provider: str, lat:
         cache_key = (round(lat, 2), round(lon, 2))
         loop_time = asyncio.get_running_loop().time()
         async with _METNORWAY_CACHE_LOCK:
+            for old_key, (expires_at, _) in list(_METNORWAY_CACHE.items()):
+                if expires_at <= loop_time:
+                    _METNORWAY_CACHE.pop(old_key, None)
             cached = _METNORWAY_CACHE.get(cache_key)
-            current = dict(cached[1]) if cached and cached[0] > loop_time else None
+            if cached and cached[0] > loop_time:
+                _METNORWAY_CACHE.move_to_end(cache_key)
+                current = dict(cached[1])
+            else:
+                current = None
 
         # Never hold the shared cache lock during network I/O: distinct locations
         # can be fetched concurrently by the country/world city report.
@@ -277,6 +285,9 @@ async def _fetch_provider_current(client: httpx.AsyncClient, provider: str, lat:
             ttl = max(3 * 60 * 60, ttl)
             async with _METNORWAY_CACHE_LOCK:
                 _METNORWAY_CACHE[cache_key] = (asyncio.get_running_loop().time() + ttl, dict(current))
+                _METNORWAY_CACHE.move_to_end(cache_key)
+                while len(_METNORWAY_CACHE) > _METNORWAY_CACHE_MAX_ENTRIES:
+                    _METNORWAY_CACHE.popitem(last=False)
     if not isinstance(current.get("temperature_2m"), (int,float)):
         raise ValueError(f"{provider} returned no valid temperature")
     return {"current":current,"provider":provider}
