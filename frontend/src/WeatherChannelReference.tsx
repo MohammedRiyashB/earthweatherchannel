@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 
 const API = import.meta.env.VITE_API_BASE_URL || "https://earthweather-api.onrender.com";
 
@@ -47,15 +47,138 @@ function Icon({ name, className = "size-6" }: {
   return <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name]}</svg>;
 }
 
-function WeatherGlyph({ code, className = "" }: { code: unknown; className?: string }) {
-  const name = code === 0 ? "sun" : code === 1 || code === 2 ? "partly" : code === 3 ? "cloud"
+function weatherKind(code: unknown) {
+  return code === 0 ? "sun" : code === 1 || code === 2 ? "partly"
+    : code === 3 ? "cloud"
     : typeof code === "number" && [45,48].includes(code) ? "fog"
     : typeof code === "number" && [95,96,99].includes(code) ? "storm"
     : typeof code === "number" && [71,73,75,77,85,86].includes(code) ? "snow"
     : typeof code === "number" && [51,53,55,56,57,61,63,65,66,67,80,81,82].includes(code) ? "rain" : "cloud";
+}
+
+function WeatherGlyph({ code, className = "" }: { code: unknown; className?: string }) {
+  const name = weatherKind(code);
   return <span className={"wx-icon-weather "+className} data-weather={name} aria-label={weatherLabel(code)}>
     {name === "sun" ? "☀" : name === "partly" ? "🌤" : name === "cloud" ? "☁" : name === "fog" ? "🌫" : name === "storm" ? "⛈" : name === "snow" ? "❄" : "🌧"}
   </span>;
+}
+
+/* Lightweight Pixi-style weather particle field rendered on a transparent canvas. */
+function WeatherParticleField({ code }: { code: unknown }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const scene = weatherKind(code);
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const ctx = canvas?.getContext("2d", { alpha: true });
+    if (!canvas || !ctx) return;
+    let width = 0, height = 0, raf = 0, lastFrame = 0, lastTime = 0;
+    let flashUntil = 0, nextFlash = 5000 + Math.random() * 5000;
+    const ratio = Math.min(window.devicePixelRatio || 1, 1.6);
+    const rainCount = scene === "storm" ? 90 : 62;
+    const snowCount = 42;
+    const particles = Array.from({ length: scene === "rain" || scene === "storm" ? rainCount : scene === "snow" ? snowCount : 22 }, () => ({
+      x: Math.random(), y: Math.random(), speed: 0.55 + Math.random() * 1.1,
+      size: 1.2 + Math.random() * 2.2, length: 8 + Math.random() * 15,
+      phase: Math.random() * Math.PI * 2, drift: .3 + Math.random() * .8
+    }));
+    const clouds = Array.from({ length: scene === "cloud" || scene === "partly" || scene === "storm" ? 5 : 2 }, (_, i) => ({
+      x: (i * .27 + Math.random() * .12) % 1, y: .16 + Math.random() * .48,
+      scale: .55 + Math.random() * .75, speed: .003 + Math.random() * .006,
+      alpha: .12 + Math.random() * .16
+    }));
+    const resize = () => {
+      const rect = canvas.getBoundingClientRect();
+      width = Math.max(1, rect.width); height = Math.max(1, rect.height);
+      canvas.width = Math.round(width * ratio);
+      canvas.height = Math.round(height * ratio);
+      ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+    };
+    const draw = (time: number) => {
+      if (document.hidden) { raf = requestAnimationFrame(draw); return; }
+      if (time - lastFrame < 30 && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+        raf = requestAnimationFrame(draw); return;
+      }
+      const dt = Math.min((time - (lastTime || time)) / 16.67, 2);
+      lastTime = time; lastFrame = time;
+      ctx.clearRect(0, 0, width, height);
+      if (scene === "sun" || scene === "partly") {
+        const sx = width * .77, sy = height * .25, radius = Math.min(width, height) * .34;
+        const glow = ctx.createRadialGradient(sx, sy, 2, sx, sy, radius);
+        glow.addColorStop(0, "rgba(255,226,145,.28)");
+        glow.addColorStop(1, "rgba(255,226,145,0)");
+        ctx.fillStyle = glow; ctx.fillRect(sx-radius, sy-radius, radius*2, radius*2);
+        ctx.save(); ctx.translate(sx, sy); ctx.rotate(time * .000035);
+        ctx.strokeStyle = "rgba(255,235,173,.28)"; ctx.lineWidth = 2;
+        for (let i = 0; i < 12; i++) {
+          ctx.rotate(Math.PI / 6); ctx.beginPath(); ctx.moveTo(0, radius*.42); ctx.lineTo(0, radius*.54); ctx.stroke();
+        }
+        ctx.restore();
+      }
+      if (clouds.length && (scene === "cloud" || scene === "partly" || scene === "storm" || scene === "fog")) {
+        clouds.forEach((cloud) => {
+          cloud.x += cloud.speed * dt;
+          if (cloud.x > 1.18) cloud.x = -.2;
+          const x = cloud.x * width, y = cloud.y * height, s = cloud.scale;
+          ctx.save(); ctx.globalAlpha = cloud.alpha;
+          ctx.fillStyle = ctx.createRadialGradient(x, y, 3, x, y, 76*s);
+          ctx.fillStyle.addColorStop(0, "rgba(238,247,255,.65)");
+          ctx.fillStyle.addColorStop(1, "rgba(220,239,255,0)");
+          ctx.beginPath(); ctx.ellipse(x, y, 78*s, 27*s, 0, 0, Math.PI*2); ctx.fill();
+          ctx.beginPath(); ctx.ellipse(x-25*s, y-10*s, 31*s, 22*s, 0, 0, Math.PI*2); ctx.fill();
+          ctx.beginPath(); ctx.ellipse(x+20*s, y-15*s, 38*s, 28*s, 0, 0, Math.PI*2); ctx.fill();
+          ctx.restore();
+        });
+      }
+      if (scene === "rain" || scene === "storm") {
+        ctx.lineWidth = scene === "storm" ? 1.7 : 1.25;
+        particles.forEach((p) => {
+          p.x -= .0035 * p.speed * dt; p.y += .012 * p.speed * dt;
+          if (p.y > 1.08) { p.y = -.08; p.x = Math.random() * 1.08; }
+          if (p.x < -.08) p.x = 1.04;
+          const x = p.x * width, y = p.y * height;
+          ctx.strokeStyle = scene === "storm" ? "rgba(208,231,255,.62)" : "rgba(189,225,255,.52)";
+          ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x-3.5, y+p.length); ctx.stroke();
+        });
+      } else if (scene === "snow") {
+        particles.forEach((p) => {
+          p.y += .0022 * p.speed * dt;
+          p.x += Math.sin(time*.0007 + p.phase) * .0018 * dt;
+          if (p.y > 1.06) { p.y = -.05; p.x = Math.random(); }
+          if (p.x < -.03) p.x = 1.03; if (p.x > 1.03) p.x = -.03;
+          ctx.fillStyle = "rgba(244,250,255,.8)";
+          ctx.beginPath(); ctx.arc(p.x*width, p.y*height, p.size, 0, Math.PI*2); ctx.fill();
+        });
+      } else if (scene === "fog") {
+        for (let i = 0; i < 5; i++) {
+          const x = ((time*.008 + i*width*.28) % (width*1.6)) - width*.3;
+          const y = height*(.32 + i*.12);
+          ctx.fillStyle = "rgba(234,244,250,.065)";
+          ctx.beginPath(); ctx.ellipse(x, y, width*.34, 12+i*2, 0, 0, Math.PI*2); ctx.fill();
+        }
+      }
+      if (scene === "storm") {
+        if (time > nextFlash) { flashUntil = time + 150; nextFlash = time + 4800 + Math.random()*6500; }
+        if (time < flashUntil) {
+          ctx.fillStyle = "rgba(222,235,255,.12)"; ctx.fillRect(0,0,width,height);
+          ctx.strokeStyle = "rgba(250,252,255,.9)"; ctx.lineWidth = 3;
+          ctx.beginPath(); ctx.moveTo(width*.68,height*.16); ctx.lineTo(width*.64,height*.32);
+          ctx.lineTo(width*.70,height*.32); ctx.lineTo(width*.62,height*.52); ctx.stroke();
+        }
+      }
+      if (!window.matchMedia("(prefers-reduced-motion: reduce)").matches) raf = requestAnimationFrame(draw);
+    };
+    resize();
+    const observer = typeof ResizeObserver !== "undefined" ? new ResizeObserver(resize) : null;
+    observer?.observe(canvas);
+    window.addEventListener("resize", resize);
+    raf = requestAnimationFrame(draw);
+    return () => {
+      cancelAnimationFrame(raf);
+      observer?.disconnect();
+      window.removeEventListener("resize", resize);
+    };
+  }, [scene]);
+  return <canvas ref={canvasRef} className="wx-hero-particles" aria-hidden="true"/>;
 }
 
 function weatherLabel(code: unknown) {
@@ -353,44 +476,57 @@ export function WeatherChannelPage({ mode, location, cities, storms, onNavigate 
     <small className="text-xs text-gray-500">{hourly.precipitation_probability?.[index]!=null?value(hourly.precipitation_probability[index])+"%":"—"}</small>
   </div>);
 
-  const forecastRows = (limit: number) => days.slice(0,limit).map((date,index) => <div className="flex min-h-14 items-center gap-3 border-b border-gray-200 py-2 last:border-b-0 max-sm:gap-2" key={String(date)+index}>
-    <strong className="w-24 shrink-0 text-sm font-semibold text-gray-900 max-sm:w-20">{index===0?"Today":dateLabel(date)}</strong>
-    <WeatherGlyph code={daily.weather_code?.[index]} className="shrink-0 text-2xl"/>
-    <div className="min-w-0 flex-1"><p className="truncate text-sm font-medium text-gray-900">{weatherLabel(daily.weather_code?.[index])}</p><small className="text-xs text-gray-500">Rain {value(daily.precipitation_sum?.[index],1)} mm</small></div>
-    <strong className="shrink-0 text-sm text-gray-900">{value(daily.temperature_2m_max?.[index])}°</strong>
-    <span className="shrink-0 text-sm text-gray-500">{value(daily.temperature_2m_min?.[index])}°</span>
-  </div>);
+  const lowValues = (daily.temperature_2m_min || []).filter((n: unknown): n is number => typeof n === "number" && Number.isFinite(n));
+  const highValues = (daily.temperature_2m_max || []).filter((n: unknown): n is number => typeof n === "number" && Number.isFinite(n));
+  const overallLow = lowValues.length ? Math.min(...lowValues) : 0;
+  const overallHigh = highValues.length ? Math.max(...highValues) : overallLow + 1;
+  const temperatureSpan = Math.max(1, overallHigh - overallLow);
+  const forecastRows = (limit: number) => days.slice(0,limit).map((date,index) => {
+    const low = daily.temperature_2m_min?.[index];
+    const high = daily.temperature_2m_max?.[index];
+    const probability = daily.precipitation_probability_max?.[index] ?? daily.precipitation_probability?.[index];
+    const rangeLeft = typeof low === "number" ? Math.max(0, Math.min(78, ((low-overallLow)/temperatureSpan)*100)) : 0;
+    const rangeWidth = typeof high === "number" && typeof low === "number"
+      ? Math.max(18, Math.min(100-rangeLeft, ((high-low)/temperatureSpan)*100)) : 58;
+    const dayName = index === 0 ? "Tonight" : (() => {
+      const d = new Date(String(date).length === 10 ? String(date)+"T12:00:00" : String(date));
+      return Number.isNaN(d.getTime()) ? dateLabel(date) : d.toLocaleDateString([], { weekday:"short", day:"2-digit" });
+    })();
+    return <div className="wx-daily-forecast-row" key={String(date)+index}>
+      <strong className="wx-day-name">{dayName}</strong>
+      <span className="wx-day-symbol"><WeatherGlyph code={daily.weather_code?.[index]} className="wx-daily-icon"/></span>
+      <span className="wx-day-rain">{typeof probability === "number" ? value(probability)+"%" : "—"}</span>
+      <span className="wx-day-low">{value(low)}°</span>
+      <span className="wx-day-range"><i style={{left:rangeLeft+"%",width:rangeWidth+"%"}}/></span>
+      <strong className="wx-day-high">{value(high)}°</strong>
+    </div>;
+  });
 
   const currentCard = <section aria-label="Current Conditions" data-testid="current-conditions"
-    className="flex flex-col @container/card text-card-foreground border border-gray-200 bg-card relative isolate overflow-hidden rounded-2xl bg-clip-padding p-4 @lg/current-conditions:p-6" style={{backgroundColor:"var(--color-white)"}}>
-    <div aria-hidden="true" className="pointer-events-none absolute -inset-px z-0 overflow-hidden rounded-2xl">
-      <WeatherSprite code={current.weather_code}/>
-      <div className="absolute inset-0 bg-[#003F7B]/50"/>
-      <div className="absolute inset-0 bg-gradient-to-br from-[#1467b7]/35 via-transparent to-[#001e48]/75"/>
-    </div>
-    <div className="relative z-10 flex-1 text-white">
-      <div className="flex min-h-[88px] items-end justify-between gap-4 @lg/current-conditions:min-h-30 @lg/current-conditions:gap-8">
-        <div className="flex-1">
-          <span className="text-sm opacity-90">Now</span>
-          <strong className="block text-[72px] leading-[78px] font-extrabold tracking-[-.04em] @lg/current-conditions:text-[104px] @lg/current-conditions:leading-[104px]">{value(current.temperature_2m)}°</strong>
+    data-scene={weatherKind(current.weather_code)}
+    className="wx-hero-card flex flex-col relative isolate overflow-hidden rounded-2xl border border-gray-200">
+    <WeatherParticleField code={current.weather_code}/>
+    <div className="wx-hero-content relative z-10 flex-1 text-white">
+      <div className="wx-hero-main flex items-center justify-between gap-4">
+        <div className="wx-hero-temperature-wrap min-w-0">
+          <span className="wx-hero-now">Now</span>
+          <strong className="wx-hero-temperature">{value(current.temperature_2m)}°</strong>
         </div>
-        <div className="flex min-w-16 flex-col items-center gap-1 @lg/current-conditions:gap-2">
-          <div className="flex h-16 w-16 items-center justify-center @lg/current-conditions:h-[88px] @lg/current-conditions:w-[88px]"><WeatherGlyph code={current.weather_code} className="text-6xl"/></div>
-          <span className="text-center text-sm font-bold text-balance wrap-anywhere @lg/current-conditions:text-lg">{weatherLabel(current.weather_code)}</span>
+        <div className="wx-hero-condition flex min-w-0 flex-col items-center">
+          <WeatherGlyph code={current.weather_code} className="wx-hero-symbol"/>
+          <span className="wx-hero-condition-label">{weatherLabel(current.weather_code)}</span>
         </div>
       </div>
-      <div className="mt-4 flex flex-col gap-2">
-        <div className="flex min-h-[21px] flex-wrap items-center gap-3 @lg/current-conditions:min-h-6">
-          <span className="flex items-center gap-1 text-sm"><span className="opacity-80">Feels like</span><strong>{value(current.apparent_temperature)}°</strong></span>
-          <span className="h-4 w-px bg-white opacity-90"/>
-          <span className="flex items-center gap-1 text-sm"><span className="opacity-80">H</span><strong>{value(high)}°</strong></span>
-          <span className="h-4 w-px bg-white opacity-90"/>
-          <span className="flex items-center gap-1 text-sm"><span className="opacity-80">L</span><strong>{value(low)}°</strong></span>
-        </div>
-        <div className="flex min-h-[21px] flex-wrap items-center gap-3 @lg/current-conditions:min-h-6">
-          <span className="flex items-center gap-1 text-sm"><span className="opacity-80">Chance of Rain</span><strong>{rainChance==null?"—":value(rainChance)+"%"}</strong></span>
-          {current.precipitation!=null&&<><span className="h-4 w-px bg-white opacity-90"/><strong className="text-sm">{value(current.precipitation,1)} mm</strong></>}
-        </div>
+      <div className="wx-hero-meta">
+        <span><span className="wx-hero-muted">Feels like</span> <strong>{value(current.apparent_temperature)}°</strong></span>
+        <i/>
+        <span><span className="wx-hero-muted">H</span> <strong>{value(high)}°</strong></span>
+        <i/>
+        <span><span className="wx-hero-muted">L</span> <strong>{value(low)}°</strong></span>
+      </div>
+      <div className="wx-hero-rain">
+        <span><span className="wx-hero-muted">Chance of Rain</span> <strong>{rainChance==null?"—":value(rainChance)+"%"}</strong></span>
+        {current.precipitation!=null&&<><i/><strong>{value(current.precipitation,1)} mm</strong></>}
       </div>
     </div>
   </section>;
