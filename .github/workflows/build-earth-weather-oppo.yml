@@ -205,6 +205,52 @@ jobs:
                          r'\\1Earth Weather\\2', s, flags=re.S)
               p.write_text(s, encoding="utf-8")
 
+          # Point every app-owned legal entry point to the published EARTH WEATHER website.
+          legal_link_map = {
+              "https://privacy.oppo.com": "https://earthweatherchannel.web.app/privacy-policy",
+              "https://www.oppo.com/privacy": "https://earthweatherchannel.web.app/privacy-policy",
+              "https://www.oppo.com": "https://earthweatherchannel.web.app",
+              "https://oppo.com": "https://earthweatherchannel.web.app",
+              "https://privacy.oppo.com/en/": "https://earthweatherchannel.web.app/privacy-policy",
+              "https://privacy.oppo.com/en": "https://earthweatherchannel.web.app/privacy-policy",
+          }
+          for p in root.rglob("*"):
+              if not p.is_file() or p.suffix.lower() not in text_ext:
+                  continue
+              try:
+                  s = p.read_text(encoding="utf-8")
+              except (UnicodeDecodeError, OSError):
+                  continue
+              before = s
+              for old_url, new_url in legal_link_map.items():
+                  s = s.replace(old_url, new_url)
+              if p.suffix.lower() == ".smali":
+                  s = s.replace("https://earthweatherchannel.web.app/privacy-policy", "https://earthweatherchannel.web.app/privacy-policy")
+                  s = s.replace("https://earthweatherchannel.web.app/terms-and-conditions", "https://earthweatherchannel.web.app/terms-and-conditions")
+                  s = s.replace("https://earthweatherchannel.web.app/data-usage-policy", "https://earthweatherchannel.web.app/data-usage-policy")
+              if p.name.startswith("weather_third_party_info") and p.suffix.lower() == ".html":
+                  s = """<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Earth Weather — Third-party information</title></head><body><h1>Earth Weather third-party information</h1><p>For the current third-party services, SDKs, data handling and privacy disclosures used by EARTH WEATHER, please read the published BMR INC. policy.</p><p><a href="https://earthweatherchannel.web.app/data-usage-policy">Earth Weather Data Usage & Third-party Information</a></p><p><a href="https://earthweatherchannel.web.app/privacy-policy">Earth Weather Privacy Policy</a></p></body></html>"""
+              if s != before:
+                  p.write_text(s, encoding="utf-8")
+
+          # Preserve MIT/Open Source license notices; only rebrand app-specific legal pages and destinations.
+          # Fail the build if an OPPO vendor privacy destination remains in visible app resources.
+          visible_hits = []
+          for base in (root / "res", root / "assets"):
+              if not base.exists():
+                  continue
+              for p in base.rglob("*"):
+                  if not p.is_file() or p.suffix.lower() not in text_ext:
+                      continue
+                  try:
+                      body = p.read_text(encoding="utf-8")
+                  except (UnicodeDecodeError, OSError):
+                      continue
+                  if re.search(r"(?i)Guangdong OPPO|oppo\\.com/privacy|privacy\\.oppo\\.com|ColorOS Weather|OPPO Weather", body):
+                      visible_hits.append(str(p))
+          if visible_hits:
+              raise SystemExit("OPPO branding/privacy URLs remain in visible resources: " + ", ".join(visible_hits[:20]))
+
           # Record the intended product identity in the build workspace.
           (Path("earth-weather-build.properties")).write_text(
               "applicationId=com.bmrinc.earthweather\nappName=Earth Weather\napiBase=https://earth-weather-api.onrender.com\n"
