@@ -216,6 +216,13 @@ cert_dir = ROOT / "assets" / "crypto_android_sdk" / "oplus_prod_cert_chain"
 if cert_dir.exists():
     shutil.rmtree(cert_dir)
 
+# Kotlin module metadata is build-time compiler metadata, not Android runtime data.
+# Remove vendor-generated module descriptors so their original namespace strings do not ship.
+for metadata in (ROOT / "META-INF").glob("*.kotlin_module"):
+    metadata.unlink()
+for metadata in (ROOT / "META-INF").glob("com.*.kotlin_module"):
+    metadata.unlink()
+
 # Move renamed app namespaces to their new source-tree locations after the
 # descriptors have been updated in all smali files.
 for base in sorted(ROOT.glob("smali*")):
