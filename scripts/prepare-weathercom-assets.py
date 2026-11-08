@@ -63,14 +63,17 @@ try:
             target.write_bytes(archive.read(source_name))
             extracted += 1
 
-        if extracted < 12:
+        if extracted < 5:
             raise SystemExit(
-                f"Only {extracted} CSS/font/sprite assets were extracted; expected at least 12."
+                f"Only {extracted} CSS/font/sprite assets were extracted; expected at least five (three CSS bundles and two sprite images)."
             )
 except BadZipFile as exc:
     raise SystemExit(f"The full UI reference is not a valid ZIP: {exc}") from exc
 
+font_count = sum(1 for relative in selected if relative.lower().endswith(".woff2"))
 print(
     f"Extracted {extracted} original page CSS/font/sprite assets "
     f"from {ARCHIVE.name}; brand logos and application JS are intentionally excluded."
 )
+if font_count == 0:
+    print("Reference archive contains no WOFF2 fonts; the page will use the CSS/system sans-serif fallback.")
