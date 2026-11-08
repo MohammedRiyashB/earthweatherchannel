@@ -136,6 +136,75 @@ jobs:
               raise SystemExit("Could not safely patch WeatherDataClientManager.cryptoInit()")
           manager.write_text(ms)
 
+          # Replace user-visible vendor identity and legal destinations with EARTH WEATHER's published pages.
+          brand_replacements = {
+              "Guangdong OPPO Mobile Telecommunications Corp., Ltd.": "BMR INC. — EARTH WEATHER CHANNEL",
+              "Guangdong OPPO": "BMR INC.",
+              "OPPO Weather": "Earth Weather",
+              "OPPO weather": "Earth Weather",
+              "Oppo Weather": "Earth Weather",
+              "ColorOS Weather": "Earth Weather",
+              "ColorOS": "Earth Weather",
+              "OPPO": "EARTH WEATHER",
+              "OPlus": "EARTH WEATHER",
+              "Oplus": "EARTH WEATHER",
+              "HeyTap": "EARTH WEATHER",
+              "heytap": "earthweather",
+              "oppo.com/privacy-feedback": "earthweatherchannel.web.app/privacy-policy",
+              "privacy.oppo.com": "earthweatherchannel.web.app/privacy-policy",
+              "https://www.oppo.com": "https://earthweatherchannel.web.app",
+              "https://oppo.com": "https://earthweatherchannel.web.app",
+          }
+          legal_routes = {
+              "weather_user_agreement": "https://earthweatherchannel.web.app/terms-and-conditions",
+              "user_agreement": "https://earthweatherchannel.web.app/terms-and-conditions",
+              "privacy_policy": "https://earthweatherchannel.web.app/privacy-policy",
+              "privacy_notice": "https://earthweatherchannel.web.app/privacy-policy",
+              "personal_service": "https://earthweatherchannel.web.app/data-usage-policy",
+              "third_party": "https://earthweatherchannel.web.app/data-usage-policy",
+          }
+          for p in root.rglob("*"):
+              if not p.is_file() or p.suffix.lower() not in text_ext:
+                  continue
+              try:
+                  s = p.read_text(encoding="utf-8")
+              except (UnicodeDecodeError, OSError):
+                  continue
+              original = s
+              for old_text, new_text in brand_replacements.items():
+                  s = s.replace(old_text, new_text)
+              if p.name.startswith("weather_user_agreement") or p.name.startswith("user_agreement"):
+                  s = s.replace("https://earthweatherchannel.web.app", legal_routes["weather_user_agreement"])
+              if p.name.startswith("weather_privacy") or p.name.startswith("privacy_policy"):
+                  s = s.replace("https://earthweatherchannel.web.app", legal_routes["privacy_policy"])
+              if p.name.startswith("weather_personal_service") or p.name.startswith("personal_service"):
+                  s = s.replace("https://earthweatherchannel.web.app", legal_routes["personal_service"])
+              if p.name.startswith("weather_third_party_info"):
+                  # Keep vendor disclosures truthful; route the app's legal entry point to EARTH WEATHER's data-use page.
+                  s = s.replace("https://earthweatherchannel.web.app", legal_routes["third_party"])
+              if s != original:
+                  p.write_text(s, encoding="utf-8")
+
+          # Keep the actual third-party SDK disclosures truthful; only remove obsolete OPPO ad-network branding.
+          for p in root.rglob("*.json"):
+              try:
+                  s = p.read_text(encoding="utf-8")
+              except (UnicodeDecodeError, OSError):
+                  continue
+              s = s.replace('"OPPO","Realme"', '"EARTH WEATHER"')
+              s = s.replace('"OPPO"', '"EARTH WEATHER"')
+              p.write_text(s, encoding="utf-8")
+
+          # Ensure the Android launcher label is ours in every locale.
+          for p in (root / "res").glob("values*/strings.xml"):
+              try:
+                  s = p.read_text(encoding="utf-8")
+              except (UnicodeDecodeError, OSError):
+                  continue
+              s = re.sub(r'(<string\\s+name="app_name"[^>]*>).*?(</string>)',
+                         r'\\1Earth Weather\\2', s, flags=re.S)
+              p.write_text(s, encoding="utf-8")
+
           # Record the intended product identity in the build workspace.
           (Path("earth-weather-build.properties")).write_text(
               "applicationId=com.bmrinc.earthweather\nappName=Earth Weather\napiBase=https://earth-weather-api.onrender.com\n"
