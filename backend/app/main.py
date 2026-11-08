@@ -60,6 +60,7 @@ METNORWAY_COMPACT = "https://api.met.no/weatherapi/locationforecast/2.0/compact"
 WEATHER_PROVIDER_ORDER = ("metnorway", "open-meteo")
 METNORWAY_USER_AGENT = os.getenv("METNORWAY_USER_AGENT", "EARTH-WEATHER/1.0 (https://earthweatherchannel.web.app)")
 OPEN_METEO_FORECAST = "https://api.open-meteo.com/v1/forecast"
+OPEN_METEO_AIR_QUALITY = "https://air-quality-api.open-meteo.com/v1/air-quality"
 _METNORWAY_CACHE: dict[tuple[float, float], tuple[float, dict[str, Any]]] = {}
 _METNORWAY_CACHE_LOCK = asyncio.Lock()
 EONET_EVENTS = "https://eonet.gsfc.nasa.gov/api/v3/events"
@@ -68,6 +69,7 @@ NASA_GIBS_CAPABILITIES = "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/1.0
 SOURCES = [
     {"id":"metnorway","name":"MET Norway Locationforecast","kind":"primary global weather-model analysis","coverage":"Global","status":"primary-connected","update":"Updated by model cycle; worldwide requests should be cached for at least three hours","note":"Primary weather source for EARTH WEATHER. Uses an identified User-Agent and provider cache headers; values are model analysis, not direct station observations."},
     {"id":"open-meteo","name":"Open-Meteo","kind":"fallback global weather-model analysis","coverage":"Global","status":"fallback-connected","update":"Provider model update cadence","note":"Free API fallback when MET Norway is unavailable or returns invalid data. Values are model-analysis fields, not direct satellite observations. Attribution: CC BY 4.0."},
+    {"id":"open-meteo-air-quality","name":"Open-Meteo CAMS Air Quality","kind":"global modelled pollutant and AQI forecast","coverage":"Global CAMS forecast grid; pollen coverage is region-limited","status":"connected","update":"CAMS global model updates about every 12 hours","note":"Modelled concentrations and US AQI reference scale; not a local regulatory monitor or official Indian CPCB AQI station."},
     {"id":"nasa-gibs","name":"NASA GIBS / VIIRS / GOES imagery","kind":"satellite imagery","coverage":"Product-dependent global and geostationary regions","status":"connected","update":"Daily to near-real-time, product-dependent","note":"Imagery tiles are time/product dependent; not every layer is globally continuous or instantaneous."},
     {"id":"nasa-eonet","name":"NASA EONET severe-storm events","kind":"curated natural-event metadata","coverage":"Global curated events","status":"connected","update":"Near-real-time curation; not a complete cyclone warning feed","note":"Tracks/events appear only when curated and may not include every active tropical cyclone."},
     {"id":"rainviewer","name":"RainViewer radar","kind":"precipitation radar tiles","coverage":"Patchy radar network","status":"connected","update":"Past frames, about 10-minute cadence where available","note":"Historical radar only; incomplete coverage and no free nowcast. Transparent tiles do not mean guaranteed dry weather."},
@@ -430,6 +432,7 @@ async def source_health() -> dict[str, Any]:
     checks = [
         ("metnorway", METNORWAY_COMPACT, {"lat": "0.0000", "lon": "0.0000"}),
         ("open-meteo", OPEN_METEO_FORECAST, {"latitude": 0, "longitude": 0, "current": "temperature_2m"}),
+        ("open-meteo-air-quality", OPEN_METEO_AIR_QUALITY, {"latitude": 0, "longitude": 0, "current": "us_aqi"}),
         ("nasa-eonet", EONET_EVENTS, {"category": "severeStorms", "status": "open", "limit": 1}),
         ("rainviewer", RAINVIEWER, None),
         ("nasa-gibs", NASA_GIBS_CAPABILITIES, None),
@@ -437,6 +440,7 @@ async def source_health() -> dict[str, Any]:
     roles = {
         "metnorway": "primary-weather",
         "open-meteo": "fallback-weather",
+        "open-meteo-air-quality": "air-quality-model",
         "nasa-eonet": "storm-event-metadata",
         "rainviewer": "past-radar-frames",
         "nasa-gibs": "satellite-imagery-catalogue",
@@ -712,7 +716,7 @@ async def forecast(
     response: Response,
     latitude: float = Query(..., ge=-90, le=90),
     longitude: float = Query(..., ge=-180, le=180),
-    days: int = Query(7, ge=1, le=7),
+    days: int = Query(10, ge=1, le=10),
     timezone_name: str = Query("auto", alias="timezone", min_length=1, max_length=64),
 ) -> dict[str, Any]:
     """Return validated current, hourly and daily forecast with provider provenance."""
@@ -731,6 +735,62 @@ async def forecast(
             status_code=503,
             detail={"message": "Forecast data is temporarily unavailable", "provider_errors": str(exc)},
         ) from exc
+
+
+@app.get("/api/air-quality")
+async def air_quality(
+    response: Response,
+    latitude: float = Query(..., ge=-90, le=90),
+    longitude: float = Query(..., ge=-180, le=180),
+    days: int = Query(5, ge=1, le=7),
+) -> dict[str, Any]:
+    """Return CAMS-based modelled pollutant concentrations and a clearly labelled US AQI reference index."""
+    response.headers["Cache-Control"] = "public, max-age=0, s-maxage=900, stale-while-revalidate=300"
+    params = {
+        "latitude": latitude,
+        "longitude": longitude,
+        "current": "us_aqi,pm10,pm2_5,carbon_monoxide,nitrogen_dioxide,sulphur_dioxide,ozone",
+        "hourly": "us_aqi,pm10,pm2_5,carbon_monoxide,nitrogen_dioxide,sulphur_dioxide,ozone",
+        "forecast_days": days,
+        "timezone": "auto",
+        "domains": "auto",
+        "cell_selection": "land",
+    }
+    try:
+        result = await app.state.weather_http.get(OPEN_METEO_AIR_QUALITY, params=params)
+        result.raise_for_status()
+        payload = result.json()
+        if not isinstance(payload, dict) or not isinstance(payload.get("hourly"), dict):
+            raise ValueError("Air-quality provider returned an invalid forecast")
+        current = payload.get("current") or {}
+        hourly = payload.get("hourly") or {}
+        if not current and not hourly.get("time"):
+            raise ValueError("Air-quality provider returned no usable values")
+        return {
+            "location": {
+                "latitude": payload.get("latitude", latitude),
+                "longitude": payload.get("longitude", longitude),
+                "timezone": payload.get("timezone", "auto"),
+            },
+            "source": {
+                "provider": "open-meteo-cams",
+                "name": "Open-Meteo · CAMS global atmospheric composition forecast",
+                "url": "https://open-meteo.com/en/docs/air-quality-api",
+                "retrieved_at": utc_now(),
+                "resolution_km": 45,
+            },
+            "current": current,
+            "current_units": payload.get("current_units") or {},
+            "hourly": hourly,
+            "hourly_units": payload.get("hourly_units") or {},
+            "note": "Modelled air-quality guidance from CAMS, not a local ground-monitor observation. The displayed US AQI is a US EPA reference scale and is not the official Indian CPCB AQI. Pollen variables are not guaranteed outside Europe.",
+        }
+    except httpx.HTTPStatusError as exc:
+        logger.warning("Air-quality upstream returned HTTP %s", exc.response.status_code)
+        raise HTTPException(status_code=502, detail="Air-quality model is temporarily unavailable") from exc
+    except (httpx.HTTPError, ValueError, TypeError) as exc:
+        logger.exception("Air-quality forecast request failed")
+        raise HTTPException(status_code=502, detail="Air-quality model is temporarily unavailable") from exc
 
 
 # Public Nominatim reverse-geocoding: one request at a time, cached by nearby coordinates.
