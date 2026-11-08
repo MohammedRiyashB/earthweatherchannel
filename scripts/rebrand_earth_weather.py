@@ -361,6 +361,75 @@ patch_method(
     "vendor crypto handshake removal",
 )
 
+# Disable all inherited OPPO/AppLovin/Pangle mobile ad SDK entry points.
+# The website has AdSense, but it does not supply a mobile SDK or app ad-unit IDs;
+# no third-party mobile ads are initialized until a real EARTH WEATHER provider
+# is deliberately integrated. Weather UI screens remain unchanged.
+feed = find_smali("com/bmrinc/earthweather/core/weather/ad/OPPOFeedAdManager.smali")
+patch_method(
+    feed, r"init\\(Landroid/content/Context;\\)V",
+    """.method public static final init(Landroid/content/Context;)V
+    .locals 0
+    return-void
+.end method""",
+    "disable inherited feed-ad SDK init",
+)
+splash = find_smali("com/bmrinc/earthweather/core/weather/ad/splash/SplashAdManager.smali")
+patch_method(
+    splash, r"ensurePreInit\\(Landroid/content/Context;\\)V",
+    """.method public static final ensurePreInit(Landroid/content/Context;)V
+    .locals 0
+    return-void
+.end method""",
+    "disable inherited splash-ad preinit",
+)
+patch_method(
+    splash, r"ensurePreInit\\(Landroid/content/Context;Ljava/lang/String;\\)V",
+    """.method public static final ensurePreInit(Landroid/content/Context;Ljava/lang/String;)V
+    .locals 0
+    return-void
+.end method""",
+    "disable inherited splash-ad preinit overload",
+)
+patch_method(
+    splash, r"initExportAdSdk\\(Landroid/content/Context;\\)V",
+    """.method public static final initExportAdSdk(Landroid/content/Context;)V
+    .locals 0
+    return-void
+.end method""",
+    "disable inherited export-ad SDK init",
+)
+patch_method(
+    splash, r"appActiveTime\\(\\)J",
+    """.method public static final appActiveTime()J
+    .locals 2
+    const-wide/16 v0, 0x0
+    return-wide v0
+.end method""",
+    "disable inherited ad active-time tracking",
+)
+ad_manager = find_smali("com/bmrinc/earthweather/core/weather/ad/AdManager.smali")
+for method_name in ("initAdSdk", "initOppoSdk", "initMaxSdk"):
+    patch_method(
+        ad_manager,
+        method_name + r"\\(Landroid/content/Context;Lkotlin/coroutines/Continuation;\\)Ljava/lang/Object;",
+        """.method public static final METHOD(Landroid/content/Context;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+    .locals 1
+    sget-object v0, Lkotlin/Unit;->INSTANCE:Lkotlin/Unit;
+    return-object v0
+.end method""".replace("METHOD", method_name),
+        "disable inherited " + method_name,
+    )
+banner_api = find_smali("com/bmrinc/earthweather/core/weather/banner/BannerAdApiUtils.smali")
+patch_method(
+    banner_api, r"initRiskControl\\(Landroid/app/Application;\\)V",
+    """.method public static final initRiskControl(Landroid/app/Application;)V
+    .locals 0
+    return-void
+.end method""",
+    "disable inherited vendor ad risk-control init",
+)
+
 # The old advertising adapters are deliberately disabled. This build does not
 # pretend that website AdSense is a mobile SDK; mobile ad placements remain off
 # until an authorized mobile ad provider and its own app/unit IDs are configured.
