@@ -460,6 +460,20 @@ async def fetch_forecast(
         if not isinstance(payload, dict):
             raise ValueError("Open-Meteo returned a non-object response")
         _validate_open_meteo(payload)
+        # The Open-Meteo current endpoint exposes only a subset of fields. Fill
+        # current dew point and UV from the hourly row matching current.time.
+        current = payload.get("current") or {}
+        hourly = payload.get("hourly") or {}
+        hourly_times = hourly.get("time") or []
+        try:
+            current_index = hourly_times.index(current.get("time"))
+        except (ValueError, TypeError):
+            current_index = 0
+        for key in ("dew_point_2m", "uv_index"):
+            values = hourly.get(key) or []
+            if not _is_number(current.get(key)) and current_index < len(values) and _is_number(values[current_index]):
+                current[key] = values[current_index]
+        payload["current"] = current
         payload["location"] = {
             "latitude": payload.get("latitude", latitude),
             "longitude": payload.get("longitude", longitude),
