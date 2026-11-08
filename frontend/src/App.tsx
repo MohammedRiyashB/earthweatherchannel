@@ -670,9 +670,33 @@ const [section,setSection]=useState("Weather Report");const page:"home"|SitePage
  };
  useEffect(()=>{
   if(!locationPickerOpen)return;
-  const handleKeyDown=(event:KeyboardEvent)=>{if(event.key==="Escape"){setLocationPickerOpen(false);setQuery("");setLocationSearchResults([]);setLocationSearchError("");}};
+  const closePicker=()=>{
+   setLocationPickerOpen(false);setQuery("");setLocationSearchResults([]);setLocationSearchError("");
+  };
+  const handleKeyDown=(event:KeyboardEvent)=>{if(event.key==="Escape")closePicker();};
+  const handlePointerDown=(event:PointerEvent)=>{
+   const target=event.target;
+   if(target instanceof Element&&!target.closest(".location-picker-shell"))closePicker();
+  };
+  let keyboardWasOpen=Boolean(window.visualViewport&&window.visualViewport.height<window.innerHeight-140);
+  const handleViewportResize=()=>{
+   const viewport=window.visualViewport;
+   if(!viewport)return;
+   const keyboardOpen=viewport.height<window.innerHeight-140;
+   if(keyboardWasOpen&&!keyboardOpen)closePicker();
+   keyboardWasOpen=keyboardOpen;
+  };
+  const handleScroll=()=>closePicker();
   window.addEventListener("keydown",handleKeyDown);
-  return()=>{window.removeEventListener("keydown",handleKeyDown);};
+  window.addEventListener("pointerdown",handlePointerDown,true);
+  window.addEventListener("scroll",handleScroll,true);
+  window.visualViewport?.addEventListener("resize",handleViewportResize);
+  return()=>{
+   window.removeEventListener("keydown",handleKeyDown);
+   window.removeEventListener("pointerdown",handlePointerDown,true);
+   window.removeEventListener("scroll",handleScroll,true);
+   window.visualViewport?.removeEventListener("resize",handleViewportResize);
+  };
  },[locationPickerOpen]);
  const signIn=async()=>{if(!auth)return;try{await signInWithPopup(auth,googleProvider)}catch{setNotice("Google sign-in could not be completed.")}};
  const countryTab=visitorLocation?.country||"Country";
