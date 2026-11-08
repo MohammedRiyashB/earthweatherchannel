@@ -42,6 +42,7 @@ class MainActivity : Activity() {
     private lateinit var statusText: TextView
     private lateinit var stats: LinearLayout
     private var lastLocation: Location? = null
+    private var pendingLocationListener: LocationListener? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -155,11 +156,40 @@ class MainActivity : Activity() {
 
         val loc = lastLocation
         if (loc == null) {
-            locationText.text = "Location unavailable"
-            statusText.text = "Turn on device location, then tap Refresh weather."
+            locationText.text = "Finding your location…"
+            statusText.text = "Getting a fresh location from your device…"
+            requestFreshLocation(manager)
             return
         }
         fetchWeather(loc.latitude, loc.longitude)
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun requestFreshLocation(manager: LocationManager) {
+        val providers = listOf(LocationManager.NETWORK_PROVIDER, LocationManager.GPS_PROVIDER)
+        var requested = false
+        val listener = object : LocationListener {
+            override fun onLocationChanged(location: Location) {
+                lastLocation = location
+                try { manager.removeUpdates(this) } catch (_: Exception) {}
+                pendingLocationListener = null
+                fetchWeather(location.latitude, location.longitude)
+            }
+        }
+        pendingLocationListener?.let { try { manager.removeUpdates(it) } catch (_: Exception) {} }
+        pendingLocationListener = listener
+        for (provider in providers) {
+            try {
+                if (manager.isProviderEnabled(provider)) {
+                    manager.requestLocationUpdates(provider, 0L, 0f, listener, Looper.getMainLooper())
+                    requested = true
+                }
+            } catch (_: Exception) {}
+        }
+        if (!requested) {
+            locationText.text = "Location unavailable"
+            statusText.text = "Turn on device location and allow Earth Weather location access."
+        }
     }
 
     private fun fetchWeather(lat: Double, lon: Double) {
@@ -253,6 +283,9 @@ class MainActivity : Activity() {
     private fun dp(value: Int) = (value * resources.displayMetrics.density).roundToInt()
 
     override fun onDestroy() {
+        pendingLocationListener?.let { listener ->
+            try { (getSystemService(LOCATION_SERVICE) as LocationManager).removeUpdates(listener) } catch (_: Exception) {}
+        }
         executor.shutdownNow()
         super.onDestroy()
     }
