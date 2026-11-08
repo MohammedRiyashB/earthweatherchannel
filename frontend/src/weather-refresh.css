@@ -299,3 +299,69 @@ button,input,a{-webkit-tap-highlight-color:transparent}button:focus-visible,inpu
 @keyframes satellite-frame-in{from{opacity:.55}to{opacity:.92}}
 @keyframes satellite-pulse{50%{opacity:.45;box-shadow:0 0 0 7px rgba(76,226,189,.04)}}
 @media(prefers-reduced-motion:reduce){.weather-earth-animated img,.satellite-play-indicator i{animation:none}}
+
+
+/* November 2026: compact inline location search and round profile shortcut. */
+.location-picker-overlay{
+  position:fixed!important;
+  inset:auto 12px auto 12px!important;
+  top:calc(env(safe-area-inset-top, 0px) + 136px)!important;
+  z-index:10050!important;
+  width:auto!important;
+  max-height:calc(100dvh - 156px)!important;
+  overflow-y:auto!important;
+  padding:12px!important;
+  border:1px solid #e7e9ed!important;
+  border-radius:24px!important;
+  background:#fff!important;
+  color:#252422!important;
+  box-shadow:0 18px 54px rgba(20,28,38,.20),0 4px 14px rgba(20,28,38,.08)!important;
+  overscroll-behavior:contain;
+  animation:ew-location-pop-in .18s ease-out both;
+}
+@keyframes ew-location-pop-in{from{opacity:0;transform:translateY(-8px) scale(.985)}to{opacity:1;transform:translateY(0) scale(1)}}
+.location-picker-shell{width:100%!important;max-width:none!important;margin:0!important}
+.location-picker-search{display:flex!important;gap:8px!important;margin:0!important}
+.location-picker-input-wrap{
+  height:50px!important;gap:10px!important;padding:0 14px!important;
+  border:1px solid #e2e5e9!important;border-radius:16px!important;
+  background:#f7f8fa!important;
+}
+.location-picker-input-wrap svg{width:21px!important;height:21px!important;stroke:#252422!important}
+.location-picker-input-wrap input{color:#252422!important;font-size:16px!important}
+.location-picker-input-wrap input::placeholder{color:#777f89!important}
+.location-picker-cancel{
+  display:inline-flex!important;align-items:center!important;justify-content:center!important;
+  width:42px!important;height:48px!important;padding:0!important;border-radius:14px!important;
+  background:#f1f2f4!important;color:#252422!important;font-size:26px!important;line-height:1!important;
+}
+.location-picker-section,.location-picker-results{margin-top:17px!important}
+.location-picker-heading{margin:0 0 9px!important;color:#737b86!important;font-size:12px!important;font-weight:700!important}
+.location-picker-section.world{margin-top:18px!important}
+.location-city-grid{gap:7px!important}
+.location-city-pill{
+  min-height:38px!important;padding:0 13px!important;border:1px solid #e5e7eb!important;
+  border-radius:12px!important;background:#f8f9fb!important;color:#252422!important;font-size:13px!important;
+}
+.location-city-pill.current{background:#eef4ff!important;border-color:#d8e5ff!important;color:#17478e!important}
+.location-picker-result{gap:11px!important;padding:12px 5px!important;border-bottom:1px solid #edf0f2!important;color:#252422!important}
+.location-picker-result strong{color:#252422!important;font-size:14px!important}
+.location-picker-result small{color:#727982!important;font-size:12px!important}
+.location-result-pin{color:#17478e!important}
+.location-result-arrow{color:#68717d!important}
+.location-picker-message{margin:12px 3px!important;color:#66717e!important}
+.location-picker-message.error{color:#b42318!important}
+.wx-header-profile-button{
+  display:inline-flex;align-items:center;justify-content:center;
+  width:42px;height:42px;flex:none;padding:2px;
+  border:1px solid #e5e7eb;border-radius:50%;background:#fff;
+  box-shadow:0 2px 8px rgba(0,0,0,.10);overflow:hidden;
+}
+.wx-header-profile-button img{display:block;width:100%;height:100%;border-radius:50%;object-fit:cover}
+.wx-mobile-location-surface{position:relative}
+@media(min-width:768px){
+ .location-picker-overlay{top:88px!important;left:calc(200px + 28px)!important;right:28px!important;max-width:560px!important}
+}
+@media(max-width:767px){
+ .location-picker-overlay{left:12px!important;right:12px!important;top:126px!important;max-height:calc(100dvh - 142px)!important;padding:11px!important}
+}
