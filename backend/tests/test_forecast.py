@@ -76,7 +76,7 @@ class ForecastAdapterTests(unittest.IsolatedAsyncioTestCase):
         class Client:
             def __init__(self):
                 self.requests = []
-            async def get(self, url, params, headers=None):
+            async def get(self, url, params, headers=None, **kwargs):
                 self.requests.append((url, params, headers))
                 return FakeResponse(met_payload if "api.met.no" in url else supplement_payload)
         client = Client()
@@ -141,7 +141,7 @@ class ForecastAdapterTests(unittest.IsolatedAsyncioTestCase):
             def __init__(self):
                 self.calls = 0
 
-            async def get(self, url, params, headers=None):
+            async def get(self, url, params, headers=None, **kwargs):
                 self.calls += 1
                 if self.calls == 1:
                     return FakeResponse({"reason": "invalid forecast"})
@@ -159,7 +159,7 @@ class ForecastAdapterTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_all_forecast_providers_down_returns_explicit_failure(self):
         class Client:
-            async def get(self, url, params, headers=None):
+            async def get(self, url, params, headers=None, **kwargs):
                 raise httpx.ConnectError("offline")
 
         with self.assertRaises(ForecastUnavailable):

@@ -18,13 +18,14 @@ import httpx
 from fastapi import FastAPI, HTTPException, Query, Response
 from fastapi.middleware.cors import CORSMiddleware
 from app.forecast import ForecastUnavailable, fetch_forecast
+from app.runtime_cache import prune_expired_lru
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Keep one pooled upstream connection client for fast, uncached live requests."""
     app.state.weather_http = httpx.AsyncClient(
-        timeout=httpx.Timeout(connect=2.5, read=6.0, write=3.0, pool=2.0),
-        limits=httpx.Limits(max_connections=40, max_keepalive_connections=20, keepalive_expiry=30.0),
+        timeout=httpx.Timeout(connect=3.0, read=12.0, write=5.0, pool=3.0),
+        limits=httpx.Limits(max_connections=60, max_keepalive_connections=30, keepalive_expiry=30.0),
         follow_redirects=True,
         headers={
             "User-Agent": os.getenv("METNORWAY_USER_AGENT", "EARTH-WEATHER/1.0 (+https://earthweatherchannel.web.app)"),
@@ -61,8 +62,9 @@ WEATHER_PROVIDER_ORDER = ("metnorway", "open-meteo")
 METNORWAY_USER_AGENT = os.getenv("METNORWAY_USER_AGENT", "EARTH-WEATHER/1.0 (https://earthweatherchannel.web.app)")
 OPEN_METEO_FORECAST = "https://api.open-meteo.com/v1/forecast"
 OPEN_METEO_AIR_QUALITY = "https://air-quality-api.open-meteo.com/v1/air-quality"
-_METNORWAY_CACHE: dict[tuple[float, float], tuple[float, dict[str, Any]]] = {}
+_METNORWAY_CACHE: OrderedDict[tuple[float, float], tuple[float, dict[str, Any]]] = OrderedDict()
 _METNORWAY_CACHE_LOCK = asyncio.Lock()
+_METNORWAY_CACHE_MAX_ENTRIES = 512
 EONET_EVENTS = "https://eonet.gsfc.nasa.gov/api/v3/events"
 RAINVIEWER = "https://api.rainviewer.com/public/weather-maps.json"
 NASA_GIBS_CAPABILITIES = "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/1.0.0/WMTSCapabilities.xml"
@@ -243,8 +245,13 @@ async def _fetch_provider_current(client: httpx.AsyncClient, provider: str, lat:
         cache_key = (round(lat, 2), round(lon, 2))
         loop_time = asyncio.get_running_loop().time()
         async with _METNORWAY_CACHE_LOCK:
+            prune_expired_lru(_METNORWAY_CACHE, loop_time, _METNORWAY_CACHE_MAX_ENTRIES)
             cached = _METNORWAY_CACHE.get(cache_key)
-            current = dict(cached[1]) if cached and cached[0] > loop_time else None
+            if cached and cached[0] > loop_time:
+                _METNORWAY_CACHE.move_to_end(cache_key)
+                current = dict(cached[1])
+            else:
+                current = None
 
         # Never hold the shared cache lock during network I/O: distinct locations
         # can be fetched concurrently by the country/world city report.
@@ -277,6 +284,8 @@ async def _fetch_provider_current(client: httpx.AsyncClient, provider: str, lat:
             ttl = max(3 * 60 * 60, ttl)
             async with _METNORWAY_CACHE_LOCK:
                 _METNORWAY_CACHE[cache_key] = (asyncio.get_running_loop().time() + ttl, dict(current))
+                _METNORWAY_CACHE.move_to_end(cache_key)
+                prune_expired_lru(_METNORWAY_CACHE, asyncio.get_running_loop().time(), _METNORWAY_CACHE_MAX_ENTRIES)
     if not isinstance(current.get("temperature_2m"), (int,float)):
         raise ValueError(f"{provider} returned no valid temperature")
     return {"current":current,"provider":provider}
@@ -383,23 +392,19 @@ async def satellite_catalog() -> dict[str, Any]:
     """Return provider readiness plus actual live NASA GIBS WMTS imagery layers."""
     import os
 
-    async with httpx.AsyncClient(
-        timeout=httpx.Timeout(12.0, connect=4.0),
-        follow_redirects=True,
-        headers={"User-Agent": "EARTH-WEATHER/1.0 (+https://earthweatherchannel.web.app)"},
-    ) as client:
-        try:
-            live_imagery = await fetch_gibs_layers(client)
-        except (httpx.HTTPError, ValueError, TypeError) as exc:
-            logger.warning("NASA GIBS layer catalogue unavailable: %s", exc.__class__.__name__)
-            live_imagery = {
-                "provider": "NASA EOSDIS GIBS",
-                "status": "degraded",
-                "retrieved_layers": 0,
-                "layers": [],
-                "capabilities_url": NASA_GIBS_CAPABILITIES,
-                "error": exc.__class__.__name__,
-            }
+    client = app.state.weather_http
+    try:
+        live_imagery = await fetch_gibs_layers(client)
+    except (httpx.HTTPError, ValueError, TypeError) as exc:
+        logger.warning("NASA GIBS layer catalogue unavailable: %s", exc.__class__.__name__)
+        live_imagery = {
+            "provider": "NASA EOSDIS GIBS",
+            "status": "degraded",
+            "retrieved_layers": 0,
+            "layers": [],
+            "capabilities_url": NASA_GIBS_CAPABILITIES,
+            "error": exc.__class__.__name__,
+        }
 
     providers = []
     for provider in SATELLITE_PROVIDERS:
@@ -451,7 +456,7 @@ async def source_health() -> dict[str, Any]:
         headers = {"User-Agent": METNORWAY_USER_AGENT, "Accept": "application/json"} if source_id == "metnorway" else None
         started = datetime.now(timezone.utc)
         try:
-            response = await client.get(url, params=params, headers=headers)
+            response = await client.get(url, params=params, headers=headers, timeout=10.0)
             elapsed = (datetime.now(timezone.utc) - started).total_seconds() * 1000
             response.raise_for_status()
             return {"id": source_id, "role": roles[source_id], "status": "online",
@@ -469,11 +474,8 @@ async def source_health() -> dict[str, Any]:
             return {"id": source_id, "role": roles[source_id], "status": "degraded",
                     "error": exc.__class__.__name__, "checked_at": utc_now()}
 
-    async with httpx.AsyncClient(
-        timeout=10.0, follow_redirects=True,
-        headers={"User-Agent": METNORWAY_USER_AGENT, "Accept": "application/json"},
-    ) as client:
-        results = await asyncio.gather(*(probe(client, item) for item in checks))
+    client = app.state.weather_http
+    results = await asyncio.gather(*(probe(client, item) for item in checks))
     return {
         "checked_at": utc_now(),
         "weather_pipeline": {"primary": "metnorway", "fallback": "open-meteo", "order": list(WEATHER_PROVIDER_ORDER)},
@@ -833,14 +835,14 @@ async def reverse_location(
         }
         _last_reverse_location_request = asyncio.get_running_loop().time()
         try:
-            async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
-                response = await client.get(
-                    "https://nominatim.openstreetmap.org/reverse",
-                    params=params,
-                    headers=headers,
-                )
-                response.raise_for_status()
-                payload = response.json()
+            response = await app.state.weather_http.get(
+                "https://nominatim.openstreetmap.org/reverse",
+                params=params,
+                headers=headers,
+                timeout=15.0,
+            )
+            response.raise_for_status()
+            payload = response.json()
         except (httpx.HTTPError, ValueError) as exc:
             raise HTTPException(status_code=502, detail="Nearby place lookup is temporarily unavailable") from exc
 
@@ -894,10 +896,13 @@ async def atmosphere(
 async def cyclones() -> dict[str, Any]:
     """NASA EONET curated active severe-storm events; not an official warning/complete cyclone track service."""
     try:
-        async with httpx.AsyncClient(timeout=20.0) as client:
-            response = await client.get(EONET_EVENTS, params={"category":"severeStorms","status":"open","limit":100})
-            response.raise_for_status()
-            payload = response.json()
+        response = await app.state.weather_http.get(
+            EONET_EVENTS,
+            params={"category":"severeStorms","status":"open","limit":100},
+            timeout=20.0,
+        )
+        response.raise_for_status()
+        payload = response.json()
         events = []
         for event in payload.get("events", []):
             geometries = event.get("geometry", [])
@@ -922,10 +927,14 @@ async def alerts(
         return {"source":"NOAA/NWS","coverage":"United States only","features":[],"message":"NWS alerts are not available for this location."}
     headers = {"User-Agent": os.getenv("EARTH_WEATHER_USER_AGENT", "EARTH-WEATHER/0.2 (set a monitored contact before production)")}
     try:
-        async with httpx.AsyncClient(timeout=15.0, headers=headers) as client:
-            response = await client.get("https://api.weather.gov/alerts/active", params={"point":f"{latitude},{longitude}"})
-            response.raise_for_status()
-            return response.json()
+        response = await app.state.weather_http.get(
+            "https://api.weather.gov/alerts/active",
+            params={"point":f"{latitude},{longitude}"},
+            headers=headers,
+            timeout=15.0,
+        )
+        response.raise_for_status()
+        return response.json()
     except httpx.HTTPError as exc:
         raise HTTPException(status_code=502, detail="NOAA/NWS alert service unavailable") from exc
 
@@ -933,11 +942,10 @@ async def alerts(
 async def radar() -> dict[str, Any]:
     """Return RainViewer's available past radar frames; never a nowcast."""
     try:
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            response = await client.get(RAINVIEWER)
-            response.raise_for_status()
-            payload = response.json()
-            return {
+        response = await app.state.weather_http.get(RAINVIEWER, timeout=15.0)
+        response.raise_for_status()
+        payload = response.json()
+        return {
                 "source":"RainViewer","host":payload.get("host"),"generated":payload.get("generated"),
                 "frames":payload.get("radar",{}).get("past",[]),
                 "note":"Past radar frames only. Coverage is incomplete; transparent tiles do not mean guaranteed dry weather."
@@ -1045,8 +1053,10 @@ async def _assert_public_article_host(url: str) -> None:
         raise HTTPException(status_code=403, detail="Private or non-public article hosts are not allowed")
 
 
-_WEATHER_RSS_CACHE: dict[str, tuple[float, float, list[dict[str, Any]]]] = {}
+_WEATHER_RSS_CACHE: OrderedDict[str, tuple[float, float, list[dict[str, Any]]]] = OrderedDict()
 _WEATHER_RSS_LOCK = asyncio.Lock()
+_WEATHER_RSS_FEED_LOCKS: dict[str, asyncio.Lock] = {}
+_WEATHER_RSS_MAX_ENTRIES = 96
 NDMA_RSS_BASE = "https://sachet.ndma.gov.in/cap_public_website/rss/"
 NDMA_STATE_FEEDS = {
     "andaman and nicobar islands":"rss_andaman.xml", "andaman":"rss_andaman.xml",
@@ -1121,20 +1131,35 @@ def _rss_item_to_story(item: ET.Element, source_name: str) -> dict[str, Any]:
 
 
 async def _fetch_weather_rss(url: str, source_name: str) -> list[dict[str, Any]]:
-    """Fetch and cache an official RSS feed; handles known namespace quirks in NASA's feed."""
+    """Fetch an RSS feed with per-feed request coalescing and a bounded stale cache."""
     async with _WEATHER_RSS_LOCK:
+        feed_lock = _WEATHER_RSS_FEED_LOCKS.setdefault(url, asyncio.Lock())
         now = asyncio.get_running_loop().time()
         cached = _WEATHER_RSS_CACHE.get(url)
         if cached and cached[0] > now:
-            return cached[2]
+            _WEATHER_RSS_CACHE.move_to_end(url)
+            return list(cached[2])
+
+    # Only requests for the same feed wait on one another. NASA, NOAA and regional
+    # NDMA feeds can therefore be refreshed concurrently without duplicating a feed fetch.
+    async with feed_lock:
+        async with _WEATHER_RSS_LOCK:
+            now = asyncio.get_running_loop().time()
+            cached = _WEATHER_RSS_CACHE.get(url)
+            if cached and cached[0] > now:
+                _WEATHER_RSS_CACHE.move_to_end(url)
+                return list(cached[2])
         try:
-            async with httpx.AsyncClient(timeout=15.0, follow_redirects=True, headers={
-                "User-Agent": "EARTH-WEATHER/1.0 (+https://earthweatherchannel.web.app)",
-                "Accept": "application/rss+xml, application/xml, text/xml;q=0.9, */*;q=0.5",
-            }) as client:
-                response = await client.get(url)
-                response.raise_for_status()
-                content = response.text
+            response = await app.state.weather_http.get(
+                url,
+                headers={
+                    "User-Agent": "EARTH-WEATHER/1.0 (+https://earthweatherchannel.web.app)",
+                    "Accept": "application/rss+xml, application/xml, text/xml;q=0.9, */*;q=0.5",
+                },
+                timeout=15.0,
+            )
+            response.raise_for_status()
+            content = response.text
             # NASA's current RSS has a missing whitespace between these two namespace attributes.
             content = content.replace('xmlns:apod="https://science.nasa.gov/apod/"xmlns:media=', 'xmlns:apod="https://science.nasa.gov/apod/" xmlns:media=')
             # Repair bare ampersands from legacy RSS descriptions, preserving valid entities.
@@ -1153,15 +1178,20 @@ async def _fetch_weather_rss(url: str, source_name: str) -> list[dict[str, Any]]
                     if urlparse(story["image"]).scheme not in {"http", "https"}:
                         story["image"] = None
                 stories.append(story)
-            _WEATHER_RSS_CACHE[url] = (now + 5 * 60, now + 30 * 60, stories)
-            if len(_WEATHER_RSS_CACHE) > 80:
+            now = asyncio.get_running_loop().time()
+            async with _WEATHER_RSS_LOCK:
+                _WEATHER_RSS_CACHE[url] = (now + 5 * 60, now + 30 * 60, stories)
+                _WEATHER_RSS_CACHE.move_to_end(url)
                 for old_url, value in list(_WEATHER_RSS_CACHE.items()):
-                    if value[1] < now or len(_WEATHER_RSS_CACHE) > 80:
+                    if value[1] <= now:
                         _WEATHER_RSS_CACHE.pop(old_url, None)
-            return stories
+                while len(_WEATHER_RSS_CACHE) > _WEATHER_RSS_MAX_ENTRIES:
+                    _WEATHER_RSS_CACHE.popitem(last=False)
+            return list(stories)
         except (httpx.HTTPError, ET.ParseError, ValueError):
-            if cached and cached[1] > asyncio.get_running_loop().time():
-                return cached[2]
+            now = asyncio.get_running_loop().time()
+            if cached and cached[1] > now:
+                return list(cached[2])
             raise
 
 
@@ -1259,13 +1289,20 @@ async def weather_news_image(url: str = Query(..., min_length=12, max_length=204
     """Safely proxy publisher lead images so cards and the reader can load them consistently."""
     current_url = url
     try:
-        async with httpx.AsyncClient(timeout=httpx.Timeout(10.0, connect=4.0), follow_redirects=False, headers={
+        client = app.state.weather_http
+        image_headers = {
             "User-Agent": "Mozilla/5.0 (compatible; EARTHWEATHER/1.0; +https://earthweatherchannel.web.app)",
             "Accept": "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
-        }) as client:
-            for _ in range(5):
-                await _assert_public_article_host(current_url)
-                async with client.stream("GET", current_url) as upstream:
+        }
+        for _ in range(5):
+            await _assert_public_article_host(current_url)
+            async with client.stream(
+                "GET",
+                current_url,
+                headers=image_headers,
+                timeout=httpx.Timeout(10.0, connect=4.0),
+                follow_redirects=False,
+            ) as upstream:
                     if upstream.status_code in {301, 302, 303, 307, 308}:
                         location = upstream.headers.get("location")
                         if not location:
@@ -1306,58 +1343,64 @@ async def weather_news_article(
     """Fetch a public publisher page and extract its readable text and lead image for the in-site reader."""
     current_url = url
     try:
-        async with httpx.AsyncClient(timeout=httpx.Timeout(12.0, connect=4.0), follow_redirects=False, headers={
+        client = app.state.weather_http
+        article_headers = {
             "User-Agent": "Mozilla/5.0 (compatible; EARTHWEATHER/1.0; +https://earthweatherchannel.web.app)",
             "Accept": "text/html,application/xhtml+xml;q=0.9,*/*;q=0.5",
-        }) as client:
-            response = None
-            for _ in range(5):
-                await _assert_public_article_host(current_url)
-                response = await client.get(current_url)
-                if response.status_code in {301, 302, 303, 307, 308}:
-                    location = response.headers.get("location")
-                    if not location:
-                        break
-                    current_url = urljoin(str(response.url), location)
-                    continue
-                break
-            if response is None:
-                raise HTTPException(status_code=502, detail="Publisher did not return an article page")
-            if response.status_code >= 400:
-                raise HTTPException(status_code=502, detail=f"Publisher page returned HTTP {response.status_code}")
-            content_type = response.headers.get("content-type", "").lower()
-            if "xml" in content_type and "sachet.ndma.gov.in" in urlparse(current_url).hostname:
-                cap_root = ET.fromstring(response.text)
-                cap_fields: dict[str, list[str]] = {}
-                for node in cap_root.iter():
-                    tag = _xml_local(node)
-                    if tag in {"sender", "sent", "status", "event", "urgency", "severity", "certainty", "effective", "expires", "headline", "description", "instruction", "areadesc"} and node.text:
-                        cap_fields.setdefault(tag, []).append(node.text.strip())
-                def first_field(key: str, fallback: str = "") -> str:
-                    return (cap_fields.get(key) or [fallback])[0]
-                title = first_field("headline", fallback_title)
-                paragraphs = []
-                for key, label in (("description", "Details"), ("instruction", "Safety instructions"), ("areadesc", "Affected area")):
-                    for value in cap_fields.get(key, []):
-                        if value and value not in paragraphs:
-                            paragraphs.append(f"{label}: {value}" if key != "description" else value)
-                metadata = [
-                    f"Event: {first_field('event')}", f"Severity: {first_field('severity')}",
-                    f"Urgency: {first_field('urgency')}", f"Effective: {first_field('effective')}",
-                    f"Expires: {first_field('expires')}",
-                ]
-                paragraphs = [value for value in paragraphs if value]
-                if metadata:
-                    paragraphs.extend(value for value in metadata if not value.endswith(": "))
-                return {
-                    "title": title[:500], "description": "Official Common Alerting Protocol (CAP) weather alert from NDMA SACHET.",
-                    "image": None, "paragraphs": paragraphs[:20], "source_url": current_url,
-                    "source": first_field("sender", "NDMA SACHET"), "retrieved_at": utc_now(),
-                    "extraction_status": "official_alert", "note": "Official CAP weather alert. Follow the issuing authority's instructions and validity period.",
-                }
-            if "html" not in content_type:
-                raise HTTPException(status_code=415, detail="This publisher link does not provide an HTML article")
-            source_html = response.text[:3_000_000]
+        }
+        response = None
+        for _ in range(5):
+            await _assert_public_article_host(current_url)
+            response = await client.get(
+                current_url,
+                headers=article_headers,
+                timeout=httpx.Timeout(12.0, connect=4.0),
+                follow_redirects=False,
+            )
+            if response.status_code in {301, 302, 303, 307, 308}:
+                location = response.headers.get("location")
+                if not location:
+                    break
+                current_url = urljoin(str(response.url), location)
+                continue
+            break
+        if response is None:
+            raise HTTPException(status_code=502, detail="Publisher did not return an article page")
+        if response.status_code >= 400:
+            raise HTTPException(status_code=502, detail=f"Publisher page returned HTTP {response.status_code}")
+        content_type = response.headers.get("content-type", "").lower()
+        if "xml" in content_type and "sachet.ndma.gov.in" in urlparse(current_url).hostname:
+            cap_root = ET.fromstring(response.text)
+            cap_fields: dict[str, list[str]] = {}
+            for node in cap_root.iter():
+                tag = _xml_local(node)
+                if tag in {"sender", "sent", "status", "event", "urgency", "severity", "certainty", "effective", "expires", "headline", "description", "instruction", "areadesc"} and node.text:
+                    cap_fields.setdefault(tag, []).append(node.text.strip())
+            def first_field(key: str, fallback: str = "") -> str:
+                return (cap_fields.get(key) or [fallback])[0]
+            title = first_field("headline", fallback_title)
+            paragraphs = []
+            for key, label in (("description", "Details"), ("instruction", "Safety instructions"), ("areadesc", "Affected area")):
+                for value in cap_fields.get(key, []):
+                    if value and value not in paragraphs:
+                        paragraphs.append(f"{label}: {value}" if key != "description" else value)
+            metadata = [
+                f"Event: {first_field('event')}", f"Severity: {first_field('severity')}",
+                f"Urgency: {first_field('urgency')}", f"Effective: {first_field('effective')}",
+                f"Expires: {first_field('expires')}",
+            ]
+            paragraphs = [value for value in paragraphs if value]
+            if metadata:
+                paragraphs.extend(value for value in metadata if not value.endswith(": "))
+            return {
+                "title": title[:500], "description": "Official Common Alerting Protocol (CAP) weather alert from NDMA SACHET.",
+                "image": None, "paragraphs": paragraphs[:20], "source_url": current_url,
+                "source": first_field("sender", "NDMA SACHET"), "retrieved_at": utc_now(),
+                "extraction_status": "official_alert", "note": "Official CAP weather alert. Follow the issuing authority's instructions and validity period.",
+            }
+        if "html" not in content_type:
+            raise HTTPException(status_code=415, detail="This publisher link does not provide an HTML article")
+        source_html = response.text[:3_000_000]
         parser = _WeatherArticleParser()
         parser.feed(source_html)
         title = parser.meta.get("og:title") or " ".join(parser.title_parts) or fallback_title
@@ -1471,8 +1514,8 @@ async def satellite_provider_health() -> dict[str, Any]:
                 "data_type": provider["data_type"],
             }
 
-    async with httpx.AsyncClient(timeout=12.0, headers={"User-Agent": "EARTH-WEATHER/1.0"}) as client:
-        results = await asyncio.gather(*(probe(client, item) for item in SATELLITE_PROVIDER_CHECKS))
+    client = app.state.weather_http
+    results = await asyncio.gather(*(probe(client, item) for item in SATELLITE_PROVIDER_CHECKS))
     reachable = sum(item["status"] in ("reachable", "reachable_auth_required") for item in results)
     return {
         "checked_at": utc_now(),

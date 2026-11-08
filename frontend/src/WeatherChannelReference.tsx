@@ -75,6 +75,8 @@ function WeatherParticleField({ code }: { code: unknown }) {
     if (!canvas || !ctx) return;
     let width = 0, height = 0, raf = 0, lastFrame = 0, lastTime = 0;
     let flashUntil = 0, nextFlash = 5000 + Math.random() * 5000;
+    const motionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
+    let reducedMotion = motionQuery.matches;
     const ratio = Math.min(window.devicePixelRatio || 1, 1.6);
     const rainCount = scene === "storm" ? 90 : 62;
     const snowCount = 42;
@@ -96,9 +98,10 @@ function WeatherParticleField({ code }: { code: unknown }) {
       ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
     };
     const draw = (time: number) => {
-      if (document.hidden) { raf = requestAnimationFrame(draw); return; }
-      if (time - lastFrame < 30 && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-        raf = requestAnimationFrame(draw); return;
+      raf = 0;
+      if (document.hidden) return;
+      if (time - lastFrame < 30 && !reducedMotion) {
+        raf = window.requestAnimationFrame(draw); return;
       }
       const dt = Math.min((time - (lastTime || time)) / 16.67, 2);
       lastTime = time; lastFrame = time;
@@ -168,17 +171,41 @@ function WeatherParticleField({ code }: { code: unknown }) {
           ctx.lineTo(width*.70,height*.32); ctx.lineTo(width*.62,height*.52); ctx.stroke();
         }
       }
-      if (!window.matchMedia("(prefers-reduced-motion: reduce)").matches) raf = requestAnimationFrame(draw);
+      if (!reducedMotion) raf = window.requestAnimationFrame(draw);
+    };
+    const schedule = () => {
+      if (!document.hidden && raf === 0) raf = window.requestAnimationFrame(draw);
+    };
+    const handleVisibility = () => {
+      if (document.hidden) {
+        if (raf) window.cancelAnimationFrame(raf);
+        raf = 0;
+        lastTime = 0;
+      } else {
+        schedule();
+      }
+    };
+    const handleMotionPreference = () => {
+      reducedMotion = motionQuery.matches;
+      if (raf) window.cancelAnimationFrame(raf);
+      raf = 0;
+      lastFrame = 0;
+      lastTime = 0;
+      schedule();
     };
     resize();
     const observer = typeof ResizeObserver !== "undefined" ? new ResizeObserver(resize) : null;
     observer?.observe(canvas);
     window.addEventListener("resize", resize);
-    raf = requestAnimationFrame(draw);
+    document.addEventListener("visibilitychange", handleVisibility);
+    motionQuery.addEventListener("change", handleMotionPreference);
+    schedule();
     return () => {
-      cancelAnimationFrame(raf);
+      if (raf) window.cancelAnimationFrame(raf);
       observer?.disconnect();
       window.removeEventListener("resize", resize);
+      document.removeEventListener("visibilitychange", handleVisibility);
+      motionQuery.removeEventListener("change", handleMotionPreference);
     };
   }, [scene]);
   return <canvas ref={canvasRef} className="wx-hero-particles" aria-hidden="true"/>;
@@ -412,19 +439,23 @@ export function WeatherChannelPage({ mode, location, cities, storms, onNavigate 
   useEffect(() => {
     if (!["Weather Report", "Radar", "Hourly", "10 Day"].includes(mode)) return;
     let active = true;
+    const controller = new AbortController();
     const load = async () => {
       setRadarLoading(true);
       try {
-        const response = await fetch(API + "/api/radar", { cache: "no-store" });
+        const response = await fetch(API + "/api/radar", { cache: "no-store", signal: controller.signal });
         if (!response.ok) throw new Error("Radar service returned " + response.status);
         const payload = await response.json() as Radar;
-        if (active) { setRadar(payload); setFrameIndex(Math.max(0, (payload.frames?.length || 1) - 1)); setPlaying(true); setRadarError(""); }
-      } catch (error) { if (active) setRadarError(error instanceof Error ? error.message : "Radar unavailable"); }
-      finally { if (active) setRadarLoading(false); }
+        if (active && !controller.signal.aborted) { setRadar(payload); setFrameIndex(Math.max(0, (payload.frames?.length || 1) - 1)); setPlaying(true); setRadarError(""); }
+      } catch (error) {
+        if (active && !controller.signal.aborted) setRadarError(error instanceof Error ? error.message : "Radar unavailable");
+      } finally {
+        if (active && !controller.signal.aborted) setRadarLoading(false);
+      }
     };
     void load();
     const interval = window.setInterval(() => void load(), 10 * 60 * 1000);
-    return () => { active = false; window.clearInterval(interval); };
+    return () => { active = false; controller.abort(); window.clearInterval(interval); };
   }, [mode, refresh]);
 
   const hourly = forecast?.hourly || {};
