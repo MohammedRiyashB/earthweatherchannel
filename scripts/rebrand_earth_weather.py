@@ -72,21 +72,21 @@ def replace_text_file(path: Path) -> int:
     for old, new in IDENTITY_REPLACEMENTS:
         updated = updated.replace(old, new)
     for pattern, replacement in (
-        (r"\\bOPPO\\b", "EARTH WEATHER"),
-        (r"\\bOPLUS\\b", "EARTH WEATHER"),
-        (r"\\bOPlus\\b", "Earth Weather"),
-        (r"\\bColorOS\\b", "EARTH WEATHER"),
-        (r"\\bColorOs\\b", "Earth Weather"),
-        (r"\\bHeytap\\b", "EARTH WEATHER"),
-        (r"\\bOPOS\\b", "EARTH WEATHER"),
-        (r"\\bOpos\\b", "Earth Weather"),
+        (r"\bOPPO\b", "EARTH WEATHER"),
+        (r"\bOPLUS\b", "EARTH WEATHER"),
+        (r"\bOPlus\b", "Earth Weather"),
+        (r"\bColorOS\b", "EARTH WEATHER"),
+        (r"\bColorOs\b", "Earth Weather"),
+        (r"\bHeytap\b", "EARTH WEATHER"),
+        (r"\bOPOS\b", "EARTH WEATHER"),
+        (r"\bOpos\b", "Earth Weather"),
     ):
         updated = re.sub(pattern, replacement, updated, flags=re.IGNORECASE)
-    updated = re.sub(r"\\bOplus(?=[A-Z])", "EarthWeather", updated)
-    updated = re.sub(r"\\bColorOs(?=[A-Z])", "EarthWeather", updated)
+    updated = re.sub(r"\bOplus(?=[A-Z])", "EarthWeather", updated)
+    updated = re.sub(r"\bColorOs(?=[A-Z])", "EarthWeather", updated)
     # Map old provider domains, including bare URLs, to the published EARTH WEATHER pages.
     updated = re.sub(
-        r"(?i)(?:https?://)?(?:www\\.)?(?:privacy\\.)?(?:oppo|oplus|heytap|coloros)\\.[a-z.]+(?:/[^\\s\\\"<>]*)?",
+        r"(?i)(?:https?://)?(?:www\.)?(?:privacy\.)?(?:oppo|oplus|heytap|coloros)\.[a-z.]+(?:/[^\s\\"<>]*)?",
         POLICY_URL,
         updated,
     )
