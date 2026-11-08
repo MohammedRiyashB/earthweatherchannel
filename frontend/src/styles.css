@@ -1166,3 +1166,88 @@
  .weather-earth-panel{margin:22px 0 0;border-radius:8px;overflow:hidden}
  .wx-forecast-shell{padding:27px 30px}
 }
+
+
+/* Expanding single-surface location search. */
+.location-picker-overlay {
+  position: fixed; inset: 0; z-index: 120; display: flex;
+  align-items: flex-start; justify-content: center;
+  padding: clamp(205px, 28vh, 330px) 16px 24px;
+  background: transparent;
+  animation: earth-picker-backdrop-in .18s ease-out both;
+}
+.location-picker-shell {
+  width: min(100%, 620px); max-height: min(58vh, 560px);
+  overflow: auto; overscroll-behavior: contain; padding: 10px;
+  border: 1px solid rgba(15,23,42,.08); border-radius: 30px;
+  background: #fff;
+  box-shadow: 0 16px 48px rgba(15,23,42,.18), 0 2px 8px rgba(15,23,42,.06);
+  transform-origin: top center;
+  animation: earth-picker-expand .28s cubic-bezier(.2,.85,.25,1) both;
+}
+.location-picker-search { display: block; width: 100%; margin: 0; }
+.location-picker-input-wrap {
+  display: flex; min-height: 62px; width: 100%; align-items: center;
+  gap: 13px; padding: 0 16px; border: 0; border-radius: 23px;
+  background: #f5f6f7; box-shadow: inset 0 0 0 1px rgba(15,23,42,.06);
+}
+.location-picker-input-wrap > svg {
+  width: 25px; height: 25px; flex: 0 0 25px; fill: none;
+  stroke: #242424; stroke-width: 1.9; stroke-linecap: round;
+}
+.location-picker-input-wrap input {
+  min-width: 0; width: 100%; height: 56px; padding: 0;
+  border: 0 !important; outline: none !important;
+  background: transparent !important; box-shadow: none !important;
+  color: #252422; font-size: 19px; line-height: 1.3;
+}
+.location-picker-input-wrap input::placeholder { color: #858b93; opacity: 1; }
+.location-picker-clear, .location-picker-cancel {
+  display: inline-flex; width: 34px; height: 34px; flex: 0 0 34px;
+  align-items: center; justify-content: center; padding: 0; border: 0;
+  border-radius: 50%; background: transparent; color: #252422;
+  font-size: 27px; line-height: 1; cursor: pointer;
+}
+.location-picker-clear { color: #6b7280; }
+.location-picker-cancel { background: #e9ebee; font-size: 25px; }
+.location-picker-results { margin: 8px 0 0; padding: 2px 4px 4px; }
+.location-picker-result {
+  display: flex; width: 100%; min-height: 66px; align-items: center;
+  gap: 13px; padding: 10px 12px; border: 0; border-radius: 17px;
+  background: transparent; color: #252422; text-align: left; cursor: pointer;
+  transition: background .16s ease, transform .16s ease;
+}
+.location-picker-result:hover, .location-picker-result:focus-visible {
+  background: #f3f5f8; outline: none;
+}
+.location-picker-result:active { transform: scale(.985); }
+.location-result-pin { width: 22px; flex: 0 0 22px; color: #4b5563; font-size: 20px; text-align: center; }
+.location-picker-result > span:nth-child(2) {
+  display: flex; min-width: 0; flex: 1; flex-direction: column; gap: 3px;
+}
+.location-picker-result strong {
+  overflow: hidden; font-size: 16px; font-weight: 600;
+  text-overflow: ellipsis; white-space: nowrap;
+}
+.location-picker-result small {
+  overflow: hidden; color: #737b84; font-size: 13px;
+  text-overflow: ellipsis; white-space: nowrap;
+}
+.location-result-arrow { color: #9aa1a9; font-size: 25px; }
+.location-picker-message { margin: 12px 10px; color: #69717b; font-size: 14px; }
+.location-picker-message.error { color: #b42318; }
+@keyframes earth-picker-expand {
+  from { opacity: 0; transform: translateY(-10px) scale(.94); clip-path: inset(0 0 80% 0 round 30px); }
+  to { opacity: 1; transform: translateY(0) scale(1); clip-path: inset(0 0 0 0 round 30px); }
+}
+@keyframes earth-picker-backdrop-in { from { opacity: .7; } to { opacity: 1; } }
+@media (max-width: 767px) {
+  .location-picker-overlay { padding: 205px 14px 20px; }
+  .location-picker-shell { width: 100%; max-height: 56vh; border-radius: 27px; padding: 9px; }
+  .location-picker-input-wrap { min-height: 58px; border-radius: 21px; }
+  .location-picker-input-wrap input { font-size: 18px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .location-picker-overlay, .location-picker-shell { animation: none; }
+  .location-picker-result { transition: none; }
+}
