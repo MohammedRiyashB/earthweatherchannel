@@ -119,11 +119,21 @@ def parse_gibs_capabilities(xml_text: str, limit: int = 250) -> list[dict[str, A
             for node in layer.iter()
             if _local_name(node.tag) == "ResourceURL" and node.attrib.get("template")
         ]
+        time_default: str | None = None
+        time_extent: str | None = None
+        for dimension in (node for node in layer.iter() if _local_name(node.tag) == "Dimension"):
+            identifier = next((child.text.strip().lower() for child in dimension.iter() if _local_name(child.tag) == "Identifier" and child.text), "")
+            if identifier == "time":
+                time_default = next((child.text.strip() for child in dimension.iter() if _local_name(child.tag) == "Default" and child.text), None)
+                time_extent = next((child.text.strip() for child in dimension.iter() if _local_name(child.tag) == "Value" and child.text), None)
+                break
         layers.append({
             "id": identifiers[0],
             "title": (fields.get("Title") or identifiers)[0],
             "formats": fields.get("Format", []),
             "tile_templates": templates[:3],
+            "default_time": time_default,
+            "time_extent": time_extent,
         })
         if len(layers) >= limit:
             break

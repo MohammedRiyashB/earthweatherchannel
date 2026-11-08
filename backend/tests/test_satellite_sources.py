@@ -12,6 +12,7 @@ class NasaGibsCapabilitiesTests(unittest.TestCase):
             <Layer>
               <ows:Title>VIIRS Corrected Reflectance True Color</ows:Title>
               <ows:Identifier>VIIRS_SNPP_CorrectedReflectance_TrueColor</ows:Identifier>
+              <Dimension><ows:Identifier>Time</ows:Identifier><Default>2026-11-07</Default><Value>2026-11-06/2026-11-07/P1D</Value></Dimension>
               <Format>image/jpeg</Format>
               <ResourceURL format="image/jpeg" resourceType="tile"
                 template="https://example.test/{TileMatrix}/{TileRow}/{TileCol}.jpg"/>
@@ -24,6 +25,8 @@ class NasaGibsCapabilitiesTests(unittest.TestCase):
         self.assertEqual(layers[0]["title"], "VIIRS Corrected Reflectance True Color")
         self.assertEqual(layers[0]["formats"], ["image/jpeg"])
         self.assertIn("{TileMatrix}", layers[0]["tile_templates"][0])
+        self.assertEqual(layers[0]["default_time"], "2026-11-07")
+        self.assertEqual(layers[0]["time_extent"], "2026-11-06/2026-11-07/P1D")
 
     def test_missing_contents_is_rejected(self) -> None:
         with self.assertRaises(ValueError):

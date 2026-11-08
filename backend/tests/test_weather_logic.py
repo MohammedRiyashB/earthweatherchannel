@@ -12,33 +12,33 @@ def params_for(points: int) -> dict[str, str]:
     return {"latitude": ",".join(latitudes), "longitude": ",".join(longitudes)}
 
 
-class OpenMeteoProviderTests(unittest.IsolatedAsyncioTestCase):
-    async def test_open_meteo_is_the_free_primary_provider(self):
+class WeatherProviderTests(unittest.IsolatedAsyncioTestCase):
+    async def test_met_norway_is_the_primary_provider(self):
         class FakeResponse:
-            def raise_for_status(self): pass
-            def json(self): return {"current":{"time":"2026-11-07T17:00","temperature_2m":28.0}}
-        class FakeClient:
-            async def get(self, url, params): return FakeResponse()
-        result = await weather_api._fetch_weather_current(FakeClient(), params_for(1))
-        self.assertEqual(result["provider"], "open-meteo")
-        self.assertEqual(result["temperature_2m"], 28.0)
-
-    async def test_open_meteo_failure_falls_back_to_identified_met_norway_model(self):
-        class FakeResponse:
-            headers = {"cache-control":"max-age=0"}
+            headers = {"cache-control": "max-age=0"}
             def raise_for_status(self): pass
             def json(self):
-                return {"properties":{"timeseries":[{"time":"2026-11-07T17:00:00Z","data":{"instant":{"details":{"air_temperature":25.0,"relative_humidity":90,"wind_speed":2.0,"wind_from_direction":330,"cloud_area_fraction":25}},"next_1_hours":{"summary":{"symbol_code":"clearsky_night"},"details":{"precipitation_amount":0.0}}}}]}}
+                return {"properties":{"timeseries":[{"time":"2026-11-07T17:00:00Z","data":{"instant":{"details":{"air_temperature":28.0,"relative_humidity":65,"wind_speed":2.0}},"next_1_hours":{"summary":{"symbol_code":"clearsky_day"},"details":{"precipitation_amount":0.0}}}}]}}
         class FakeClient:
-            def __init__(self): self.calls=0
-            async def get(self, url, params, **kwargs):
-                self.calls+=1
-                if self.calls==1: raise weather_api.httpx.ConnectError("Open-Meteo unavailable")
-                return FakeResponse()
+            async def get(self, url, params, **kwargs): return FakeResponse()
         result = await weather_api._fetch_weather_current(FakeClient(), params_for(1))
         self.assertEqual(result["provider"], "metnorway")
+        self.assertEqual(result["temperature_2m"], 28.0)
+
+    async def test_met_norway_failure_falls_back_to_open_meteo(self):
+        class FakeResponse:
+            def raise_for_status(self): pass
+            def json(self):
+                return {"current":{"time":"2026-11-07T17:00","temperature_2m":25.0,"relative_humidity_2m":90,"wind_speed_10m":2.0,"weather_code":0},"hourly":{"time":["2026-11-07T17:00"],"rain":[0.0]}}
+        class FakeClient:
+            def __init__(self): self.calls = 0
+            async def get(self, url, params, **kwargs):
+                self.calls += 1
+                if self.calls == 1: raise weather_api.httpx.ConnectError("MET Norway unavailable")
+                return FakeResponse()
+        result = await weather_api._fetch_weather_current(FakeClient(), params_for(1))
+        self.assertEqual(result["provider"], "open-meteo")
         self.assertEqual(result["temperature_2m"], 25.0)
-        self.assertIn("MET Norway",result["source"])
 
     async def test_open_meteo_is_free_and_needs_no_environment_key(self):
         with patch.dict(os.environ, {}, clear=True):
@@ -53,12 +53,14 @@ class OpenMeteoProviderTests(unittest.IsolatedAsyncioTestCase):
         class FakeResponse:
             def raise_for_status(self): pass
             def json(self):
-                return [{"current":{"time":"2026-11-07T17:00","temperature_2m":value}}
-                        for value in (-6.0,-5.0,-4.0)]
+                return {"properties":{"timeseries":[{"time":"2026-11-07T17:00:00Z","data":{"instant":{"details":{"air_temperature":1.0,"wind_speed":1.0}}}}]}}
         class FakeClient:
-            async def get(self, url, params): return FakeResponse()
-        result = await weather_api._fetch_weather_current(FakeClient(), params_for(3))
-        self.assertEqual([row["current"]["temperature_2m"] for row in result], [-6.0, -5.0, -4.0])
+            async def get(self, url, params, **kwargs):
+                response = FakeResponse()
+                response.json = lambda: {"properties":{"timeseries":[{"time":"2026-11-07T17:00:00Z","data":{"instant":{"details":{"air_temperature":float(params["lat"])+6,"wind_speed":1.0}}}}]}}
+                return response
+        result = await weather_api._fetch_weather_rows(FakeClient(), [-6.0,-5.0,-4.0], [100.0,101.0,102.0])
+        self.assertEqual([row["current"]["temperature_2m"] for row in result], [0.0,1.0,2.0])
 
     async def test_open_meteo_adapter_maps_all_live_weather_fields(self):
         class FakeResponse:
