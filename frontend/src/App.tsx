@@ -676,7 +676,7 @@ const [section,setSection]=useState("Weather Report");const page:"home"|SitePage
   window.addEventListener("keydown",handleKeyDown);
   return()=>{document.body.style.overflow=previousOverflow;window.removeEventListener("keydown",handleKeyDown);};
  },[locationPickerOpen]);
- const signIn=async()=>{if(!auth){setNotice("Firebase Authentication is not configured yet.");return;}try{await signInWithPopup(auth,googleProvider);setAuthScreen(null);setAuthError("");}catch{setNotice("Google sign-in could not be completed. Check popup permission and Firebase Authorized domains.");}};const submitEmailAuth=async(event:React.FormEvent)=>{event.preventDefault();if(!auth)return;setAuthBusy(true);setAuthError("");try{if(authScreen==="signup")await createUserWithEmailAndPassword(auth,authEmail.trim(),authPassword);else await signInWithEmailAndPassword(auth,authEmail.trim(),authPassword);setAuthScreen(null);setAuthEmail("");setAuthPassword("");}catch(error:any){setAuthError(error?.message||"Authentication could not be completed.");}finally{setAuthBusy(false);}};const openSignup=()=>{setLocationPickerOpen(false);setAuthScreen("signup");};const openRecentPlace=(place:Place)=>{setSection("Weather Report");void chooseLocation(place);};
+ const signIn=async()=>{if(!auth){setNotice("Firebase Authentication is not configured yet.");return;}try{await signInWithPopup(auth,googleProvider);setAuthScreen(null);setAuthError("");}catch{setNotice("Google sign-in could not be completed. Check popup permission and Firebase Authorized domains.");}};const submitEmailAuth=async(event:import("react").FormEvent)=>{event.preventDefault();if(!auth)return;setAuthBusy(true);setAuthError("");try{if(authScreen==="signup")await createUserWithEmailAndPassword(auth,authEmail.trim(),authPassword);else await signInWithEmailAndPassword(auth,authEmail.trim(),authPassword);setAuthScreen(null);setAuthEmail("");setAuthPassword("");}catch(error:any){setAuthError(error?.message||"Authentication could not be completed.");}finally{setAuthBusy(false);}};const openSignup=()=>{setLocationPickerOpen(false);setAuthScreen("signup");};const openRecentPlace=(place:Place)=>{setSection("Weather Report");void chooseLocation(place);};
  const countryTab=visitorLocation?.country||"Country";
  const stateTab=visitorLocation?.state||"State";
  const localTab=visitorLocation?.name?(visitorLocation?.district?`${visitorLocation.name} · ${visitorLocation.district}`:visitorLocation.name):(visitorLocation?.district||"Local");
@@ -718,7 +718,7 @@ const [section,setSection]=useState("Weather Report");const page:"home"|SitePage
     location={local}
     onNavigate={setSection}
     onSearchLocation={()=>{setQuery("");setLocationSearchResults([]);setLocationSearchError("");setLocationPickerOpen(true);}}
-    onAccount={()=>{if(user)void signOut(auth!);else void signIn();}}
+    onAccount={()=>{if(user)void signOut(auth!);else{setAuthError("");setAuthScreen("signin");}}}
     accountName={user?.displayName||null}
    >
     {(["Weather Report","Hourly","10 Day","Radar","Air Quality","Allergy","Storm reports"] as string[]).includes(section)
@@ -727,7 +727,7 @@ const [section,setSection]=useState("Weather Report");const page:"home"|SitePage
       :section==="Satellite imagery"?<SatelliteDashboard/>
       :<WeatherNewsPage section={section as "World"|"Country"|"State"|"Local"} location={visitorLocation}/>} 
    </WeatherChannelLayout>:<>
-    <header className="masthead"><div className="masthead-row"><div className="brand-lockup"><img className="brand-wordmark" src="/logo.png" alt="EARTH WEATHER" width="1200" height="220"/></div><div className="masthead-actions"><button className="header-location-search" type="button" aria-label="Search city or region" title="Search city or region" onClick={()=>{setQuery("");setLocationSearchResults([]);setLocationSearchError("");setLocationPickerOpen(true);}}><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.6"/><path d="m16 16 4.1 4.1"/></svg></button>{user?<button className="masthead-account-button" onClick={()=>void signOut(auth!)}>{user.displayName||"Account"}</button>:<button className="masthead-account-button" onClick={()=>void signIn()}>Sign in</button>}</div></div></header>
+    <header className="masthead"><div className="masthead-row"><div className="brand-lockup"><img className="brand-wordmark" src="/logo.png" alt="EARTH WEATHER" width="1200" height="220"/></div><div className="masthead-actions"><button className="header-location-search" type="button" aria-label="Search city or region" title="Search city or region" onClick={()=>{setQuery("");setLocationSearchResults([]);setLocationSearchError("");setLocationPickerOpen(true);}}><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.6"/><path d="m16 16 4.1 4.1"/></svg></button>{user?<button className="masthead-account-button" onClick={()=>void signOut(auth!)}>{user.displayName||"Account"}</button>:<button className="masthead-account-button" onClick={()=>{setAuthError("");setAuthScreen("signin");}}>Sign in</button>}</div></div></header>
     <main className="news-main info-page"><SitePageView slug={page}/></main>
    </>}
   <footer className="news-footer">
