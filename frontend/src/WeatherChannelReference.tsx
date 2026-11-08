@@ -503,7 +503,8 @@ export function WeatherChannelPage({ mode, location, cities, storms, onNavigate 
   const high = daily.temperature_2m_max?.[0], low = daily.temperature_2m_min?.[0];
   const rainChance = (hourly.precipitation_probability || []).slice(0,24).filter((n: unknown): n is number => typeof n === "number" && Number.isFinite(n)).reduce((max: number, n: number) => Math.max(max,n), -1);
   const next24RainChance = rainChance >= 0 ? rainChance : daily.precipitation_probability_max?.[0];
-  const next24RainAmount = (hourly.precipitation || []).slice(0,24).filter((n: unknown): n is number => typeof n === "number" && Number.isFinite(n)).reduce((sum: number,n: number) => sum+n,0);
+  const next24RainValues = (hourly.precipitation || []).slice(0,24).filter((n: unknown): n is number => typeof n === "number" && Number.isFinite(n));
+  const next24RainAmount = next24RainValues.length ? next24RainValues.reduce((sum: number,n: number) => sum+n,0) : daily.precipitation_sum?.[0];
   const dewPoint = typeof hourly.dew_point_2m?.[currentHourIndex] === "number"
     ? hourly.dew_point_2m[currentHourIndex]
     : current.dew_point_2m;
@@ -603,7 +604,7 @@ export function WeatherChannelPage({ mode, location, cities, storms, onNavigate 
   const hourlySection = <section className="flex flex-col gap-2" aria-label="Hourly forecast">
     <div className="flex min-h-7 items-center justify-between gap-3">
       <h2 className="text-xl leading-normal tracking-tight text-gray-900 mb-2 font-black">Today's outlook</h2>
-      <button type="button" onClick={()=>onNavigate("Hourly")} className="text-sm font-bold text-[#003399]">Next 24 hours ›</button>
+      <button type="button" aria-expanded={showAllHours} onClick={()=>setShowAllHours(v=>!v)} className="text-sm font-bold text-[#003399]">{showAllHours ? "Show less ↑" : "Next 24 hours ›"}</button>
     </div>
     <div className="overflow-hidden rounded-3xl border border-gray-200 bg-white">
       <div className="flex items-center justify-between px-4 pt-4"><span className="text-sm font-semibold text-gray-900">Hourly forecast</span><span className="text-xs text-gray-500">Local time</span></div>
