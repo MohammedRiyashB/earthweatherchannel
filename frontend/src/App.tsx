@@ -369,29 +369,6 @@ const [section,setSection]=useState("Weather Report");const page:"home"|SitePage
  const locationRequestVersion=useRef(0);
  const cityRequestVersion=useRef(0);
  useEffect(()=>{
-  const site=document.querySelector<HTMLElement>(".weathercom-site");
-  if(!site)return;
-  const updateScene=()=>{
-   const hour=new Date().getHours();
-   const phase=hour>=5&&hour<10?"morning":hour>=10&&hour<16?"day":hour>=16&&hour<19?"evening":"night";
-   site.dataset.ewTime=phase;
-   const maxScroll=Math.max(1,document.documentElement.scrollHeight-window.innerHeight);
-   const progress=Math.min(1,Math.max(0,window.scrollY/maxScroll));
-   site.style.setProperty("--ew-scroll",`${Math.round(progress*100)}%`);
-  };
-  updateScene();
-  window.addEventListener("scroll",updateScene,{passive:true});
-  const clock=window.setInterval(updateScene,60000);
-  window.addEventListener("resize",updateScene);
-  return()=>{
-   window.removeEventListener("scroll",updateScene);
-   window.removeEventListener("resize",updateScene);
-   window.clearInterval(clock);
-   delete site.dataset.ewTime;
-   site.style.removeProperty("--ew-scroll");
-  };
- },[page]);
- useEffect(()=>{
   const cards=Array.from(document.querySelectorAll<HTMLElement>(".weather-scene"));
   if(!cards.length)return;
   if(!("IntersectionObserver" in window)){
