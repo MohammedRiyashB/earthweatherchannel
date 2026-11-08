@@ -685,11 +685,21 @@ const [section,setSection]=useState("Weather Report");const page:"home"|SitePage
     <form className="location-picker-search" onSubmit={async event=>{event.preventDefault();const matches=await search();if(matches[0])void chooseLocation(matches[0]);}}>
      <div className="location-picker-input-wrap">
       <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.6"/><path d="m16 16 4.1 4.1"/></svg>
-      <input autoFocus value={query} onChange={event=>setQuery(event.target.value)} placeholder="Search city or region" aria-label="Search city or region" autoComplete="off"/>
+      <input autoFocus value={query} onChange={event=>setQuery(event.target.value)} placeholder="Search for a location" aria-label="Search for a location" autoComplete="off"/>
       {query&&<button type="button" className="location-picker-clear" aria-label="Clear search" onClick={()=>{setQuery("");setLocationSearchResults([]);setLocationSearchError("");}}>×</button>}
       <button type="button" className="location-picker-cancel" aria-label="Close location search" onClick={()=>{setLocationPickerOpen(false);setQuery("");setLocationSearchResults([]);setLocationSearchError("");}}>×</button>
      </div>
     </form>
+    {!query.trim()&&<section className="location-picker-places" aria-label="My Places">
+     <h2>My Places</h2>
+     {local?<button type="button" className="location-picker-place" onClick={()=>{setLocationPickerOpen(false);setQuery("");}}>
+      <span className="location-place-weather">{local.loading||locationStatus==="locating"?"…":(local.current?.weather_code===0?"☀️":typeof local.current?.weather_code==="number"&&local.current.weather_code>=1&&typeof local.current?.weather_code==="number"&&local.current.weather_code<=3?"🌤️":typeof local.current?.weather_code==="number"&&local.current.weather_code>=45&&typeof local.current?.weather_code==="number"&&local.current.weather_code<=48?"🌫️":typeof local.current?.weather_code==="number"&&local.current.weather_code>=51&&typeof local.current?.weather_code==="number"&&local.current.weather_code<=67?"🌧️":typeof local.current?.weather_code==="number"&&local.current.weather_code>=71&&typeof local.current?.weather_code==="number"&&local.current.weather_code<=86?"🌨️":typeof local.current?.weather_code==="number"&&local.current.weather_code>=95?"⛈️":"☁️")}</span>
+      <span className="location-place-temperature">{typeof local.current?.temperature_2m==="number"?Math.round(local.current.temperature_2m)+"°":local.loading?"…":"—"}</span>
+      <span className="location-place-name"><strong>{local.name||"Finding your location…"}</strong><small>{local.region||locationMessage||"Fetching nearby location…"}</small></span>
+      <span className="location-place-arrow" aria-hidden="true">➤</span>
+     </button>:<p className="location-picker-message">{locationMessage||"Fetching your location…"}</p>}
+     {(locationStatus==="locating"||local?.loading)&&<p className="location-picker-message location-place-fetching">Fetching current location and weather…</p>}
+    </section>}
     {query.trim().length>=2&&<section className="location-picker-results" aria-live="polite">
      {locationSearching&&<p className="location-picker-message">Searching locations…</p>}
      {locationSelectionPending&&<p className="location-picker-message">Loading weather for {locationSelectionPending}…</p>}
