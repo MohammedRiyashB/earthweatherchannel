@@ -307,7 +307,7 @@ function WeatherNewsPage({section,location}:{section:"World"|"Country"|"State"|"
  </main>;
 }
 
-export default function ForecastExperience({location}:{location:Place|null}){
+function ForecastExperience({location}:{location:Place|null}){
  const [data,setData]=useState<any>(null);
  const [loading,setLoading]=useState(false);
  const [error,setError]=useState("");
@@ -342,7 +342,7 @@ export default function ForecastExperience({location}:{location:Place|null}){
  </section>;
 }
 
-function App(){
+export default function App(){
  const [cities,setCities]=useState<Place[]>(()=>readCache<Place[]>("cities",CITIES.map(x=>({...x,loading:true}))));
  const [storms,setStorms]=useState<Storm[]>(()=>readCache<Storm[]>("storms",[]));
   const [updated,setUpdated]=useState<string>(()=>readCache<string>("cities-updated",""));const [busy,setBusy]=useState(false);const [query,setQuery]=useState("");
