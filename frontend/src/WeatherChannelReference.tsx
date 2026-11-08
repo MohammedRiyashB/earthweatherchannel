@@ -360,7 +360,7 @@ export function WeatherChannelPage({ mode, location, cities, storms, onNavigate 
   const [refresh, setRefresh] = useState(0);
   const [showAllHours, setShowAllHours] = useState(false);
   const [showAllDays, setShowAllDays] = useState(false);
-  const [zoom] = useState(11);
+  const [zoom] = useState(7);
 
   useEffect(() => {
     const refreshWhenVisible = () => { if (document.visibilityState === "visible") setRefresh(value => value + 1); };
