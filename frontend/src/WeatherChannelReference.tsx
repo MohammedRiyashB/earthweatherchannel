@@ -222,7 +222,6 @@ export function WeatherChannelLayout({
   accountName?: string | null;
   children: ReactNode;
 }) {
-  const [moreOpen, setMoreOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
 
 
@@ -232,12 +231,6 @@ export function WeatherChannelLayout({
     { key: "Radar", label: "Radar", icon: "radar" as const },
     { key: "Allergy", label: "Allergy Tracker", icon: "allergy" as const },
     { key: "Air Quality", label: "Air Quality Index", icon: "air" as const }
-  ];
-  const moreItems = [
-    ["Hourly", "Hourly forecast"], ["10 Day", "10-day forecast"],
-    ["Satellite imagery", "Satellite"], ["Satellite Report", "Satellite report"],
-    ["Storm reports", "Storm reports"], ["World", "World weather news"],
-    ["Country", "Country weather news"], ["State", "State weather news"], ["Local", "Local weather news"]
   ];
   const nav = (drawer = false) => <nav
     aria-label="Weather navigation"
@@ -271,13 +264,6 @@ export function WeatherChannelLayout({
             className={"rounded-xl px-3 py-2 text-left text-sm hover:bg-gray-100 " + (active === key ? "bg-gray-100 font-bold text-[#003399]" : "")}>{title}</button>)}
         </div>}
       </li>
-    </ul>
-    <ul className="m-0 mt-auto flex w-full flex-col gap-1 px-3 pb-4">
-      <li><button type="button" onClick={onAccount}
-        className="group relative box-border flex h-14 w-full cursor-pointer flex-col items-center justify-center rounded-2xl bg-[#252422] px-3 font-semibold text-white xl:h-12 xl:flex-row xl:justify-start">
-        <Icon name="user" className="inline-block h-6 w-6 shrink-0 text-white xl:mr-3" />
-        <span className="mt-1 line-clamp-1 text-xxs font-semibold text-white xl:mt-0 xl:text-sm">{accountName || "Sign in"}</span>
-      </button></li>
     </ul>
   </nav>;
 
