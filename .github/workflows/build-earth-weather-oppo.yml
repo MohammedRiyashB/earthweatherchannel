@@ -136,120 +136,168 @@ jobs:
               raise SystemExit("Could not safely patch WeatherDataClientManager.cryptoInit()")
           manager.write_text(ms)
 
-          # Replace user-visible vendor identity and legal destinations with EARTH WEATHER's published pages.
-          brand_replacements = {
-              "Guangdong OPPO Mobile Telecommunications Corp., Ltd.": "BMR INC. — EARTH WEATHER CHANNEL",
-              "Guangdong OPPO": "BMR INC.",
-              "OPPO Weather": "Earth Weather",
-              "OPPO weather": "Earth Weather",
-              "Oppo Weather": "Earth Weather",
-              "ColorOS Weather": "Earth Weather",
-              "ColorOS": "Earth Weather",
-              "OPPO": "EARTH WEATHER",
-              "OPlus": "EARTH WEATHER",
-              "Oplus": "EARTH WEATHER",
-              "HeyTap": "EARTH WEATHER",
-              "heytap": "earthweather",
-              "oppo.com/privacy-feedback": "earthweatherchannel.web.app/privacy-policy",
-              "privacy.oppo.com": "earthweatherchannel.web.app/privacy-policy",
-              "https://www.oppo.com": "https://earthweatherchannel.web.app",
-              "https://oppo.com": "https://earthweatherchannel.web.app",
+          # Modify only user-visible Android string resources and legal HTML.
+          # Never replace vendor tokens in Smali descriptors, class names, method names,
+          # resource identifiers, or XML attribute names: those are implementation symbols.
+          import html
+          import xml.etree.ElementTree as ET
+          import re
+
+          def map_vendor_url(value: str) -> str:
+              def _map(match):
+                  url = match.group(0)
+                  lower = url.lower()
+                  if any(x in lower for x in ("agreement", "terms", "user-agreement")):
+                      return "https://earthweatherchannel.web.app/terms-and-conditions"
+                  if any(x in lower for x in ("third", "service", "personal")):
+                      return "https://earthweatherchannel.web.app/data-usage-policy"
+                  if any(x in lower for x in ("privacy", "policy", "opush")):
+                      return "https://earthweatherchannel.web.app/privacy-policy"
+                  return "https://earthweatherchannel.web.app/"
+              pattern = re.compile(r"https?://(?:[A-Za-z0-9-]+\\.)*(?:oppo|oplus|heytap|oneplus|realme)\\.(?:com|cn)(?:/[^\\s\\"'<>]*)?", re.I)
+              return pattern.sub(_map, value)
+
+          def clean_visible_text(value):
+              if not value:
+                  return value
+              value = map_vendor_url(value)
+              replacements = [
+                  ("Guangdong OPPO Mobile Telecommunications Corp., Ltd.", "BMR INC. — EARTH WEATHER CHANNEL"),
+                  ("Guangdong OPPO", "BMR INC."),
+                  ("OPPO ADN", "EARTH WEATHER"),
+                  ("OPPO Weather", "Earth Weather"),
+                  ("Oppo Weather", "Earth Weather"),
+                  ("OPPO weather", "Earth Weather"),
+                  ("Oppo Market", "Earth Weather"),
+                  ("ColorOS Weather", "Earth Weather"),
+                  ("ColorOS", "EARTH WEATHER"),
+                  ("HeyTap", "EARTH WEATHER"),
+                  ("heytap", "earthweather"),
+                  ("OPlus", "EARTH WEATHER"),
+                  ("Oplus", "EARTH WEATHER"),
+              ]
+              for old_text, new_text in replacements:
+                  value = value.replace(old_text, new_text)
+              value = re.sub(r"(?i)\\bOPPO\\b", "EARTH WEATHER", value)
+              value = re.sub(r"(?i)\\bOppo\\b", "Earth Weather", value)
+              return value
+
+          # Make the built-in legal hyperlinks point to the published BMR INC. pages.
+          uri_map = {
+              "bootreg://private.policy": "https://earthweatherchannel.web.app/privacy-policy",
+              "bootreg://export.private.policy": "https://earthweatherchannel.web.app/data-usage-policy",
+              "bootreg://user.agreement": "https://earthweatherchannel.web.app/terms-and-conditions",
+              "@string/url_www_opush_01": "https://earthweatherchannel.web.app/privacy-policy",
           }
-          legal_routes = {
-              "weather_user_agreement": "https://earthweatherchannel.web.app/terms-and-conditions",
-              "user_agreement": "https://earthweatherchannel.web.app/terms-and-conditions",
-              "privacy_policy": "https://earthweatherchannel.web.app/privacy-policy",
-              "privacy_notice": "https://earthweatherchannel.web.app/privacy-policy",
-              "personal_service": "https://earthweatherchannel.web.app/data-usage-policy",
-              "third_party": "https://earthweatherchannel.web.app/data-usage-policy",
-          }
-          for p in root.rglob("*"):
-              if not p.is_file() or p.suffix.lower() not in text_ext:
-                  continue
-              try:
-                  s = p.read_text(encoding="utf-8")
-              except (UnicodeDecodeError, OSError):
-                  continue
-              original = s
-              for old_text, new_text in brand_replacements.items():
-                  s = s.replace(old_text, new_text)
-              if p.name.startswith("weather_user_agreement") or p.name.startswith("user_agreement"):
-                  s = s.replace("https://earthweatherchannel.web.app", legal_routes["weather_user_agreement"])
-              if p.name.startswith("weather_privacy") or p.name.startswith("privacy_policy"):
-                  s = s.replace("https://earthweatherchannel.web.app", legal_routes["privacy_policy"])
-              if p.name.startswith("weather_personal_service") or p.name.startswith("personal_service"):
-                  s = s.replace("https://earthweatherchannel.web.app", legal_routes["personal_service"])
-              if p.name.startswith("weather_third_party_info"):
-                  # Keep vendor disclosures truthful; route the app's legal entry point to EARTH WEATHER's data-use page.
-                  s = s.replace("https://earthweatherchannel.web.app", legal_routes["third_party"])
-              if s != original:
-                  p.write_text(s, encoding="utf-8")
 
-          # Keep the actual third-party SDK disclosures truthful; only remove obsolete OPPO ad-network branding.
-          for p in root.rglob("*.json"):
+          values_dir = root / "res"
+          for p in values_dir.glob("values*/strings.xml"):
               try:
-                  s = p.read_text(encoding="utf-8")
-              except (UnicodeDecodeError, OSError):
-                  continue
-              s = s.replace('"OPPO","Realme"', '"EARTH WEATHER"')
-              s = s.replace('"OPPO"', '"EARTH WEATHER"')
-              p.write_text(s, encoding="utf-8")
+                  tree = ET.parse(p)
+              except (ET.ParseError, OSError) as exc:
+                  raise SystemExit(f"Invalid Android strings resource {p}: {exc}")
+              changed_here = False
+              for node in tree.iter():
+                  if node.text:
+                      before = node.text
+                      after = clean_visible_text(before)
+                      for old_uri, new_uri in uri_map.items():
+                          after = after.replace(old_uri, new_uri)
+                      if after != before:
+                          node.text = after
+                          changed_here = True
+                  if node.tail:
+                      before = node.tail
+                      after = clean_visible_text(before)
+                      for old_uri, new_uri in uri_map.items():
+                          after = after.replace(old_uri, new_uri)
+                      if after != before:
+                          node.tail = after
+                          changed_here = True
+                  # URL attributes are safe to rewrite; leave resource IDs and class names intact.
+                  for key, val in list(node.attrib.items()):
+                      if isinstance(val, str) and (val.startswith("http://") or val.startswith("https://")):
+                          after = clean_visible_text(val)
+                          if after != val:
+                              node.set(key, after)
+                              changed_here = True
+              if changed_here:
+                  tree.write(p, encoding="utf-8", xml_declaration=True)
 
-          # Ensure the Android launcher label is ours in every locale.
-          for p in (root / "res").glob("values*/strings.xml"):
-              try:
-                  s = p.read_text(encoding="utf-8")
-              except (UnicodeDecodeError, OSError):
-                  continue
-              s = re.sub(r'(<string\\s+name="app_name"[^>]*>).*?(</string>)',
-                         r'\\1Earth Weather\\2', s, flags=re.S)
-              p.write_text(s, encoding="utf-8")
-
-          # Point every app-owned legal entry point to the published EARTH WEATHER website.
-          legal_link_map = {
-              "https://privacy.oppo.com": "https://earthweatherchannel.web.app/privacy-policy",
-              "https://www.oppo.com/privacy": "https://earthweatherchannel.web.app/privacy-policy",
-              "https://www.oppo.com": "https://earthweatherchannel.web.app",
-              "https://oppo.com": "https://earthweatherchannel.web.app",
-              "https://privacy.oppo.com/en/": "https://earthweatherchannel.web.app/privacy-policy",
-              "https://privacy.oppo.com/en": "https://earthweatherchannel.web.app/privacy-policy",
-          }
-          for p in root.rglob("*"):
-              if not p.is_file() or p.suffix.lower() not in text_ext:
-                  continue
-              try:
-                  s = p.read_text(encoding="utf-8")
-              except (UnicodeDecodeError, OSError):
-                  continue
-              before = s
-              for old_url, new_url in legal_link_map.items():
-                  s = s.replace(old_url, new_url)
-              if p.suffix.lower() == ".smali":
-                  s = s.replace("https://earthweatherchannel.web.app/privacy-policy", "https://earthweatherchannel.web.app/privacy-policy")
-                  s = s.replace("https://earthweatherchannel.web.app/terms-and-conditions", "https://earthweatherchannel.web.app/terms-and-conditions")
-                  s = s.replace("https://earthweatherchannel.web.app/data-usage-policy", "https://earthweatherchannel.web.app/data-usage-policy")
-              if p.name.startswith("weather_third_party_info") and p.suffix.lower() == ".html":
-                  s = """<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Earth Weather — Third-party information</title></head><body><h1>Earth Weather third-party information</h1><p>For the current third-party services, SDKs, data handling and privacy disclosures used by EARTH WEATHER, please read the published BMR INC. policy.</p><p><a href="https://earthweatherchannel.web.app/data-usage-policy">Earth Weather Data Usage & Third-party Information</a></p><p><a href="https://earthweatherchannel.web.app/privacy-policy">Earth Weather Privacy Policy</a></p></body></html>"""
-              if s != before:
-                  p.write_text(s, encoding="utf-8")
-
-          # Preserve MIT/Open Source license notices; only rebrand app-specific legal pages and destinations.
-          # Fail the build if an OPPO vendor privacy destination remains in visible app resources.
-          visible_hits = []
-          for base in (root / "res", root / "assets"):
+          # Handle any HTML/TXT legal resources without touching Smali or other program files.
+          for base in (root / "assets", root / "res"):
               if not base.exists():
                   continue
               for p in base.rglob("*"):
-                  if not p.is_file() or p.suffix.lower() not in text_ext:
+                  if not p.is_file() or p.suffix.lower() not in {".html", ".htm", ".txt"}:
                       continue
                   try:
-                      body = p.read_text(encoding="utf-8")
+                      raw = p.read_text(encoding="utf-8")
                   except (UnicodeDecodeError, OSError):
                       continue
-                  if re.search(r"(?i)Guangdong OPPO|oppo\\.com/privacy|privacy\\.oppo\\.com|ColorOS Weather|OPPO Weather", body):
-                      visible_hits.append(str(p))
+                  updated = clean_visible_text(raw)
+                  for old_uri, new_uri in uri_map.items():
+                      updated = updated.replace(old_uri, new_uri)
+                  if p.name.startswith("weather_third_party_info") and p.suffix.lower() in {".html", ".htm"}:
+                      updated = """<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Earth Weather — Third-party information</title></head><body><h1>Earth Weather third-party information</h1><p>For current third-party services, SDKs, data handling and privacy disclosures used by EARTH WEATHER, read the published BMR INC. disclosure.</p><p><a href="https://earthweatherchannel.web.app/data-usage-policy">Earth Weather Data Usage and Third-party Information</a></p><p><a href="https://earthweatherchannel.web.app/privacy-policy">Earth Weather Privacy Policy</a></p></body></html>"""
+                  if updated != raw:
+                      p.write_text(updated, encoding="utf-8")
+
+          # Replace only the legacy browser's vendor host string with our website host.
+          base_web = next(root.glob("smali*/com/oplus/weather/plugin/webview/BaseWebActivity.smali"), None)
+          if base_web:
+              body = base_web.read_text(encoding="utf-8")
+              body = body.replace('const-string/jumbo v4, "oppo"', 'const-string/jumbo v4, "earthweatherchannel.web.app"')
+              base_web.write_text(body, encoding="utf-8")
+
+          # Disable the bundled OPPO index-ad client at its boundary. The weather UI
+          # remains unchanged; its ad data request receives an empty string and makes no vendor request.
+          ad_ext = next(root.glob("smali*/com/oplus/weather/service/network/client/IndexAdClientExt.smali"), None)
+          if ad_ext is None:
+              raise SystemExit("IndexAdClientExt.smali not found; refusing to leave OPPO ad client enabled")
+          ad_body = ad_ext.read_text(encoding="utf-8")
+          method = ".method public final getIndexAdData(Ljava/util/Map;)Ljava/lang/String;"
+          a = ad_body.find(method)
+          if a < 0:
+              raise SystemExit("IndexAdClientExt.getIndexAdData method not found")
+          z = ad_body.find(".end method", a)
+          if z < 0:
+              raise SystemExit("IndexAdClientExt.getIndexAdData method terminator not found")
+          z += len(".end method")
+          safe_method = """.method public final getIndexAdData(Ljava/util/Map;)Ljava/lang/String;
+              .locals 1
+              const-string v0, ""
+              return-object v0
+          .end method"""
+          ad_body = ad_body[:a] + safe_method + ad_body[z:]
+          ad_ext.write_text(ad_body, encoding="utf-8")
+
+          # The app's ad-support feature flag is false in the reference build already.
+          # Keep that vendor ad path disabled; do not rewrite internal com.oplus/com.heytap namespaces.
+          feature = next(root.glob("smali*/com/oplus/weather/utils/AppFeatureUtils.smali"), None)
+          if feature is None:
+              raise SystemExit("AppFeatureUtils.smali not found")
+          feature_body = feature.read_text(encoding="utf-8")
+          if "isSupportOplusAd_delegate$lambda$5" not in feature_body:
+              raise SystemExit("Could not verify OPPO ad feature gate")
+          # The upstream feature gate already returns false; preserve it verbatim.
+
+          # Validate the resource XML after all edits.
+          for p in values_dir.glob("values*/strings.xml"):
+              ET.parse(p)
+
+          # Fail if OEM branding or vendor legal links remain in user-visible text nodes.
+          visible_hits = []
+          forbidden = re.compile(r"(?i)Guangdong OPPO|\\bOPPO\\b|\\bColorOS\\b|\\bHeyTap\\b|\\bOPlus\\b|https?://[^\\s\\"'<>]*(?:oppo|oplus|heytap|oneplus|realme)\\.(?:com|cn)")
+          for p in values_dir.glob("values*/strings.xml"):
+              tree = ET.parse(p)
+              for node in tree.iter():
+                  if node.text and forbidden.search(node.text):
+                      visible_hits.append(f"{p}:{node.tag}:{node.text[:90]}")
+                  if node.tail and forbidden.search(node.tail):
+                      visible_hits.append(f"{p}:{node.tag}:tail:{node.tail[:90]}")
           if visible_hits:
-              raise SystemExit("OPPO branding/privacy URLs remain in visible resources: " + ", ".join(visible_hits[:20]))
+              raise SystemExit("OEM branding/vendor links remain in visible strings: " + " | ".join(visible_hits[:20]))
 
           # Record the intended product identity in the build workspace.
           (Path("earth-weather-build.properties")).write_text(
