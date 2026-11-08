@@ -557,9 +557,10 @@ function handleBack(){
 }
 function initApp(){
   syncSettings();
+  setHeroStatus("Finding your location…");
+  $("condition").textContent="Loading weather";
   const recent=readStore("earthWeather.lastLocation",null);
-  if(recent&&recent.latitude!==undefined&&recent.longitude!==undefined)loadWeather(recent.latitude,recent.longitude,recent.name||"Last location",recent.region||"");
-  else loadWeather(DEFAULT_CITY.latitude,DEFAULT_CITY.longitude,DEFAULT_CITY.name,DEFAULT_CITY.region);
+  if(recent&&recent.name)$("cityName").textContent=recent.name;
 }
 document.addEventListener("DOMContentLoaded",initApp);
 </script>
