@@ -92,7 +92,7 @@ button,input{font:inherit;color:inherit}button{border:0;background:none;cursor:p
     <div><div class="tip-icon">☼</div><div class="tip-text">Stay hydrated</div></div>
   </div>
 </section>
-<footer class="brand-footer"><strong>EARTH WEATHER</strong><small>© 2026 BMR Inc.</small></footer>
+<footer class="brand-footer"><svg viewBox="0 0 64 64" width="46" height="46" aria-label="Earth Weather logo"><defs><linearGradient id="ewg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#eaf7ff"/><stop offset="1" stop-color="#8ac5ff"/></linearGradient></defs><circle cx="32" cy="32" r="29" fill="url(#ewg)" stroke="#fff" stroke-opacity=".8" stroke-width="2"/><path d="M12 34c0-8 7-14 15-13 4-8 17-7 20 3 8 0 13 8 9 15-2 5-7 7-13 7H25c-8 0-13-5-13-12z" fill="#fff"/></svg><strong>EARTH WEATHER</strong><small>© 2026 BMR Inc.</small></footer>
 </main>
 
 <section id="citiesPage" class="page">
@@ -183,6 +183,7 @@ function populateExtraWeather(data){
  document.getElementById("tipRoad").textContent=[61,63,65,80,81,82,95,96,99].includes(Number(c.weather_code))?"Wet road – drive carefully":"Drive safely";
  document.getElementById("tipTrip").textContent=rain?"Check rain forecast before a trip":"Weather looks suitable for a trip";
  document.getElementById("moonPhase").textContent="Local moon information";
+ if(currentLat!==null&&currentLon!==null){fetch("https://air-quality-api.open-meteo.com/v1/air-quality?latitude="+currentLat+"&longitude="+currentLon+"&current=us_aqi,pm2_5,pm10&timezone=auto").then(r=>r.ok?r.json():null).then(a=>{const q=a?.current?.us_aqi;if(q==null)return;const label=q<=50?"Good":q<=100?"Moderate":q<=150?"Unhealthy for sensitive groups":q<=200?"Unhealthy":q<=300?"Very unhealthy":"Hazardous";document.getElementById("aqiValue").textContent=Math.round(q);document.getElementById("aqiInline").textContent="Air quality: "+Math.round(q)+" · "+label;document.getElementById("aqiText").textContent=label+" · US AQI · PM2.5 "+(a.current.pm2_5==null?"--":Number(a.current.pm2_5).toFixed(1)+" μg/m³")}).catch(()=>{})}
 }
 let currentLat=null,currentLon=null,currentPlace="Rasipuram",lastData=null,searchTimer=null;let cities=JSON.parse(localStorage.getItem("ewCities")||"[]");let settings=JSON.parse(localStorage.getItem("ewSettings")||"{}");
 function el(id){return document.getElementById(id)}function setStatus(s){el("status").textContent=s}
