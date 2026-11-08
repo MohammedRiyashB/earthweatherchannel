@@ -367,7 +367,7 @@ patch_method(
 # is deliberately integrated. Weather UI screens remain unchanged.
 feed = find_smali("com/bmrinc/earthweather/core/weather/ad/OPPOFeedAdManager.smali")
 patch_method(
-    feed, r"init\\(Landroid/content/Context;\\)V",
+    feed, r"init\(Landroid/content/Context;\)V",
     """.method public static final init(Landroid/content/Context;)V
     .locals 0
     return-void
@@ -376,7 +376,7 @@ patch_method(
 )
 splash = find_smali("com/bmrinc/earthweather/core/weather/ad/splash/SplashAdManager.smali")
 patch_method(
-    splash, r"ensurePreInit\\(Landroid/content/Context;\\)V",
+    splash, r"ensurePreInit\(Landroid/content/Context;\)V",
     """.method public static final ensurePreInit(Landroid/content/Context;)V
     .locals 0
     return-void
@@ -384,7 +384,7 @@ patch_method(
     "disable inherited splash-ad preinit",
 )
 patch_method(
-    splash, r"ensurePreInit\\(Landroid/content/Context;Ljava/lang/String;\\)V",
+    splash, r"ensurePreInit\(Landroid/content/Context;Ljava/lang/String;\)V",
     """.method public static final ensurePreInit(Landroid/content/Context;Ljava/lang/String;)V
     .locals 0
     return-void
@@ -392,7 +392,7 @@ patch_method(
     "disable inherited splash-ad preinit overload",
 )
 patch_method(
-    splash, r"initExportAdSdk\\(Landroid/content/Context;\\)V",
+    splash, r"initExportAdSdk\(Landroid/content/Context;\)V",
     """.method public static final initExportAdSdk(Landroid/content/Context;)V
     .locals 0
     return-void
@@ -400,7 +400,7 @@ patch_method(
     "disable inherited export-ad SDK init",
 )
 patch_method(
-    splash, r"appActiveTime\\(\\)J",
+    splash, r"appActiveTime\(\)J",
     """.method public static final appActiveTime()J
     .locals 2
     const-wide/16 v0, 0x0
@@ -412,7 +412,7 @@ ad_manager = find_smali("com/bmrinc/earthweather/core/weather/ad/AdManager.smali
 for method_name in ("initAdSdk", "initOppoSdk", "initMaxSdk"):
     patch_method(
         ad_manager,
-        method_name + r"\\(Landroid/content/Context;Lkotlin/coroutines/Continuation;\\)Ljava/lang/Object;",
+        method_name + r"\(Landroid/content/Context;Lkotlin/coroutines/Continuation;\)Ljava/lang/Object;",
         """.method public static final METHOD(Landroid/content/Context;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
     .locals 1
     sget-object v0, Lkotlin/Unit;->INSTANCE:Lkotlin/Unit;
@@ -422,7 +422,7 @@ for method_name in ("initAdSdk", "initOppoSdk", "initMaxSdk"):
     )
 banner_api = find_smali("com/bmrinc/earthweather/core/weather/banner/BannerAdApiUtils.smali")
 patch_method(
-    banner_api, r"initRiskControl\\(Landroid/app/Application;\\)V",
+    banner_api, r"initRiskControl\(Landroid/app/Application;\)V",
     """.method public static final initRiskControl(Landroid/app/Application;)V
     .locals 0
     return-void
