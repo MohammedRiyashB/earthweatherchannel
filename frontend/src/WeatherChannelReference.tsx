@@ -299,7 +299,7 @@ export function WeatherChannelLayout({
               <div className="flex shrink-0 items-center md:hidden">
                 <button type="button" onClick={onAccount} aria-label={accountName ? "Account profile" : "Sign in with Google"} title={accountName || "Sign in"}
                   className="wx-header-profile-button">
-                  <img src={accountPhoto || "https://github.com/MohammedRiyashB.png?size=160"} alt="Profile" referrerPolicy="no-referrer"/>
+                  <img src="https://github.com/MohammedRiyashB.png?size=160" alt="Mohammed Riyash B — EARTH WEATHER Founder" referrerPolicy="no-referrer"/>
                 </button>
               </div>
             </div>
