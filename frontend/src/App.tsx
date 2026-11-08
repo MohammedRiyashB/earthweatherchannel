@@ -3,6 +3,8 @@ import { auth, firebaseReady, googleProvider } from "./firebase";
 import { onAuthStateChanged, signInWithPopup, signOut, type User } from "firebase/auth";
 import { FOOTER_GROUPS, resolveSitePage, SITE_PATHS, SitePageView, type SitePageId } from "./sitePages";
 import "./intelligence.css";
+import { WeatherChannelPage, WeatherChannelSidebar, type WeatherChannelMode } from "./WeatherChannelPages";
+import "./weather-channel.css";
 
 const API=import.meta.env.VITE_API_BASE_URL||"https://earthweather-api.onrender.com";
 type Current={time?:string|number;is_day?:number;temperature_2m?:number;relative_humidity_2m?:number;apparent_temperature?:number;precipitation?:number;cloud_cover?:number;pressure_msl?:number;wind_speed_10m?:number;wind_direction_10m?:number;weather_code?:number;source?:string;source_url?:string};
@@ -712,68 +714,16 @@ const [section,setSection]=useState("Weather Report");const page:"home"|SitePage
    </div>
   </div>}
   <header className="masthead"><div className="masthead-row"><div className="brand-lockup"><img className="brand-wordmark" src="/logo.png" alt="EARTH WEATHER" width="1200" height="220" /></div><div className="masthead-actions"><button className="header-location-search" type="button" aria-label="Search city or region" title="Search city or region" onClick={()=>{setQuery("");setLocationSearchResults([]);setLocationSearchError("");setLocationPickerOpen(true);}}><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.6"/><path d="m16 16 4.1 4.1"/></svg></button>{user?<button className="masthead-account-button" onClick={()=>void signOut(auth!)}>{user.displayName||"Account"}</button>:<button className="masthead-account-button" onClick={()=>void signIn()}>Sign in</button>}</div></div></header>
-  {page==="home"&&section==="Weather Report"&&<nav className="wx-quick-nav" aria-label="Weather sections"><button onClick={()=>document.getElementById("today-weather")?.scrollIntoView({behavior:"smooth"})}>Today</button><button onClick={()=>document.getElementById("hourly-forecast")?.scrollIntoView({behavior:"smooth"})}>Hourly</button><button onClick={()=>document.getElementById("ten-day-forecast")?.scrollIntoView({behavior:"smooth"})}>7 Day</button><button onClick={()=>setSection("Satellite imagery")}>Radar & Satellite</button><button onClick={()=>setSection("Country")}>News</button></nav>}
-  <nav className="news-nav">{[{key:"Weather Report",label:"Weather Report"},...newsTabs,{key:"Satellite imagery",label:"Satellite Intelligence 2.0"},{key:"Satellite Report",label:"Satellite Report"}].map(item=><button className={section===item.key?"active":""} key={item.key} onClick={()=>setSection(item.key)}>{item.label}</button>)}</nav>
-  {page==="home"?(section==="Satellite Report"?<SatelliteNumericalReport/>:section==="Satellite imagery"?<SatelliteDashboard/>:section!=="Weather Report"?<WeatherNewsPage section={section as "World"|"Country"|"State"|"Local"} location={visitorLocation}/>:<main className="news-main">
-   {notice&&<div className="notice">{notice}</div>}
-   <div className="weather-dashboard-grid" id="today-weather">
-   <section className="local-weather-card" aria-live="polite">
-    <div className="local-weather-heading">
-     <div><span className="eyebrow">{isSearchLocation ? "SELECTED CITY" : "WEATHER NEAR YOU"}</span><h2>{isSearchLocation && local ? `Weather in ${local.name}` : "Your current location"}</h2><p>{isSearchLocation ? "Showing weather for the city you searched" : "Automatically detected using your device location"}</p></div>
-    </div>
-    {local&&locationStatus==="ready"?<>
-     <div className={`local-weather-place weather-scene ${weatherScene(local.current?.weather_code,local.current?.cloud_cover)} ${solarPhase(local.lat,local.lon,local.current?.time,local.current?.is_day)} ${cloudDensity(local.current?.cloud_cover)}`}><span className="weather-sky-art" aria-hidden="true"><i/><i/><i/></span>
-      <div><h3>{local.name}</h3><p>{local.region}</p></div>
-      <div className="local-temperature"><span>{icon(local.current?.weather_code)}</span><strong>{local.current?.temperature_2m!=null?Math.round(local.current.temperature_2m)+"°C":"—"}</strong><small>{weatherLabel(local.current?.weather_code)}</small></div>
-     </div>
-     {local.loading&&!local.current&&<p className="local-weather-foot">Getting current weather for this location…</p>}{local.error&&!local.current&&<p className="local-weather-foot">Weather data is temporarily unavailable. Your detected location is still shown.</p>}{locationMessage&&<p className="local-weather-foot">{locationMessage}</p>}<div className="local-weather-stats">
-      <div><span>Humidity</span><strong>{local.current?.relative_humidity_2m!=null?local.current.relative_humidity_2m+"%":"—"}</strong></div>
-      <div><span>Wind</span><strong>{local.current?.wind_speed_10m!=null?formatMetric(local.current.wind_speed_10m)+" km/h":"—"}</strong></div>
-      <div><span>Cloud cover</span><strong>{local.current?.cloud_cover!=null?local.current.cloud_cover+"%":"—"}</strong></div>
-      <div><span>Feels like</span><strong>{local.current?.apparent_temperature!=null?Math.round(local.current.apparent_temperature)+"°C":"—"}</strong></div>
-      <div><span>Rainfall</span><strong>{local.current?.precipitation!=null?formatMetric(local.current.precipitation)+" mm":"—"}</strong></div>
-      <div><span>Pressure</span><strong>{local.current?.pressure_msl!=null?Math.round(local.current.pressure_msl)+" hPa":"—"}</strong></div>
-     </div>
-     <div className="local-weather-foot">{modelTime(local.current?.time)}
-    </div>
-    </>:<div className="local-weather-prompt"><span>{locationMessage}</span><button onClick={detectLocalWeather} disabled={locationStatus==="locating"}>{locationStatus==="denied"?"Try location again":"Retry location"}</button></div>}
-   </section>
-   <SatelliteLivePreview onExplore={()=>setSection("Satellite imagery")}/>
+  {page==="home"?<div className="wx-shell">
+   <WeatherChannelSidebar active={section} onNavigate={setSection}/>
+   <div className="wx-main-area">
+    {(["Weather Report","Hourly","10 Day","Radar","Air Quality","Allergy","Storm reports"] as string[]).includes(section)
+      ?<WeatherChannelPage mode={section as WeatherChannelMode} location={local} cities={cities} storms={storms} onNavigate={setSection} onSearchLocation={()=>{setQuery("");setLocationSearchResults([]);setLocationSearchError("");setLocationPickerOpen(true);}}/>
+      :section==="Satellite Report"?<SatelliteNumericalReport/>
+      :section==="Satellite imagery"?<SatelliteDashboard/>
+      :<WeatherNewsPage section={section as "World"|"Country"|"State"|"Local"} location={visitorLocation}/>}
    </div>
-
-   <ForecastExperience location={local}/>
-
-   <section className="lead-grid" id="weather-briefing">
-    <aside className="top-brief"><div className="section-heading"><h2>Weather briefing</h2><span>GLOBAL</span></div>{hottest&&<div className="brief-highlight"><small>WARMEST CITY IN THIS LIST · NOT YOUR LOCATION</small><b>{hottest.name}</b><strong>{Math.round(hottest.current?.temperature_2m??0)}°C</strong><span>{weatherLabel(hottest.current?.weather_code)}</span></div>}<div className="brief-line"><span>Active severe-storm events</span><b>{storms.length}</b></div><div className="brief-line"><span>Reporting locations</span><b>{active.length}/{cities.length}</b></div><div className="brief-line"><span>Auto refresh</span><b>Local 60s · Cities 5m</b></div><button className="refresh-button" onClick={()=>{if(visitorLocation)void refreshWeather(visitorLocation);else void refreshPopularCities();void refreshFeeds()}} disabled={busy}>{busy?"Refreshing…":"↻ Refresh live reports"}</button></aside>
-   </section>
-
-   <section className="weather-feature-strip" aria-label="Weather intelligence shortcuts">
-    <button type="button" className="weather-feature-card feature-briefing" onClick={()=>document.getElementById("weather-briefing")?.scrollIntoView({behavior:"smooth",block:"center"})}><span className="feature-symbol">◈</span><span><strong>Weather Briefing</strong><small>Live weather summary and key updates</small></span><b>↗</b></button>
-    <button type="button" className="weather-feature-card feature-regional" onClick={()=>setSection("Country")}><span className="feature-symbol">⌖</span><span><strong>India & Regional</strong><small>National and nearby city reports</small></span><b>↗</b></button>
-    <button type="button" className="weather-feature-card feature-satellite" onClick={()=>setSection("Satellite imagery")}><span className="feature-symbol">◉</span><span><strong>Satellite Intelligence 2.0</strong><small>Live imagery and cloud observation</small></span><b>↗</b></button>
-    <button type="button" className="weather-feature-card feature-report" onClick={()=>setSection("Satellite Report")}><span className="feature-symbol">⌁</span><span><strong>Satellite Report</strong><small>Point-based weather analysis</small></span><b>↗</b></button>
-   </section>
-
-   <section className="section-block">
-    <div className="section-heading">
-     <div>
-      <span className="eyebrow">{personalizedCities?"NATIONAL & INTERNATIONAL CITY REPORTS":"GLOBAL CITY WATCHLIST"}</span>
-      <h2>{personalizedCities?"Weather for your country and nearby regions":"Live weather across the world"}</h2>
-     </div>
-     <span className="updated-label">LAST CHECKED · {updated?stamp(updated):"LOADING"}</span>
-    </div>
-    {personalizedCities?<div className="city-report-groups">
-     {nationalCities.length>0&&<div className="city-report-group"><div className="city-group-heading">National · {visitorLocation?.country||"Your country"}</div><div className="city-grid">{renderCityCards(nationalCities)}</div></div>}
-     {regionalCities.length>0&&<div className="city-report-group"><div className="city-group-heading">Nearby regional cities</div><div className="city-grid">{renderCityCards(regionalCities)}</div></div>}
-     {internationalCities.length>0&&<div className="city-report-group"><div className="city-group-heading">Nearby international cities</div><div className="city-grid">{renderCityCards(internationalCities)}</div></div>}
-    </div>:<div className="city-grid">{renderCityCards(cities)}</div>}
-   </section>
-
-   <section className="section-block storm-report-section" id="storm-reports"><div><div className="section-heading"><div><span className="eyebrow">SEVERE WEATHER WATCH</span><h2>Storm & event reports</h2></div><span className="source-tag">NASA EONET</span></div>{storms.length?storms.slice(0,8).map(s=><article className="event-row" key={s.id}><div className="event-mark">!</div><div><h3>{s.title}</h3><p>{s.description||"A severe-weather event is listed in the NASA EONET event catalogue."}</p><small>EVENT CATALOGUE · {s.coordinates?.length||0} mapped positions</small></div>{s.link&&<a href={s.link} target="_blank" rel="noreferrer">Source ↗</a>}</article>):<div className="empty-report">No active severe-storm event entries were returned by the current event feed. This does not mean there is no severe weather.</div>}</div>
-    
-   </section>
-  </main>)
-  :<main className="news-main info-page"><SitePageView slug={page}/></main>}
+  </div>:<main className="news-main info-page"><SitePageView slug={page}/></main>}
   <footer className="news-footer">
    <div className="footer-heading">
     <img className="footer-logo" src="/logo.png" alt="EARTH WEATHER logo" />
