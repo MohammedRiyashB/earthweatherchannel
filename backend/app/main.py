@@ -47,7 +47,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[origin.strip() for origin in os.getenv("CORS_ORIGINS", "https://earthweatherchannel.web.app,https://earthweatherchannel.firebaseapp.com,http://localhost:5173").split(",") if origin.strip()],
     allow_credentials=False,
-    allow_methods=["GET"],
+    allow_methods=["GET", "POST"],
     allow_headers=["*"],
 )
 
@@ -1396,3 +1396,8 @@ async def satellite_provider_health() -> dict[str, Any]:
         "providers": results,
         "important": "Reachability only: this endpoint does not mean imagery has been ingested, authenticated, processed, or scientifically validated. Provider access, licensing, geographic coverage, product latency and credentials still apply.",
     }
+
+
+# Legacy Android OPPO UI endpoints, bridged to the EARTH WEATHER API.
+from app.oppo_compat import router as oppo_compat_router
+app.include_router(oppo_compat_router)
