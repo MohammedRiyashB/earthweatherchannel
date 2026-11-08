@@ -29,6 +29,8 @@ TEXT_EXT = {
 PACKAGE_REPLACEMENTS = [
     ("com.coloros.weather2", "com.bmrinc.earthweather"),
     ("com/coloros/weather2", "com/bmrinc/earthweather"),
+    ("com.coloros", "com.bmrinc.earthweather.platform"),
+    ("com/coloros", "com/bmrinc/earthweather/platform"),
     ("com.oplusos", "com.bmrinc.earthweather.platformos"),
     ("com/oplusos", "com/bmrinc/earthweather/platformos"),
     ("com.oplus", "com.bmrinc.earthweather.core"),
@@ -227,6 +229,17 @@ for metadata in (ROOT / "META-INF").glob("*.kotlin_module"):
     metadata.unlink()
 for metadata in (ROOT / "META-INF").glob("com.*.kotlin_module"):
     metadata.unlink()
+
+# Remove original APK signing manifests and all compiler metadata before re-signing.
+meta_inf = ROOT / "META-INF"
+if meta_inf.exists():
+    for pattern in ("*.SF", "*.RSA", "*.DSA", "*.EC", "MANIFEST.MF", "*.kotlin_module"):
+        for metadata in meta_inf.rglob(pattern):
+            if metadata.is_file():
+                metadata.unlink()
+    for directory in sorted((p for p in meta_inf.rglob("*") if p.is_dir()), reverse=True):
+        if not any(directory.iterdir()):
+            directory.rmdir()
 
 # Move renamed app namespaces to their new source-tree locations after the
 # descriptors have been updated in all smali files.
