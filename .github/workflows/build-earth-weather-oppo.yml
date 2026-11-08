@@ -449,14 +449,24 @@ jobs:
           # Remove only stale JAR-signature files carried over from the source APK.
           zip -q -d earth-weather-unsigned.apk 'META-INF/*.SF' 'META-INF/*.RSA' 'META-INF/*.DSA' 'META-INF/*.EC' 'META-INF/MANIFEST.MF' || true
           unzip -t earth-weather-unsigned.apk | tail -2
+      # Keep the same test-signing identity across builds without exposing a keystore in the repository.
+      - name: Restore persistent Earth Weather test signing key
+        uses: actions/cache@v4
+        with:
+          path: .signing/earthweather-debug.jks
+          key: earthweather-test-signing-key-v1
+
       - name: Align and sign APK
         run: |
           set -euo pipefail
           BT="$ANDROID_HOME/build-tools/35.0.0"
-          keytool -genkeypair -v -keystore earthweather-debug.jks -storepass android -alias earthweather -keypass android -dname "CN=Earth Weather,O=BMR Inc,C=IN" -keyalg RSA -keysize 2048 -validity 10000
+          mkdir -p .signing
+          if [ ! -s .signing/earthweather-debug.jks ]; then
+            keytool -genkeypair -v -keystore .signing/earthweather-debug.jks -storepass android -alias earthweather -keypass android -dname "CN=Earth Weather,O=BMR Inc,C=IN" -keyalg RSA -keysize 2048 -validity 10000
+          fi
           "$BT/zipalign" -f -p 4 earth-weather-unsigned.apk earth-weather-aligned.apk
           "$BT/zipalign" -c -v 4 earth-weather-aligned.apk
-          "$BT/apksigner" sign --v1-signing-enabled true --v2-signing-enabled true --v3-signing-enabled true --ks earthweather-debug.jks --ks-key-alias earthweather --ks-pass pass:android --key-pass pass:android --out EarthWeather.apk earth-weather-aligned.apk
+          "$BT/apksigner" sign --v1-signing-enabled true --v2-signing-enabled true --v3-signing-enabled true --ks .signing/earthweather-debug.jks --ks-key-alias earthweather --ks-pass pass:android --key-pass pass:android --out EarthWeather.apk earth-weather-aligned.apk
           "$BT/apksigner" verify --verbose --print-certs EarthWeather.apk
           "$BT/aapt" dump badging EarthWeather.apk | tee apk-badging.txt
           grep -q "package: name='com.bmrinc.earthweather.app'" apk-badging.txt
