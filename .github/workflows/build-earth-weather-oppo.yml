@@ -447,12 +447,16 @@ jobs:
             exit 1
           fi
           # Remove only stale JAR-signature files carried over from the source APK.
-          mapfile -t STALE_SIGNATURE_FILES < <(zipinfo -1 earth-weather-unsigned.apk | awk 'BEGIN{IGNORECASE=1} $0=="META-INF/MANIFEST.MF" || ($0 ~ /^META-INF\\/[^/]+\\.(SF|RSA|DSA|EC)$/)')
+          mapfile -t STALE_SIGNATURE_FILES < <(zipinfo -1 earth-weather-unsigned.apk | grep -Ei '^META-INF/[^/]+\.(SF|RSA|DSA|EC)$|^META-INF/MANIFEST\.MF$' || true)
           if [ "${#STALE_SIGNATURE_FILES[@]}" -gt 0 ]; then
-            printf 'Removing stale signature entry: %s\\n' "${STALE_SIGNATURE_FILES[@]}"
+            printf 'Removing stale signature entry: %s\n' "${STALE_SIGNATURE_FILES[@]}"
             zip -q -d earth-weather-unsigned.apk "${STALE_SIGNATURE_FILES[@]}"
           fi
-          if zipinfo -1 earth-weather-unsigned.apk | grep -Ei '^META-INF/[^/]+\\.(SF|RSA|DSA|EC)$|^META-INF/MANIFEST\\.MF
+          if zipinfo -1 earth-weather-unsigned.apk | grep -Ei '^META-INF/[^/]+\.(SF|RSA|DSA|EC)$|^META-INF/MANIFEST\.MF$'; then
+            echo "Stale source signature metadata was not removed."
+            exit 1
+          fi
+          unzip -t earth-weather-unsigned.apk | tail -2
       - name: Align and sign APK
         run: |
           set -euo pipefail
