@@ -675,11 +675,7 @@ const [section,setSection]=useState("Weather Report");const page:"home"|SitePage
   return()=>{document.body.style.overflow=previousOverflow;window.removeEventListener("keydown",handleKeyDown);};
  },[locationPickerOpen]);
  const signIn=async()=>{if(!auth)return;try{await signInWithPopup(auth,googleProvider)}catch{setNotice("Google sign-in could not be completed.")}};
- const countryTab=visitorLocation?.country||"Country";
- const stateTab=visitorLocation?.state||"State";
- const localTab=visitorLocation?.name?(visitorLocation?.district?`${visitorLocation.name} · ${visitorLocation.district}`:visitorLocation.name):(visitorLocation?.district||"Local");
- const newsTabs=[{key:"World",label:"World"},{key:"Country",label:countryTab},{key:"State",label:stateTab},{key:"Local",label:localTab}];
- return <div className="news-site">
+  return <div className="earth-weather-site">
   {locationPickerOpen&&<div className="location-picker-overlay" role="dialog" aria-modal="true" aria-label="Search weather locations">
    <div className="location-picker-shell">
     <form className="location-picker-search" onSubmit={event=>{event.preventDefault();void search();}}>
@@ -714,6 +710,20 @@ const [section,setSection]=useState("Weather Report");const page:"home"|SitePage
    </div>
   </div>}
   {page==="home"?<WeatherChannelLayout
+    active={section}
+    location={local}
+    onNavigate={setSection}
+    onSearchLocation={()=>{setQuery("");setLocationSearchResults([]);setLocationSearchError("");setLocationPickerOpen(true);}}
+    onAccount={()=>{if(user)void signOut(auth!);else void signIn();}}
+    accountName={user?.displayName||null}
+   >
+    {(["Weather Report","Hourly","10 Day","Radar","Air Quality","Allergy","Storm reports"] as string[]).includes(section)
+      ?<WeatherChannelPage mode={section as WeatherChannelMode} location={local} cities={cities} storms={storms} onNavigate={setSection}/>
+      :section==="Satellite Report"?<SatelliteNumericalReport/>
+      :section==="Satellite imagery"?<SatelliteDashboard/>
+      :<WeatherNewsPage section={section as "World"|"Country"|"State"|"Local"} location={visitorLocation}/>} 
+   </WeatherChannelLayout>:<>
+    {page==="home"?<WeatherChannelLayout
     active={section}
     location={local}
     onNavigate={setSection}
