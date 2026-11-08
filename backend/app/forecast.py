@@ -15,6 +15,9 @@ import asyncio
 import os
 import time
 from typing import Any
+from bisect import bisect_left
+from math import cos, pi
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import httpx
 
@@ -31,7 +34,7 @@ CURRENT_FIELDS = (
     "wind_speed_10m,wind_direction_10m,wind_gusts_10m"
 )
 HOURLY_FIELDS = (
-    "temperature_2m,relative_humidity_2m,apparent_temperature,"
+    "temperature_2m,relative_humidity_2m,dew_point_2m,apparent_temperature,"
     "precipitation_probability,precipitation,rain,showers,snowfall,weather_code,"
     "cloud_cover,wind_speed_10m,wind_direction_10m,wind_gusts_10m,uv_index,visibility"
 )
@@ -49,6 +52,171 @@ class ForecastUnavailable(RuntimeError):
 
 def _is_number(value: Any) -> bool:
     return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+def _zone_or_utc(name: str) -> ZoneInfo:
+    """Resolve an IANA timezone supplied by the client, safely falling back to UTC."""
+    if not name or name == "auto":
+        return ZoneInfo("UTC")
+    try:
+        return ZoneInfo(name)
+    except (ZoneInfoNotFoundError, ValueError):
+        return ZoneInfo("UTC")
+
+
+def _moon_phase_details(moment: datetime | None = None) -> dict[str, Any]:
+    """Approximate the illuminated lunar phase from the synodic-month cycle."""
+    instant = moment or datetime.now(timezone.utc)
+    if instant.tzinfo is None:
+        instant = instant.replace(tzinfo=timezone.utc)
+    reference_new_moon = datetime(2000, 1, 6, 18, 14, tzinfo=timezone.utc)
+    synodic_days = 29.530588853
+    age_days = ((instant.astimezone(timezone.utc) - reference_new_moon).total_seconds() / 86400) % synodic_days
+    fraction = age_days / synodic_days
+    illumination = round((1 - cos(2 * pi * fraction)) * 50, 1)
+    if fraction < 0.03 or fraction >= 0.97:
+        phase = "New Moon"
+    elif fraction < 0.22:
+        phase = "Waxing Crescent"
+    elif fraction < 0.28:
+        phase = "First Quarter"
+    elif fraction < 0.47:
+        phase = "Waxing Gibbous"
+    elif fraction < 0.53:
+        phase = "Full Moon"
+    elif fraction < 0.72:
+        phase = "Waning Gibbous"
+    elif fraction < 0.78:
+        phase = "Last Quarter"
+    else:
+        phase = "Waning Crescent"
+    return {
+        "phase": phase,
+        "illumination_percent": illumination,
+        "age_days": round(age_days, 2),
+        "calculated_at": instant.astimezone(timezone.utc).isoformat(),
+        "method": "Astronomical synodic-month calculation",
+    }
+
+
+async def _supplement_met_forecast_details(
+    client: httpx.AsyncClient,
+    forecast: dict[str, Any],
+    latitude: float,
+    longitude: float,
+    days: int,
+    timezone_name: str,
+) -> None:
+    """Fill MET Norway gaps with aligned Open-Meteo dew point, UV, visibility and sun times.
+
+    MET Norway remains the primary weather forecast. This supplementary request only
+    fills fields it does not expose in the normalized response. A failed supplement
+    never invalidates a good primary forecast.
+    """
+    params = {
+        "latitude": latitude,
+        "longitude": longitude,
+        "current": "pressure_msl",
+        "hourly": "dew_point_2m,uv_index,visibility",
+        "daily": "sunrise,sunset,uv_index_max",
+        "forecast_days": days,
+        "timezone": timezone_name,
+    }
+    try:
+        response = await asyncio.wait_for(client.get(OPEN_METEO_URL, params=params), timeout=12.0)
+        response.raise_for_status()
+        payload = response.json()
+        if not isinstance(payload, dict):
+            return
+
+        supplemental_current = payload.get("current") or {}
+        current = forecast.setdefault("current", {})
+        for key in ("pressure_msl",):
+            value = supplemental_current.get(key)
+            if _is_number(value) and (key != "pressure_msl" or not _is_number(current.get(key))):
+                current[key] = value
+
+        # Open-Meteo supplies local wall-clock timestamps; MET timestamps are UTC.
+        # Convert both to UTC instants, then select the nearest hour (within 45 min)
+        # to handle half-hour timezones such as Asia/Kolkata.
+        zone_name = payload.get("timezone") or timezone_name
+        zone = _zone_or_utc(str(zone_name))
+        supplemental_hourly = payload.get("hourly") or {}
+        supplemental_times = supplemental_hourly.get("time") or []
+        source_points: list[tuple[float, int]] = []
+        for index, raw_time in enumerate(supplemental_times):
+            if not isinstance(raw_time, str):
+                continue
+            try:
+                parsed = datetime.fromisoformat(raw_time.replace("Z", "+00:00"))
+                if parsed.tzinfo is None:
+                    parsed = parsed.replace(tzinfo=zone)
+                source_points.append((parsed.astimezone(timezone.utc).timestamp(), index))
+            except ValueError:
+                continue
+        source_points.sort(key=lambda point: point[0])
+        source_stamps = [point[0] for point in source_points]
+
+        hourly = forecast.setdefault("hourly", {})
+        met_times = hourly.get("time") or []
+        for key in ("dew_point_2m", "uv_index", "visibility"):
+            source_values = supplemental_hourly.get(key) or []
+            aligned: list[Any] = []
+            for raw_time in met_times:
+                if not isinstance(raw_time, str) or not source_points:
+                    aligned.append(None)
+                    continue
+                try:
+                    target = _parse_met_time(raw_time)
+                    if target is None:
+                        aligned.append(None)
+                        continue
+                    stamp = target.astimezone(timezone.utc).timestamp()
+                    position = bisect_left(source_stamps, stamp)
+                    candidates = source_points[max(0, position - 1):min(len(source_points), position + 1)]
+                    nearest = min(candidates, key=lambda point: abs(point[0] - stamp))
+                    if abs(nearest[0] - stamp) > 45 * 60:
+                        aligned.append(None)
+                        continue
+                    source_index = nearest[1]
+                    aligned.append(source_values[source_index] if source_index < len(source_values) else None)
+                except (ValueError, TypeError, IndexError):
+                    aligned.append(None)
+            if aligned and any(_is_number(value) for value in aligned):
+                hourly[key] = aligned
+                if key in ("dew_point_2m", "uv_index") and not _is_number(current.get(key)):
+                    current_value = next((value for value in aligned if _is_number(value)), None)
+                    if current_value is not None:
+                        current[key] = current_value
+
+        supplemental_daily = payload.get("daily") or {}
+        source_dates = supplemental_daily.get("time") or []
+        daily_lookup = {str(day)[:10]: index for index, day in enumerate(source_dates)}
+        daily = forecast.setdefault("daily", {})
+        for key in ("sunrise", "sunset", "uv_index_max"):
+            source_values = supplemental_daily.get(key) or []
+            aligned_daily = []
+            for day in daily.get("time") or []:
+                source_index = daily_lookup.get(str(day)[:10])
+                aligned_daily.append(
+                    source_values[source_index]
+                    if source_index is not None and source_index < len(source_values)
+                    else None
+                )
+            if aligned_daily and any(value is not None for value in aligned_daily):
+                daily[key] = aligned_daily
+
+        forecast["supplemental_source"] = {
+            "provider": "open-meteo",
+            "name": "Open-Meteo supplementary atmospheric and solar fields",
+            "url": "https://open-meteo.com/en/docs",
+            "fields": ["dew_point_2m", "uv_index", "visibility", "sunrise", "sunset", "uv_index_max"],
+        }
+        if payload.get("timezone"):
+            forecast["timezone"] = payload["timezone"]
+    except (httpx.HTTPError, ValueError, TypeError, KeyError, asyncio.TimeoutError):
+        # Keep the complete primary forecast and leave unavailable supplements null.
+        return
 
 
 def _validate_open_meteo(payload: dict[str, Any]) -> None:
@@ -104,7 +272,7 @@ def _parse_met_time(value: str) -> datetime | None:
         return None
 
 
-def _normalize_met_norway(payload: dict[str, Any], latitude: float, longitude: float, days: int) -> dict[str, Any]:
+def _normalize_met_norway(payload: dict[str, Any], latitude: float, longitude: float, days: int, timezone_name: str = "UTC") -> dict[str, Any]:
     properties = payload.get("properties") or {}
     timeseries = properties.get("timeseries") or []
     if not timeseries:
@@ -112,6 +280,7 @@ def _normalize_met_norway(payload: dict[str, Any], latitude: float, longitude: f
 
     hourly: dict[str, list[Any]] = defaultdict(list)
     day_groups: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    local_zone = _zone_or_utc(timezone_name)
     for item in timeseries:
         timestamp = item.get("time")
         parsed = _parse_met_time(timestamp) if isinstance(timestamp, str) else None
@@ -141,7 +310,7 @@ def _normalize_met_norway(payload: dict[str, Any], latitude: float, longitude: f
         }
         for key, value in row.items():
             hourly[key].append(value)
-        day_groups[parsed.date().isoformat()].append(row)
+        day_groups[parsed.astimezone(local_zone).date().isoformat()].append(row)
 
     if not hourly.get("time"):
         raise ValueError("MET Norway returned no valid forecast timestamps")
@@ -169,6 +338,9 @@ def _normalize_met_norway(payload: dict[str, Any], latitude: float, longitude: f
         "precipitation_sum": [],
         "weather_code": [],
         "wind_speed_10m_max": [],
+        "sunrise": [],
+        "sunset": [],
+        "uv_index_max": [],
     }
     for date_key in sorted(day_groups)[:days]:
         rows = day_groups[date_key]
@@ -181,11 +353,14 @@ def _normalize_met_norway(payload: dict[str, Any], latitude: float, longitude: f
         daily["precipitation_sum"].append(sum(rain) if rain else None)
         daily["weather_code"].append(next((r["weather_code"] for r in rows if r["weather_code"] is not None), None))
         daily["wind_speed_10m_max"].append(max(winds) if winds else None)
+        daily["sunrise"].append(None)
+        daily["sunset"].append(None)
+        daily["uv_index_max"].append(None)
 
     return {
         "location": {"latitude": latitude, "longitude": longitude},
-        "timezone": "UTC",
-        "timezone_abbreviation": "UTC",
+        "timezone": timezone_name if timezone_name != "auto" else "UTC",
+        "timezone_abbreviation": timezone_name if timezone_name != "auto" else "UTC",
         "current": current,
         "hourly": dict(hourly),
         "hourly_units": {
@@ -197,6 +372,10 @@ def _normalize_met_norway(payload: dict[str, Any], latitude: float, longitude: f
             "wind_speed_10m": "km/h",
             "wind_direction_10m": "°",
             "wind_gusts_10m": "km/h",
+            "dew_point_2m": "°C",
+            "pressure_msl": "hPa",
+            "uv_index": "",
+            "visibility": "m",
         },
         "daily": daily,
         "daily_units": {
@@ -204,6 +383,9 @@ def _normalize_met_norway(payload: dict[str, Any], latitude: float, longitude: f
             "temperature_2m_min": "°C",
             "precipitation_sum": "mm",
             "wind_speed_10m_max": "km/h",
+            "sunrise": "iso8601",
+            "sunset": "iso8601",
+            "uv_index_max": "",
         },
         "source": {
             "provider": "metnorway",
@@ -240,7 +422,7 @@ async def fetch_forecast(
         payload = response.json()
         if not isinstance(payload, dict):
             raise ValueError("MET Norway returned a non-object response")
-        forecast = _normalize_met_norway(payload, cache_key[0], cache_key[1], days)
+        forecast = _normalize_met_norway(payload, cache_key[0], cache_key[1], days, timezone_name)
         headers = getattr(response, "headers", {}) or {}
         ttl = float(_METNORWAY_MIN_CACHE_SECONDS)
         expires = headers.get("expires")
@@ -249,6 +431,8 @@ async def fetch_forecast(
                 ttl = max(ttl, (parsedate_to_datetime(expires) - datetime.now(timezone.utc)).total_seconds())
             except (TypeError, ValueError, OverflowError):
                 pass
+        await _supplement_met_forecast_details(client, forecast, cache_key[0], cache_key[1], days, timezone_name)
+        forecast["astronomy"] = _moon_phase_details()
         forecast["source"]["cache_seconds"] = int(ttl)
         forecast["source"]["last_modified"] = headers.get("last-modified")
         async with _FORECAST_CACHE_LOCK:
@@ -276,10 +460,25 @@ async def fetch_forecast(
         if not isinstance(payload, dict):
             raise ValueError("Open-Meteo returned a non-object response")
         _validate_open_meteo(payload)
+        # The Open-Meteo current endpoint exposes only a subset of fields. Fill
+        # current dew point and UV from the hourly row matching current.time.
+        current = payload.get("current") or {}
+        hourly = payload.get("hourly") or {}
+        hourly_times = hourly.get("time") or []
+        try:
+            current_index = hourly_times.index(current.get("time"))
+        except (ValueError, TypeError):
+            current_index = 0
+        for key in ("dew_point_2m", "uv_index"):
+            values = hourly.get(key) or []
+            if not _is_number(current.get(key)) and current_index < len(values) and _is_number(values[current_index]):
+                current[key] = values[current_index]
+        payload["current"] = current
         payload["location"] = {
             "latitude": payload.get("latitude", latitude),
             "longitude": payload.get("longitude", longitude),
         }
+        payload["astronomy"] = _moon_phase_details()
         payload["source"] = {
             "provider": "open-meteo",
             "name": "Open-Meteo multi-model forecast · fallback",
