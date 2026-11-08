@@ -31,7 +31,7 @@ import kotlin.math.roundToInt
  * The reference ZIP remains untouched in the repository.
  */
 class MainActivity : Activity() {
-    private val apiBase = "https://earthweather-api.onrender.com"
+    private val apiBase = "https://earth-weather-api.onrender.com"
     private val executor = Executors.newSingleThreadExecutor()
     private val main = Handler(Looper.getMainLooper())
     private lateinit var root: LinearLayout
