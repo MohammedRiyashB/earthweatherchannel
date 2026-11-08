@@ -413,7 +413,7 @@ export function WeatherChannelPage({ mode, location, cities, storms, onNavigate 
   useEffect(() => {
     if (!location || !["Weather Report", "Hourly", "10 Day", "Air Quality"].includes(mode)) return;
     const controller = new AbortController();
-    setAirLoading(true); setAirError("");
+    setAir(null); setAirLoading(true); setAirError("");
     const params = new URLSearchParams({ latitude: String(location.lat), longitude: String(location.lon), days: "5" });
     fetch(API + "/api/air-quality?" + params.toString(), { cache: "no-store", signal: controller.signal })
       .then(async response => { if (!response.ok) throw new Error("Air-quality service returned " + response.status); return response.json() as Promise<AirQuality>; })
