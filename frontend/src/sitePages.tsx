@@ -854,6 +854,21 @@ export function SitePageView({ slug }: { slug: SitePageId }) {
         <span className="eyebrow">{page.eyebrow}</span>
         <h1>{page.title}</h1>
         <p className="info-lead">{page.lead}</p>
+        {slug === "aboutus" && (
+          <div className="my-6 flex items-center gap-4 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+            <div className="flex size-16 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#e8efff] text-[#174a9c]" role="img" aria-label="Mohammed Riyash B profile">
+              <svg viewBox="0 0 48 48" className="size-10" fill="none" aria-hidden="true">
+                <circle cx="24" cy="17" r="8" fill="currentColor" />
+                <path d="M9 41c1.8-8.2 7.1-12.3 15-12.3S37.2 32.8 39 41" fill="currentColor" />
+              </svg>
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">Founder</p>
+              <h2 className="mt-1 text-lg font-bold text-gray-900">Mohammed Riyash B</h2>
+              <p className="mt-0.5 text-sm text-gray-600">Founder · EARTH WEATHER CHANNEL</p>
+            </div>
+          </div>
+        )}
         <div className="site-page-updated">EARTH WEATHER CHANNEL · BMR INC.</div>
         {page.sections.map((section, index) => (
           <section className="site-page-section" key={section.heading}>
