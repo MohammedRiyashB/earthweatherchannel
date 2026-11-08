@@ -439,19 +439,23 @@ export function WeatherChannelPage({ mode, location, cities, storms, onNavigate 
   useEffect(() => {
     if (!["Weather Report", "Radar", "Hourly", "10 Day"].includes(mode)) return;
     let active = true;
+    const controller = new AbortController();
     const load = async () => {
       setRadarLoading(true);
       try {
-        const response = await fetch(API + "/api/radar", { cache: "no-store" });
+        const response = await fetch(API + "/api/radar", { cache: "no-store", signal: controller.signal });
         if (!response.ok) throw new Error("Radar service returned " + response.status);
         const payload = await response.json() as Radar;
-        if (active) { setRadar(payload); setFrameIndex(Math.max(0, (payload.frames?.length || 1) - 1)); setPlaying(true); setRadarError(""); }
-      } catch (error) { if (active) setRadarError(error instanceof Error ? error.message : "Radar unavailable"); }
-      finally { if (active) setRadarLoading(false); }
+        if (active && !controller.signal.aborted) { setRadar(payload); setFrameIndex(Math.max(0, (payload.frames?.length || 1) - 1)); setPlaying(true); setRadarError(""); }
+      } catch (error) {
+        if (active && !controller.signal.aborted) setRadarError(error instanceof Error ? error.message : "Radar unavailable");
+      } finally {
+        if (active && !controller.signal.aborted) setRadarLoading(false);
+      }
     };
     void load();
     const interval = window.setInterval(() => void load(), 10 * 60 * 1000);
-    return () => { active = false; window.clearInterval(interval); };
+    return () => { active = false; controller.abort(); window.clearInterval(interval); };
   }, [mode, refresh]);
 
   const hourly = forecast?.hourly || {};
