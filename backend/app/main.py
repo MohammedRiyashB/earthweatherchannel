@@ -1291,13 +1291,20 @@ async def weather_news_image(url: str = Query(..., min_length=12, max_length=204
     """Safely proxy publisher lead images so cards and the reader can load them consistently."""
     current_url = url
     try:
-        async with httpx.AsyncClient(timeout=httpx.Timeout(10.0, connect=4.0), follow_redirects=False, headers={
+        client = app.state.weather_http
+        image_headers = {
             "User-Agent": "Mozilla/5.0 (compatible; EARTHWEATHER/1.0; +https://earthweatherchannel.web.app)",
             "Accept": "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
-        }) as client:
-            for _ in range(5):
-                await _assert_public_article_host(current_url)
-                async with client.stream("GET", current_url) as upstream:
+        }
+        for _ in range(5):
+            await _assert_public_article_host(current_url)
+            async with client.stream(
+                "GET",
+                current_url,
+                headers=image_headers,
+                timeout=httpx.Timeout(10.0, connect=4.0),
+                follow_redirects=False,
+            ) as upstream:
                     if upstream.status_code in {301, 302, 303, 307, 308}:
                         location = upstream.headers.get("location")
                         if not location:
@@ -1338,14 +1345,20 @@ async def weather_news_article(
     """Fetch a public publisher page and extract its readable text and lead image for the in-site reader."""
     current_url = url
     try:
-        async with httpx.AsyncClient(timeout=httpx.Timeout(12.0, connect=4.0), follow_redirects=False, headers={
+        client = app.state.weather_http
+        article_headers = {
             "User-Agent": "Mozilla/5.0 (compatible; EARTHWEATHER/1.0; +https://earthweatherchannel.web.app)",
             "Accept": "text/html,application/xhtml+xml;q=0.9,*/*;q=0.5",
-        }) as client:
-            response = None
-            for _ in range(5):
-                await _assert_public_article_host(current_url)
-                response = await client.get(current_url)
+        }
+        response = None
+        for _ in range(5):
+            await _assert_public_article_host(current_url)
+            response = await client.get(
+                current_url,
+                headers=article_headers,
+                timeout=httpx.Timeout(12.0, connect=4.0),
+                follow_redirects=False,
+            )
                 if response.status_code in {301, 302, 303, 307, 308}:
                     location = response.headers.get("location")
                     if not location:
