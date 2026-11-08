@@ -320,3 +320,78 @@
     animation-duration: 0.01ms !important;
   }
 }
+
+
+/* Mobile header refinement: move the location control into the floating tab position. */
+.wx-weather-site .wx-mobile-brand-logo {
+  display: block;
+  width: clamp(136px, 43vw, 170px);
+  height: auto;
+  max-width: 100%;
+  flex: 0 1 auto;
+}
+.wx-weather-site .wx-mobile-location-sticky {
+  position: sticky;
+  top: calc(env(safe-area-inset-top, 0px) + 8px);
+  z-index: 45;
+  margin: 8px 12px 20px;
+  isolation: isolate;
+}
+.wx-weather-site .wx-mobile-location-surface {
+  display: flex;
+  width: 100%;
+  min-height: 48px;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  border: 1px solid rgba(0,0,0,.035);
+  border-radius: 999px;
+  background: rgba(255,255,255,.96);
+  box-shadow: 0 4px 16px rgba(0,0,0,.08), 0 0 32px rgba(0,0,0,.12);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+.wx-weather-site .wx-mobile-location-button {
+  display: inline-flex;
+  width: auto;
+  max-width: min(220px, 100%);
+  min-width: 0;
+  height: 40px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 999px;
+  background: #252422;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  box-shadow: none;
+}
+.wx-weather-site .wx-mobile-location-button:hover {
+  background: #3a3938;
+}
+.wx-weather-site .wx-mobile-location-button:active {
+  background: #0c0b0b;
+}
+.wx-weather-site .wx-mobile-location-button span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+@media (max-width: 360px) {
+  .wx-weather-site .wx-mobile-brand-logo {
+    width: clamp(128px, 40vw, 145px);
+  }
+  .wx-weather-site .wx-mobile-location-sticky {
+    margin-inline: 10px;
+  }
+}
+@media (min-width: 768px) {
+  .wx-weather-site .wx-mobile-location-sticky {
+    display: none !important;
+  }
+}
