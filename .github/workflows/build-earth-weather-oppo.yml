@@ -39,23 +39,6 @@ jobs:
           test -f input/OppoWeather2/resources.arsc
           (cd input/OppoWeather2 && zip -q -r ../oppo-original.apk .)
           java -Xmx5g -jar apktool.jar d -f input/oppo-original.apk -o decoded
-      - name: Inspect exact launcher icon resources
-        run: |
-          python3 - <<'PY'
-          import xml.etree.ElementTree as ET
-          from pathlib import Path
-          root=Path("decoded")
-          manifest=ET.parse(root/"AndroidManifest.xml").getroot()
-          app=manifest.find("application")
-          ns="{http://schemas.android.com/apk/res/android}"
-          print("manifest icon:", app.get(ns+"icon") if app is not None else None)
-          print("manifest roundIcon:", app.get(ns+"roundIcon") if app is not None else None)
-          print("manifest logo:", app.get(ns+"logo") if app is not None else None)
-          for p in sorted((root/"res").rglob("*")):
-              if p.is_file() and any(k in p.name.lower() for k in ("icon","logo","weather_app","weather_icon")):
-                  print("ICON_CANDIDATE",p.relative_to(root),p.stat().st_size)
-          print("PNG directories:", sorted({str(p.parent.relative_to(root)) for p in (root/"res").rglob("*.png")}))
-          PY
       - name: Download the repository's applogo.png
         run: |
           curl -fL --retry 3 https://raw.githubusercontent.com/MohammedRiyashB/earthweatherchannel/main/applogo.png -o applogo.png
@@ -352,23 +335,43 @@ jobs:
           if visible_hits:
               raise SystemExit("OEM branding/vendor links remain in visible strings: " + " | ".join(visible_hits[:20]))
 
-          # Replace ONLY launcher icon raster assets with the user's repository applogo.png.
-          # Keep the existing resource names, adaptive icon XML, UI assets and all app behavior unchanged.
+          # Replace the exact launcher resource referenced by AndroidManifest (drawable/ic_launcher_weather).
+          # Do not touch forecast/weather icons, splash logos, mini-app logos or other UI images.
+          import shutil
           from PIL import Image
-          logo = Image.open("applogo.png").convert("RGBA")
-          launcher_dirs = [p for p in (root / "res").glob("mipmap*") if p.is_dir()]
-          icon_files = []
-          for d in launcher_dirs:
-              for p in d.rglob("*.png"):
-                  icon_files.append(p)
-          if not icon_files:
-              raise SystemExit("No launcher mipmap PNGs found; refusing to build with the old icon")
-          for p in icon_files:
-              with Image.open(p) as existing:
-                  size = existing.size
-              resized = logo.resize(size, Image.Resampling.LANCZOS)
-              resized.save(p, format="PNG", optimize=True)
-          print(f"Replaced {len(icon_files)} launcher icon PNG files from applogo.png.")
+          app_node = ET.parse(manifest).getroot().find("application")
+          icon_ref = app_node.get(android_ns + "icon") if app_node is not None else None
+          if not icon_ref or not icon_ref.startswith("@drawable/"):
+              raise SystemExit(f"Unexpected launcher icon resource: {icon_ref}")
+          icon_name = icon_ref.split("/", 1)[1]
+          icon_dir = root / "res" / "drawable"
+          icon_xml = icon_dir / f"{icon_name}.xml"
+          matches = [p for p in (root / "res").glob(f"drawable*/{icon_name}.*") if p.is_file()]
+          if not matches and not icon_xml.exists():
+              raise SystemExit(f"Launcher resource {icon_ref} not found")
+          logo_dst = root / "res" / "drawable-nodpi" / "earth_weather_launcher.png"
+          logo_dst.parent.mkdir(parents=True, exist_ok=True)
+          shutil.copyfile("applogo.png", logo_dst)
+          if icon_xml.exists():
+              icon_xml.write_text(
+                  '<?xml version="1.0" encoding="utf-8"?>\\n'
+                  '<bitmap xmlns:android="http://schemas.android.com/apk/res/android"\\n'
+                  '    android:src="@drawable/earth_weather_launcher"\\n'
+                  '    android:gravity="center" />\\n',
+                  encoding="utf-8"
+              )
+          else:
+              raster_matches = [p for p in matches if p.suffix.lower() in {".png", ".webp", ".jpg", ".jpeg"}]
+              if not raster_matches:
+                  raise SystemExit(f"No supported raster resource found for {icon_ref}")
+              for p in raster_matches:
+                  with Image.open("applogo.png") as src:
+                      with Image.open(p) as old_icon:
+                          size = old_icon.size
+                      img = src.convert("RGBA").resize(size, Image.Resampling.LANCZOS)
+                      fmt = "WEBP" if p.suffix.lower() == ".webp" else "PNG"
+                      img.save(p, format=fmt)
+          print(f"Replaced only launcher icon resource {icon_ref} using applogo.png.")
 
           # Record the intended product identity in the build workspace.
           (Path("earth-weather-build.properties")).write_text(
