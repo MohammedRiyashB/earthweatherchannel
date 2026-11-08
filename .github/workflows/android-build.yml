@@ -39,10 +39,26 @@ jobs:
       - name: Build debug APK
         run: gradle --no-daemon -p android-app assembleDebug
 
-      - name: Upload debug APK
+      - name: Verify APK metadata, signature, and SHA-256
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="android-app/app/build/outputs/apk/debug/app-debug.apk"
+          test -s "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" | tee apk-badging.txt
+          grep -q "package: name='com.bmrinc.earthweather' versionCode='1' versionName='1.0'" apk-badging.txt
+          grep -q "application-label:'Earth Weather'" apk-badging.txt
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK" | tee apk-signature.txt
+          sha256sum "$APK" | tee apk-sha256.txt
+
+      - name: Upload verified debug APK and reports
         uses: actions/upload-artifact@v4
         with:
-          name: earth-weather-android-debug
-          path: android-app/app/build/outputs/apk/debug/app-debug.apk
+          name: earth-weather-1.0-android-debug
+          path: |
+            android-app/app/build/outputs/apk/debug/app-debug.apk
+            apk-badging.txt
+            apk-signature.txt
+            apk-sha256.txt
           if-no-files-found: error
           retention-days: 14
