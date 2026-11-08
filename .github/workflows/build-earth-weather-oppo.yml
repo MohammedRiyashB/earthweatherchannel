@@ -67,6 +67,10 @@ jobs:
           tree = ET.parse(manifest)
           m = tree.getroot()
           m.set("package", new)
+          # Do not carry over the original OEM package alias into a separately installable app.
+          for child in list(m):
+              if child.tag == "original-package":
+                  m.remove(child)
           tree.write(manifest, encoding="utf-8", xml_declaration=True)
 
           # Keep the original resources and their translation variants, changing only identity labels.
