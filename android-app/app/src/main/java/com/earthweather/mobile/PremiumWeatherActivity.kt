@@ -35,6 +35,12 @@ class PremiumWeatherActivity : Activity() {
             settings.geolocationEnabled = true
             settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_NEVER_ALLOW
             webViewClient = object : WebViewClient() {
+                override fun onPageFinished(view: WebView?, url: String?) {
+                    super.onPageFinished(view, url)
+                    pageReady = true
+                    startPageWeather()
+                }
+
                 override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
                     val uri = request?.url ?: return false
                     val host = uri.host ?: return false
@@ -54,7 +60,6 @@ class PremiumWeatherActivity : Activity() {
             }
         }
         setContentView(webView)
-        webView.webViewClient = webView.webViewClient
         val html = assets.open("earth_weather.html").bufferedReader(Charsets.UTF_8).use { it.readText() }
         webView.loadDataWithBaseURL("https://earthweatherchannel.web.app/", html, "text/html", "UTF-8", null)
 
