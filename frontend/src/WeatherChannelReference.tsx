@@ -282,8 +282,8 @@ export function WeatherChannelLayout({
               </div>
               <div className="relative hidden md:block">
                 <div className="rounded-4xl bg-white md:p-1 md:shadow-[0_4px_16px_0_rgba(0,0,0,0.08),_0_0_32px_0_rgba(0,0,0,0.12)]">
-                  <button type="button" onClick={onSearchLocation} aria-label="Search weather location" aria-expanded={false}
-                    className="inline-flex h-10 max-w-[190px] cursor-pointer items-center justify-center gap-2 rounded-3xl bg-[#252422] px-3 py-0 text-sm font-bold text-white transition-colors hover:bg-[#3A3938] active:bg-[#0C0B0B] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 md:h-12 md:max-w-[240px] md:bg-gray-100 md:text-gray-900 md:hover:bg-gray-200 md:px-4">
+                  <button type="button" onClick={onSearchLocation} aria-label="Search weather location"
+                    className="wx-location-search-trigger inline-flex h-10 max-w-[190px] cursor-pointer items-center justify-center gap-2 rounded-3xl bg-[#252422] px-3 py-0 text-sm font-bold text-white transition-colors hover:bg-[#3A3938] active:bg-[#0C0B0B] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 md:h-12 md:max-w-[240px] md:bg-gray-100 md:text-gray-900 md:hover:bg-gray-200 md:px-4">
                     <Icon name="pin" className="size-5 shrink-0"/>
                     <span className="max-w-[140px] truncate text-left md:max-w-[180px]"><span className="block truncate">{location?.name || "Choose location"}</span><small className="hidden text-xs font-normal text-gray-500 md:block">{location?.region || "Weather in your area"}</small></span>
                     <Icon name="chevron" className="size-4 shrink-0"/>
@@ -309,7 +309,7 @@ export function WeatherChannelLayout({
         <div className="wx-mobile-location-sticky md:hidden" data-testid="mobile-sticky-location">
           <div className="wx-mobile-location-surface">
             <button type="button" onClick={onSearchLocation} aria-label="Search weather location" aria-expanded={false}
-              className="wx-mobile-location-button">
+              className="wx-mobile-location-button wx-location-search-trigger">
               <Icon name="pin" className="size-5 shrink-0"/>
               <span className="min-w-0 truncate">{location?.name || "Choose location"}</span>
               <Icon name="chevron" className="size-4 shrink-0"/>
