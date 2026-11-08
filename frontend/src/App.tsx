@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { auth, firebaseReady, googleProvider } from "./firebase";
 import { onAuthStateChanged, signInWithPopup, signOut, type User } from "firebase/auth";
 import { FOOTER_GROUPS, resolveSitePage, SITE_PATHS, SitePageView, type SitePageId } from "./sitePages";
-import { AdvancedForecastCenter, EarthWeatherIntelligencePage, GlobalStormIntelligence } from "./IntelligencePages";
+import { GlobalStormIntelligence } from "./IntelligencePages";
 import "./intelligence.css";
 
 const API=import.meta.env.VITE_API_BASE_URL||"https://earthweather-api.onrender.com";
@@ -592,7 +592,7 @@ const [section,setSection]=useState("Weather Report");const page:"home"|SitePage
  const countryTab=visitorLocation?.country||"Country";
  const stateTab=visitorLocation?.state||"State";
  const localTab=visitorLocation?.name?(visitorLocation?.district?`${visitorLocation.name} · ${visitorLocation.district}`:visitorLocation.name):(visitorLocation?.district||"Local");
- const newsTabs=[{key:"World",label:"World"},{key:"Earth Weather Intelligence",label:"Earth Weather Intelligence"},{key:"Country",label:countryTab},{key:"State",label:stateTab},{key:"Local",label:localTab}];
+ const newsTabs=[{key:"World",label:"World"},{key:"Country",label:countryTab},{key:"State",label:stateTab},{key:"Local",label:localTab}];
  return <div className="news-site">
   {locationPickerOpen&&<div className="location-picker-overlay" role="dialog" aria-modal="true" aria-label="Search weather locations">
    <div className="location-picker-shell">
@@ -629,7 +629,7 @@ const [section,setSection]=useState("Weather Report");const page:"home"|SitePage
   </div>}
   <header className="masthead"><div className="masthead-row"><div className="brand-lockup"><img className="brand-wordmark" src="/logo.png" alt="EARTH WEATHER" width="1200" height="220" /></div><div className="masthead-actions"><button className="header-location-search" type="button" aria-label="Search city or region" title="Search city or region" onClick={()=>{setQuery("");setLocationSearchResults([]);setLocationSearchError("");setLocationPickerOpen(true);}}><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.6"/><path d="m16 16 4.1 4.1"/></svg></button>{user?<button className="masthead-account-button" onClick={()=>void signOut(auth!)}>{user.displayName||"Account"}</button>:<button className="masthead-account-button" onClick={()=>void signIn()}>Sign in</button>}</div></div></header>
   <nav className="news-nav">{[{key:"Weather Report",label:"Weather Report"},...newsTabs,{key:"Satellite imagery",label:"Satellite Intelligence 2.0"},{key:"Satellite Report",label:"Satellite Report"}].map(item=><button className={section===item.key?"active":""} key={item.key} onClick={()=>setSection(item.key)}>{item.label}</button>)}</nav>
-  {page==="home"?(section==="Satellite Report"?<SatelliteNumericalReport/>:section==="Satellite imagery"?<SatelliteDashboard/>:section==="Earth Weather Intelligence"?<EarthWeatherIntelligencePage latitude={(local||visitorLocation||undefined)?.lat} longitude={(local||visitorLocation||undefined)?.lon} placeName={(local||visitorLocation||undefined)?.name}/>:section!=="Weather Report"?<WeatherNewsPage section={section as "World"|"Country"|"State"|"Local"} location={visitorLocation}/>:<main className="news-main">
+  {page==="home"?(section==="Satellite Report"?<SatelliteNumericalReport/>:section==="Satellite imagery"?<SatelliteDashboard/>:section!=="Weather Report"?<WeatherNewsPage section={section as "World"|"Country"|"State"|"Local"} location={visitorLocation}/>:<main className="news-main">
    {notice&&<div className="notice">{notice}</div>}
    <section className="local-weather-card" aria-live="polite">
     <div className="local-weather-heading">
@@ -654,7 +654,7 @@ const [section,setSection]=useState("Weather Report");const page:"home"|SitePage
     <aside className="top-brief"><div className="section-heading"><h2>Weather briefing</h2><span>GLOBAL</span></div>{hottest&&<div className="brief-highlight"><small>WARMEST CITY IN THIS LIST · NOT YOUR LOCATION</small><b>{hottest.name}</b><strong>{Math.round(hottest.current?.temperature_2m??0)}°C</strong><span>{weatherLabel(hottest.current?.weather_code)}</span></div>}<div className="brief-line"><span>Active severe-storm events</span><b>{storms.length}</b></div><div className="brief-line"><span>Reporting locations</span><b>{active.length}/{cities.length}</b></div><div className="brief-line"><span>Auto refresh</span><b>Local 60s · Cities 5m</b></div><button className="refresh-button" onClick={()=>{if(visitorLocation)void refreshWeather(visitorLocation);else void refreshPopularCities();void refreshFeeds()}} disabled={busy}>{busy?"Refreshing…":"↻ Refresh live reports"}</button></aside>
    </section>
 
-   <AdvancedForecastCenter latitude={(local||visitorLocation||undefined)?.lat} longitude={(local||visitorLocation||undefined)?.lon} placeName={(local||visitorLocation||undefined)?.name}/>
+   
 
    <section className="section-block">
     <div className="section-heading">
