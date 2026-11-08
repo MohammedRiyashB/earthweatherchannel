@@ -1,0 +1,172 @@
+name: Build Earth Weather from OPPO UI UX source
+on:
+  workflow_dispatch:
+  push:
+    branches: ["main"]
+    paths:
+      - "Uifprweather.zip"
+      - "backend/app/oppo_compat.py"
+      - "backend/app/main.py"
+      - ".github/workflows/build-earth-weather-oppo.yml"
+permissions:
+  contents: read
+jobs:
+  build-full-oppo-ui:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Set up Android SDK build tools
+        uses: android-actions/setup-android@v3
+        with:
+          cmdline-tools-version: latest
+          packages: "platforms;android-35 build-tools;35.0.0"
+          accept-android-sdk-licenses: true
+      - name: Download Apktool
+        run: |
+          curl -fL --retry 3 --retry-delay 2 https://github.com/iBotPeaches/Apktool/releases/download/v3.0.3/apktool_3.0.3.jar -o apktool.jar
+          java -jar apktool.jar --version
+      - name: Reconstruct and decode supplied OPPO UI UX package
+        run: |
+          mkdir -p input
+          unzip -q Uifprweather.zip -d input
+          test -f input/OppoWeather2/AndroidManifest.xml
+          test -f input/OppoWeather2/resources.arsc
+          (cd input/OppoWeather2 && zip -q -r ../oppo-original.apk .)
+          java -Xmx5g -jar apktool.jar d -f input/oppo-original.apk -o decoded
+      - name: Rebrand app and route its weather data to EARTH WEATHER
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re, xml.etree.ElementTree as ET
+
+          root = Path("decoded")
+          old = "com.coloros.weather2"
+          new = "com.bmrinc.earthweather"
+
+          # Update package/authority references in decoded textual resources and Smali.
+          text_ext = {".xml", ".smali", ".yml", ".yaml", ".json", ".properties", ".txt", ".html", ".cfg", ".ini"}
+          changed = 0
+          for p in root.rglob("*"):
+              if not p.is_file() or p.suffix.lower() not in text_ext:
+                  continue
+              try:
+                  s = p.read_text(encoding="utf-8")
+              except (UnicodeDecodeError, OSError):
+                  continue
+              if old in s:
+                  p.write_text(s.replace(old, new), encoding="utf-8")
+                  changed += 1
+
+          manifest = root / "AndroidManifest.xml"
+          tree = ET.parse(manifest)
+          m = tree.getroot()
+          m.set("package", new)
+          tree.write(manifest, encoding="utf-8", xml_declaration=True)
+
+          # Keep the original resources and their translation variants, changing only identity labels.
+          label_replacements = {
+              "app_name": "Earth Weather",
+              "weather_about": "About Earth Weather",
+              "user_agreement": "Earth Weather User Agreement",
+              "privacy_policy_weather_service": "Earth Weather Privacy Notice",
+              "export_personal_service_protection_policy": "Personal Service Privacy Notice",
+          }
+          for p in (root / "res").glob("values*/strings.xml"):
+              try:
+                  s = p.read_text(encoding="utf-8")
+              except (UnicodeDecodeError, OSError):
+                  continue
+              for name, value in label_replacements.items():
+                  pattern = re.compile(r'(<string\\s+name="' + re.escape(name) + r'"[^>]*>)(.*?)(</string>)', re.S)
+                  s, n = pattern.subn(lambda m: m.group(1) + value + m.group(3), s)
+              p.write_text(s, encoding="utf-8")
+
+          # Direct the original app's Host abstraction at the user's own API host.
+          host = root / "smali/com/oplus/weather/service/network/host/Host.smali"
+          if not host.exists():
+              host = next(root.glob("smali*/com/oplus/weather/service/network/host/Host.smali"))
+          hs = host.read_text()
+          method = """.method public getAddress()Ljava/lang/String;
+              .locals 1
+              const-string v0, "https://earth-weather-api.onrender.com"
+              return-object v0
+          .end method"""
+          hs, count = re.subn(r"(?ms)^\\.method public getAddress\\(\\)Ljava/lang/String;.*?^\\.end method", method, hs, count=1)
+          if count != 1:
+              raise SystemExit("Could not safely patch Host.getAddress()")
+          host.write_text(hs)
+
+          # The user's API is not the vendor's encrypted service: pass the normal JSON request through.
+          crypto = next(root.glob("smali*/com/heytap/weather/interceptor/CryptoInterceptor.smali"))
+          cs = crypto.read_text()
+          passthrough = """.method public intercept(Lokhttp3/Interceptor$Chain;)Lokhttp3/Response;
+              .locals 1
+              invoke-interface {p1}, Lokhttp3/Interceptor$Chain;->request()Lokhttp3/Request;
+              move-result-object v0
+              invoke-interface {p1, v0}, Lokhttp3/Interceptor$Chain;->proceed(Lokhttp3/Request;)Lokhttp3/Response;
+              move-result-object v0
+              return-object v0
+          .end method"""
+          cs, count = re.subn(r"(?ms)^\\.method public intercept\\(Lokhttp3/Interceptor\\$Chain;\\)Lokhttp3/Response;.*?^\\.end method", passthrough, cs, count=1)
+          if count != 1:
+              raise SystemExit("Could not safely patch CryptoInterceptor.intercept()")
+          crypto.write_text(cs)
+
+          # Disable only the OPPO-specific cryptographic handshake; preserve the app's request headers.
+          manager = next(root.glob("smali*/com/oplus/weather/WeatherDataClientManager.smali"))
+          ms = manager.read_text()
+          init_method = """.method public static cryptoInit()V
+              .locals 1
+              sget-boolean v0, Lcom/oplus/weather/WeatherDataClientManager;->cryptoIsInit:Z
+              if-nez v0, :cond_0
+              const/4 v0, 0x1
+              sput-boolean v0, Lcom/oplus/weather/WeatherDataClientManager;->cryptoIsInit:Z
+              invoke-static {}, Lcom/oplus/weather/WeatherDataClientManager;->setRequestHeader()V
+              :cond_0
+              return-void
+          .end method"""
+          ms, count = re.subn(r"(?ms)^\\.method public static cryptoInit\\(\\)V.*?^\\.end method", init_method, ms, count=1)
+          if count != 1:
+              raise SystemExit("Could not safely patch WeatherDataClientManager.cryptoInit()")
+          manager.write_text(ms)
+
+          # Record the intended product identity in the build workspace.
+          (Path("earth-weather-build.properties")).write_text(
+              "applicationId=com.bmrinc.earthweather\\nappName=Earth Weather\\napiBase=https://earth-weather-api.onrender.com\\n"
+          )
+          print(f"Updated package references in {changed} files.")
+          PY
+      - name: Build original app resources and bytecode with Apktool
+        run: |
+          java -Xmx6g -jar apktool.jar b decoded -f -o earth-weather-unsigned.apk
+          test -s earth-weather-unsigned.apk
+          ls -lh earth-weather-unsigned.apk
+      - name: Align and sign APK
+        run: |
+          set -euo pipefail
+          BT="$ANDROID_HOME/build-tools/35.0.0"
+          keytool -genkeypair -v -keystore earthweather-debug.jks -storepass android -alias earthweather -keypass android -dname "CN=Earth Weather,O=BMR Inc,C=IN" -keyalg RSA -keysize 2048 -validity 10000
+          "$BT/zipalign" -f -p 4 earth-weather-unsigned.apk earth-weather-aligned.apk
+          "$BT/apksigner" sign --ks earthweather-debug.jks --ks-key-alias earthweather --ks-pass pass:android --key-pass pass:android --out EarthWeather.apk earth-weather-aligned.apk
+          "$BT/apksigner" verify --verbose --print-certs EarthWeather.apk
+          "$BT/aapt" dump badging EarthWeather.apk | tee apk-badging.txt
+          grep -q "package: name='com.bmrinc.earthweather'" apk-badging.txt
+          grep -q "application-label:'Earth Weather'" apk-badging.txt
+          test "$(stat -c%s EarthWeather.apk)" -gt 20000000
+          sha256sum EarthWeather.apk | tee apk-sha256.txt
+      - name: Upload full UI APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: earth-weather-full-oppo-ui-debug
+          path: |
+            EarthWeather.apk
+            apk-badging.txt
+            apk-sha256.txt
+          if-no-files-found: error
+          retention-days: 14
