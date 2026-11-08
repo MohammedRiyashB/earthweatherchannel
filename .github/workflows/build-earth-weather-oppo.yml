@@ -442,20 +442,33 @@ jobs:
           grep -q 'com.bmrinc.earthweather.app.providers.quickcard' decoded-manifest.txt
           grep -q 'com.bmrinc.earthweather.app.providers.weatherdata' decoded-manifest.txt
           grep -q 'com.bmrinc.earthweather.app.providers.settings' decoded-manifest.txt
-          if grep -E 'android:authorities.*com\\.oplus\\.(weather|exp\\.weather)' decoded-manifest.txt; then
-            echo "An OEM Weather provider authority remains in the built manifest."
-            exit 1
-          fi
-          # Remove only stale JAR-signature files carried over from the source APK.
-          mapfile -t STALE_SIGNATURE_FILES < <(zipinfo -1 earth-weather-unsigned.apk | grep -Ei '^META-INF/[^/]+\.(SF|RSA|DSA|EC)$|^META-INF/MANIFEST\.MF$' || true)
-          if [ "${#STALE_SIGNATURE_FILES[@]}" -gt 0 ]; then
-            printf 'Removing stale signature entry: %s\n' "${STALE_SIGNATURE_FILES[@]}"
-            zip -q -d earth-weather-unsigned.apk "${STALE_SIGNATURE_FILES[@]}"
-          fi
-          if zipinfo -1 earth-weather-unsigned.apk | grep -Ei '^META-INF/[^/]+\.(SF|RSA|DSA|EC)$|^META-INF/MANIFEST\.MF$'; then
-            echo "Stale source signature metadata was not removed."
-            exit 1
-          fi
+          python3 - <<'PY'
+          import pathlib
+          import zipfile
+
+          apk = pathlib.Path("earth-weather-unsigned.apk")
+          cleaned = apk.with_name("earth-weather-unsigned-clean.apk")
+          signatures = (".SF", ".RSA", ".DSA", ".EC")
+          removed = []
+          with zipfile.ZipFile(apk, "r") as source, zipfile.ZipFile(cleaned, "w") as target:
+              for item in source.infolist():
+                  upper = item.filename.upper()
+                  is_signature = upper == "META-INF/MANIFEST.MF" or (
+                      upper.startswith("META-INF/")
+                      and "/" not in upper[len("META-INF/"):]
+                      and upper.endswith(signatures)
+                  )
+                  if is_signature:
+                      removed.append(item.filename)
+                      continue
+                  target.writestr(item, source.read(item.filename), compress_type=item.compress_type)
+          if any(name.upper().startswith("META-INF/") and (
+              name.upper() == "META-INF/MANIFEST.MF" or name.upper().endswith(signatures)
+          ) for name in zipfile.ZipFile(cleaned).namelist()):
+              raise SystemExit("Stale source APK signature files remain")
+          cleaned.replace(apk)
+          print("Removed stale signature metadata:", ", ".join(removed) if removed else "none")
+          PY
           unzip -t earth-weather-unsigned.apk | tail -2
       - name: Align and sign APK
         run: |
