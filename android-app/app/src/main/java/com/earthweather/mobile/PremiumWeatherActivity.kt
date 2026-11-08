@@ -91,6 +91,12 @@ class PremiumWeatherActivity : Activity() {
 
     @Deprecated("Deprecated in Android API 33; retained for compatibility with device back navigation")
     override fun onBackPressed() {
-        if (::webView.isInitialized && webView.canGoBack()) webView.goBack() else super.onBackPressed()
+        if (!::webView.isInitialized) {
+            super.onBackPressed()
+            return
+        }
+        webView.evaluateJavascript("handleBack()") { result ->
+            if (result != "true") finish()
+        }
     }
 }
