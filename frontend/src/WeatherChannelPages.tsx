@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 
 const API = import.meta.env.VITE_API_BASE_URL || "https://earthweather-api.onrender.com";
 
