@@ -163,7 +163,7 @@ jobs:
               # Android string resources can also hold class names and opaque SDK tokens.
               # Preserve those implementation values; change only human-readable copy/URLs.
               stripped = value.strip()
-              if re.fullmatch(r"(?:[A-Za-z_$][A-Za-z0-9_$]*\\.)+[A-Za-z_$][A-Za-z0-9_$]*", stripped):
+              if re.fullmatch(r"(?:[A-Za-z_$][A-Za-z0-9_$]*\.)+[A-Za-z_$][A-Za-z0-9_$]*", stripped):
                   return value
               if re.fullmatch(r"[A-Za-z0-9+/=]{32,}", stripped):
                   return value
@@ -185,8 +185,8 @@ jobs:
               ]
               for old_text, new_text in replacements:
                   value = value.replace(old_text, new_text)
-              value = re.sub(r"(?i)\\bOPPO\\b", "EARTH WEATHER", value)
-              value = re.sub(r"(?i)\\bOppo\\b", "Earth Weather", value)
+              value = re.sub(r"(?i)\bOPPO\b", "EARTH WEATHER", value)
+              value = re.sub(r"(?i)\bOppo\b", "Earth Weather", value)
               return value
 
           # Make the built-in legal hyperlinks point to the published BMR INC. pages.
@@ -295,7 +295,7 @@ jobs:
 
           # Fail if OEM branding or vendor legal links remain in user-visible text nodes.
           visible_hits = []
-          forbidden = re.compile(r"(?i)Guangdong OPPO|\\bOPPO\\b|\\bColorOS\\b|\\bHeyTap\\b|\\bOPlus\\b|https?://[^\\s\\"'<>]*(?:oppo|oplus|heytap|oneplus|realme)\\.(?:com|cn)")
+          forbidden = re.compile(r"(?i)Guangdong OPPO|\bOPPO\b|\bColorOS\b|\bHeyTap\b|\bOPlus\b|https?://[^\s\"'<>]*(?:oppo|oplus|heytap|oneplus|realme)\.(?:com|cn)")
           for p in values_dir.glob("values*/strings.xml"):
               tree = ET.parse(p)
               for node in tree.iter():
@@ -303,7 +303,7 @@ jobs:
                       if not candidate:
                           continue
                       stripped = candidate.strip()
-                      if re.fullmatch(r"(?:[A-Za-z_$][A-Za-z0-9_$]*\\.)+[A-Za-z_$][A-Za-z0-9_$]*", stripped):
+                      if re.fullmatch(r"(?:[A-Za-z_$][A-Za-z0-9_$]*\.)+[A-Za-z_$][A-Za-z0-9_$]*", stripped):
                           continue
                       if re.fullmatch(r"[A-Za-z0-9+/=]{32,}", stripped):
                           continue
