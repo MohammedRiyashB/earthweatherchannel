@@ -710,7 +710,6 @@ const [section,setSection]=useState("Weather Report");const page:"home"|SitePage
      <div className="location-picker-input-wrap">
       <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.6"/><path d="m16 16 4.1 4.1"/></svg>
       <input autoFocus value={query} onChange={event=>setQuery(event.target.value)} placeholder="Search for a location" aria-label="Search for a location" autoComplete="off"/>
-      {query&&<button type="button" className="location-picker-clear" aria-label="Clear search" onClick={()=>{setQuery("");setLocationSearchResults([]);setLocationSearchError("");}}>×</button>}
       <button type="button" className="location-picker-cancel" aria-label="Close location search" onClick={()=>{setLocationPickerOpen(false);setQuery("");setLocationSearchResults([]);setLocationSearchError("");}}>×</button>
      </div>
     </form>
