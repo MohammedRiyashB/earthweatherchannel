@@ -611,16 +611,16 @@ const [section,setSection]=useState("Weather Report");const page:"home"|SitePage
  const currentLocation=local||visitorLocation;
  const currentCountryCode=(currentLocation?.country_code||"IN").toUpperCase();
  const topCities=TOP_CITIES_BY_COUNTRY[currentCountryCode]||WORLD_TOP_CITIES.slice(0,5);
- const search=async()=>{
+ const search=async():Promise<Place[]>=>{
   const term=query.trim();
-  if(term.length<2){setLocationSearchResults([]);setLocationSearchError("Enter at least two characters to search.");return;}
+  if(term.length<2){setLocationSearchResults([]);setLocationSearchError("Enter at least two characters to search.");return [];}
   const requestVersion=++locationSearchVersion.current;
   setLocationSearching(true);setLocationSearchError("");
   try{
    const response=await fetchBounded(`https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&limit=6&q=${encodeURIComponent(term)}`,{headers:{"Accept-Language":"en"}},12000);
    if(!response.ok)throw new Error(`Location search returned HTTP ${response.status}`);
    const data=await response.json();
-   if(requestVersion!==locationSearchVersion.current)return;
+   if(requestVersion!==locationSearchVersion.current)return [];
    const results:Place[]=(Array.isArray(data)?data:[]).map((item:any)=>{
     const address=item.address||{};
     const country=address.country||"";
@@ -631,8 +631,10 @@ const [section,setSection]=useState("Weather Report");const page:"home"|SitePage
    }).filter((place:Place)=>Number.isFinite(place.lat)&&Number.isFinite(place.lon));
    setLocationSearchResults(results);
    if(results.length===0)setLocationSearchError("No matching locations found. Try another city or region.");
+   return results;
   }catch(error){
    if(requestVersion===locationSearchVersion.current)setLocationSearchError(error instanceof Error?error.message:"Location search is temporarily unavailable.");
+   return [];
   }finally{
    if(requestVersion===locationSearchVersion.current)setLocationSearching(false);
   }
@@ -680,7 +682,7 @@ const [section,setSection]=useState("Weather Report");const page:"home"|SitePage
  return <div className={page==="home"?"weathercom-site earth-weather-site":"news-site"}>
   {locationPickerOpen&&<div className="location-picker-overlay" role="dialog" aria-modal="false" aria-label="Search weather locations" onMouseDown={event=>{if(event.target===event.currentTarget){setLocationPickerOpen(false);setQuery("");setLocationSearchResults([]);setLocationSearchError("");}}}>
    <div className="location-picker-shell">
-    <form className="location-picker-search" onSubmit={event=>{event.preventDefault();void search();}}>
+    <form className="location-picker-search" onSubmit={async event=>{event.preventDefault();const matches=await search();if(matches[0])void chooseLocation(matches[0]);}}>
      <div className="location-picker-input-wrap">
       <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.6"/><path d="m16 16 4.1 4.1"/></svg>
       <input autoFocus value={query} onChange={event=>setQuery(event.target.value)} placeholder="Search" aria-label="Search city or region" autoComplete="off"/>
