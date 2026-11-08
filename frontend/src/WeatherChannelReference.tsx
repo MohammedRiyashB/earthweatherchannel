@@ -280,7 +280,7 @@ export function WeatherChannelLayout({
                   <img src="/logo.png" alt="EARTH WEATHER" className="wx-mobile-brand-logo object-contain" />
                 </button>
               </div>
-              <div className="relative hidden md:block">
+              {active && <div className="relative hidden md:block">
                 <div className="rounded-4xl bg-white md:p-1 md:shadow-[0_4px_16px_0_rgba(0,0,0,0.08),_0_0_32px_0_rgba(0,0,0,0.12)]">
                   <button type="button" onClick={onSearchLocation} aria-label="Search weather location"
                     className="wx-location-search-trigger inline-flex h-10 max-w-[190px] cursor-pointer items-center justify-center gap-2 rounded-3xl bg-[#252422] px-3 py-0 text-sm font-bold text-white transition-colors hover:bg-[#3A3938] active:bg-[#0C0B0B] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 md:h-12 md:max-w-[240px] md:bg-gray-100 md:text-gray-900 md:hover:bg-gray-200 md:px-4">
@@ -289,7 +289,7 @@ export function WeatherChannelLayout({
                     <Icon name="chevron" className="size-4 shrink-0"/>
                   </button>
                 </div>
-              </div>
+              </div>}
               <div className="hidden items-center md:flex">
                 <div className="flex h-12 items-center gap-1 rounded-3xl bg-white p-1 shadow-[0_4px_16px_0_rgba(0,0,0,0.08),_0_0_32px_0_rgba(0,0,0,0.12)]" aria-label="Forecast tabs">
                   {(["Weather Report", "Hourly", "10 Day"] as const).map((key, index) => <button key={key} type="button" onClick={() => onNavigate(key)}
@@ -306,7 +306,7 @@ export function WeatherChannelLayout({
           </div>
         </header>
 
-        <div className="wx-mobile-location-sticky md:hidden" data-testid="mobile-sticky-location">
+        {active && <div className="wx-mobile-location-sticky md:hidden" data-testid="mobile-sticky-location">
           <div className="wx-mobile-location-surface">
             <button type="button" onClick={onSearchLocation} aria-label="Search weather location"
               className="wx-mobile-location-button wx-location-search-trigger">
@@ -315,7 +315,7 @@ export function WeatherChannelLayout({
               <Icon name="chevron" className="size-4 shrink-0"/>
             </button>
           </div>
-        </div>
+        </div>}
 
         {children}
       </main>
