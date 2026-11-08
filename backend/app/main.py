@@ -1357,14 +1357,14 @@ async def weather_news_article(
                 timeout=httpx.Timeout(12.0, connect=4.0),
                 follow_redirects=False,
             )
-                if response.status_code in {301, 302, 303, 307, 308}:
-                    location = response.headers.get("location")
-                    if not location:
-                        break
-                    current_url = urljoin(str(response.url), location)
-                    continue
-                break
-            if response is None:
+            if response.status_code in {301, 302, 303, 307, 308}:
+                location = response.headers.get("location")
+                if not location:
+                    break
+                current_url = urljoin(str(response.url), location)
+                continue
+            break
+        if response is None:
                 raise HTTPException(status_code=502, detail="Publisher did not return an article page")
             if response.status_code >= 400:
                 raise HTTPException(status_code=502, detail=f"Publisher page returned HTTP {response.status_code}")
