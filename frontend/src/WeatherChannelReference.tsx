@@ -359,6 +359,12 @@ export function WeatherChannelPage({ mode, location, cities, storms, onNavigate 
   const [zoom] = useState(11);
 
   useEffect(() => {
+    const refreshWhenVisible = () => { if (document.visibilityState === "visible") setRefresh(value => value + 1); };
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+    return () => document.removeEventListener("visibilitychange", refreshWhenVisible);
+  }, []);
+
+  useEffect(() => {
     if (!location) { setForecast(null); setForecastError("Choose a location to load the forecast."); return; }
     let active = true;
     let controller: AbortController | null = null;
