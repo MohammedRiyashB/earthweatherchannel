@@ -533,7 +533,7 @@ const PAGES: Record<SitePageId, PageData> = {
         "You can deny location access and use manual city search. You can revoke permission through your browser or device site settings."
       ]},
       { heading: "3. Weather and third-party providers", paragraphs: [
-        "The backend currently uses Open-Meteo as its primary current-weather model provider and MET Norway as fallback. The website also connects to NASA GIBS imagery metadata, NASA EONET event metadata, RainViewer historical radar metadata, NDMA SACHET alert feeds, NASA Earth Science and NOAA RSS sources, and OpenStreetMap/Nominatim services.",
+        "The forecast backend currently uses MET Norway Locationforecast as its primary global model source and Open-Meteo as a fallback and supplementary source for selected fields. Air-quality guidance is supplied by Open-Meteo CAMS. The website also connects to NASA GIBS satellite imagery products, NASA EONET curated event metadata, RainViewer past radar frames, NDMA SACHET alert feeds, NASA Earth Science and NOAA RSS sources, and OpenStreetMap/Nominatim services. Provider coverage and update cadence vary by product.",
         "Those services receive requests needed to provide their data. Their processing is governed by their own terms and privacy notices."
       ]},
       { heading: "4. Authentication", paragraphs: [
