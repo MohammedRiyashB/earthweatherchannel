@@ -1365,42 +1365,42 @@ async def weather_news_article(
                 continue
             break
         if response is None:
-                raise HTTPException(status_code=502, detail="Publisher did not return an article page")
-            if response.status_code >= 400:
-                raise HTTPException(status_code=502, detail=f"Publisher page returned HTTP {response.status_code}")
-            content_type = response.headers.get("content-type", "").lower()
-            if "xml" in content_type and "sachet.ndma.gov.in" in urlparse(current_url).hostname:
-                cap_root = ET.fromstring(response.text)
-                cap_fields: dict[str, list[str]] = {}
-                for node in cap_root.iter():
-                    tag = _xml_local(node)
-                    if tag in {"sender", "sent", "status", "event", "urgency", "severity", "certainty", "effective", "expires", "headline", "description", "instruction", "areadesc"} and node.text:
-                        cap_fields.setdefault(tag, []).append(node.text.strip())
-                def first_field(key: str, fallback: str = "") -> str:
-                    return (cap_fields.get(key) or [fallback])[0]
-                title = first_field("headline", fallback_title)
-                paragraphs = []
-                for key, label in (("description", "Details"), ("instruction", "Safety instructions"), ("areadesc", "Affected area")):
-                    for value in cap_fields.get(key, []):
-                        if value and value not in paragraphs:
-                            paragraphs.append(f"{label}: {value}" if key != "description" else value)
-                metadata = [
-                    f"Event: {first_field('event')}", f"Severity: {first_field('severity')}",
-                    f"Urgency: {first_field('urgency')}", f"Effective: {first_field('effective')}",
-                    f"Expires: {first_field('expires')}",
-                ]
-                paragraphs = [value for value in paragraphs if value]
-                if metadata:
-                    paragraphs.extend(value for value in metadata if not value.endswith(": "))
-                return {
-                    "title": title[:500], "description": "Official Common Alerting Protocol (CAP) weather alert from NDMA SACHET.",
-                    "image": None, "paragraphs": paragraphs[:20], "source_url": current_url,
-                    "source": first_field("sender", "NDMA SACHET"), "retrieved_at": utc_now(),
-                    "extraction_status": "official_alert", "note": "Official CAP weather alert. Follow the issuing authority's instructions and validity period.",
-                }
-            if "html" not in content_type:
-                raise HTTPException(status_code=415, detail="This publisher link does not provide an HTML article")
-            source_html = response.text[:3_000_000]
+            raise HTTPException(status_code=502, detail="Publisher did not return an article page")
+        if response.status_code >= 400:
+            raise HTTPException(status_code=502, detail=f"Publisher page returned HTTP {response.status_code}")
+        content_type = response.headers.get("content-type", "").lower()
+        if "xml" in content_type and "sachet.ndma.gov.in" in urlparse(current_url).hostname:
+            cap_root = ET.fromstring(response.text)
+            cap_fields: dict[str, list[str]] = {}
+            for node in cap_root.iter():
+                tag = _xml_local(node)
+                if tag in {"sender", "sent", "status", "event", "urgency", "severity", "certainty", "effective", "expires", "headline", "description", "instruction", "areadesc"} and node.text:
+                    cap_fields.setdefault(tag, []).append(node.text.strip())
+            def first_field(key: str, fallback: str = "") -> str:
+                return (cap_fields.get(key) or [fallback])[0]
+            title = first_field("headline", fallback_title)
+            paragraphs = []
+            for key, label in (("description", "Details"), ("instruction", "Safety instructions"), ("areadesc", "Affected area")):
+                for value in cap_fields.get(key, []):
+                    if value and value not in paragraphs:
+                        paragraphs.append(f"{label}: {value}" if key != "description" else value)
+            metadata = [
+                f"Event: {first_field('event')}", f"Severity: {first_field('severity')}",
+                f"Urgency: {first_field('urgency')}", f"Effective: {first_field('effective')}",
+                f"Expires: {first_field('expires')}",
+            ]
+            paragraphs = [value for value in paragraphs if value]
+            if metadata:
+                paragraphs.extend(value for value in metadata if not value.endswith(": "))
+            return {
+                "title": title[:500], "description": "Official Common Alerting Protocol (CAP) weather alert from NDMA SACHET.",
+                "image": None, "paragraphs": paragraphs[:20], "source_url": current_url,
+                "source": first_field("sender", "NDMA SACHET"), "retrieved_at": utc_now(),
+                "extraction_status": "official_alert", "note": "Official CAP weather alert. Follow the issuing authority's instructions and validity period.",
+            }
+        if "html" not in content_type:
+            raise HTTPException(status_code=415, detail="This publisher link does not provide an HTML article")
+        source_html = response.text[:3_000_000]
         parser = _WeatherArticleParser()
         parser.feed(source_html)
         title = parser.meta.get("og:title") or " ".join(parser.title_parts) or fallback_title
