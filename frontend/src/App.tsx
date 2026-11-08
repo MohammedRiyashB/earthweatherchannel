@@ -659,7 +659,7 @@ const [section,setSection]=useState("Weather Report");const page:"home"|SitePage
    </aside>
    </div>
 
-   <section className="lead-grid">
+   <section className="lead-grid" id="weather-briefing">
     <aside className="top-brief"><div className="section-heading"><h2>Weather briefing</h2><span>GLOBAL</span></div>{hottest&&<div className="brief-highlight"><small>WARMEST CITY IN THIS LIST · NOT YOUR LOCATION</small><b>{hottest.name}</b><strong>{Math.round(hottest.current?.temperature_2m??0)}°C</strong><span>{weatherLabel(hottest.current?.weather_code)}</span></div>}<div className="brief-line"><span>Active severe-storm events</span><b>{storms.length}</b></div><div className="brief-line"><span>Reporting locations</span><b>{active.length}/{cities.length}</b></div><div className="brief-line"><span>Auto refresh</span><b>Local 60s · Cities 5m</b></div><button className="refresh-button" onClick={()=>{if(visitorLocation)void refreshWeather(visitorLocation);else void refreshPopularCities();void refreshFeeds()}} disabled={busy}>{busy?"Refreshing…":"↻ Refresh live reports"}</button></aside>
    </section>
 
@@ -670,7 +670,7 @@ const [section,setSection]=useState("Weather Report");const page:"home"|SitePage
     <button type="button" className="weather-feature-card feature-report" onClick={()=>setSection("Satellite Report")}><span className="feature-symbol">⌁</span><span><strong>Satellite Report</strong><small>Point-based weather analysis</small></span><b>↗</b></button>
    </section>
 
-   <section className="section-block" id="weather-briefing">
+   <section className="section-block">
     <div className="section-heading">
      <div>
       <span className="eyebrow">{personalizedCities?"NATIONAL & INTERNATIONAL CITY REPORTS":"GLOBAL CITY WATCHLIST"}</span>
