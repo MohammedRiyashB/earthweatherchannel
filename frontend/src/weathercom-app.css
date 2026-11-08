@@ -334,22 +334,27 @@
   position: sticky;
   top: calc(env(safe-area-inset-top, 0px) + 8px);
   z-index: 45;
+  display: flex;
+  justify-content: center;
   margin: 8px 12px 20px;
   isolation: isolate;
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
 }
 .wx-weather-site .wx-mobile-location-surface {
   display: flex;
-  width: 100%;
-  min-height: 48px;
+  width: auto;
+  min-height: 0;
   align-items: center;
   justify-content: center;
-  padding: 4px;
-  border: 1px solid rgba(0,0,0,.035);
-  border-radius: 999px;
-  background: rgba(255,255,255,.96);
-  box-shadow: 0 4px 16px rgba(0,0,0,.08), 0 0 32px rgba(0,0,0,.12);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent !important;
+  box-shadow: none !important;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 .wx-weather-site .wx-mobile-location-button {
   display: inline-flex;
