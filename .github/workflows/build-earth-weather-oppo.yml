@@ -86,7 +86,55 @@ jobs:
           for child in list(m):
               if child.tag == "original-package":
                   m.remove(child)
+          # Give every app-owned OEM Weather ContentProvider a unique Earth Weather authority.
+          # The phone may already have the stock OPPO/ColorOS Weather package installed; Android
+          # rejects a new package when a provider authority is already owned by another package.
+          authority_map = {
+              "com.oplus.exp.weather.seedlingcard": "com.bmrinc.earthweather.app.providers.seedlingcard",
+              "com.oplus.weather.exp.quickcard.provider": "com.bmrinc.earthweather.app.providers.quickcard.exp",
+              "com.oplus.weather.quickcard.provider": "com.bmrinc.earthweather.app.providers.quickcard",
+              "com.oplus.weather.provider.exp.data": "com.bmrinc.earthweather.app.providers.weatherdata",
+              "com.oplus.weather.exp.setting.provider": "com.bmrinc.earthweather.app.providers.settings",
+          }
+          seen_authorities = {}
+          for provider in application.findall("provider"):
+              authorities = provider.get(android_ns + "authorities")
+              if not authorities:
+                  continue
+              renamed = []
+              for authority in authorities.split(";"):
+                  authority = authority.strip()
+                  new_authority = authority_map.get(authority, authority)
+                  if new_authority in seen_authorities:
+                      raise SystemExit(
+                          f"Duplicate provider authority {new_authority}: "
+                          f"{seen_authorities[new_authority]} and {provider.get(android_ns + 'name')}"
+                      )
+                  seen_authorities[new_authority] = provider.get(android_ns + "name")
+                  renamed.append(new_authority)
+              provider.set(android_ns + "authorities", ";".join(renamed))
+          remaining_oem_authorities = [
+              authority for authority in seen_authorities
+              if authority.startswith(("com.oplus.weather.", "com.oplus.exp.weather."))
+          ]
+          if remaining_oem_authorities:
+              raise SystemExit("OEM Weather provider authorities remain: " + ", ".join(remaining_oem_authorities))
           tree.write(manifest, encoding="utf-8", xml_declaration=True)
+
+          # Update only the exact provider-authority string literals in app code/resources.
+          # Do not rename com.oplus.* class or package descriptors: those are implementation symbols.
+          for p in root.rglob("*"):
+              if not p.is_file() or p.suffix.lower() not in text_ext:
+                  continue
+              try:
+                  body = p.read_text(encoding="utf-8")
+              except (UnicodeDecodeError, OSError):
+                  continue
+              updated = body
+              for old_authority, new_authority in authority_map.items():
+                  updated = updated.replace(old_authority, new_authority)
+              if updated != body:
+                  p.write_text(updated, encoding="utf-8")
 
           # Keep the original resources and their translation variants, changing only identity labels.
           label_replacements = {
@@ -384,13 +432,31 @@ jobs:
           java -Xmx6g -jar apktool.jar b decoded -f -o earth-weather-unsigned.apk
           test -s earth-weather-unsigned.apk
           ls -lh earth-weather-unsigned.apk
+      - name: Validate providers and clean stale source signatures
+        run: |
+          set -euo pipefail
+          BT="$ANDROID_HOME/build-tools/35.0.0"
+          "$BT/aapt" dump xmltree earth-weather-unsigned.apk AndroidManifest.xml > decoded-manifest.txt
+          grep -q 'com.bmrinc.earthweather.app.providers.seedlingcard' decoded-manifest.txt
+          grep -q 'com.bmrinc.earthweather.app.providers.quickcard.exp' decoded-manifest.txt
+          grep -q 'com.bmrinc.earthweather.app.providers.quickcard' decoded-manifest.txt
+          grep -q 'com.bmrinc.earthweather.app.providers.weatherdata' decoded-manifest.txt
+          grep -q 'com.bmrinc.earthweather.app.providers.settings' decoded-manifest.txt
+          if grep -E 'android:authorities.*com\\.oplus\\.(weather|exp\\.weather)' decoded-manifest.txt; then
+            echo "An OEM Weather provider authority remains in the built manifest."
+            exit 1
+          fi
+          # Remove only stale JAR-signature files carried over from the source APK.
+          zip -q -d earth-weather-unsigned.apk 'META-INF/*.SF' 'META-INF/*.RSA' 'META-INF/*.DSA' 'META-INF/*.EC' 'META-INF/MANIFEST.MF' || true
+          unzip -t earth-weather-unsigned.apk | tail -2
       - name: Align and sign APK
         run: |
           set -euo pipefail
           BT="$ANDROID_HOME/build-tools/35.0.0"
           keytool -genkeypair -v -keystore earthweather-debug.jks -storepass android -alias earthweather -keypass android -dname "CN=Earth Weather,O=BMR Inc,C=IN" -keyalg RSA -keysize 2048 -validity 10000
           "$BT/zipalign" -f -p 4 earth-weather-unsigned.apk earth-weather-aligned.apk
-          "$BT/apksigner" sign --ks earthweather-debug.jks --ks-key-alias earthweather --ks-pass pass:android --key-pass pass:android --out EarthWeather.apk earth-weather-aligned.apk
+          "$BT/zipalign" -c -v 4 earth-weather-aligned.apk
+          "$BT/apksigner" sign --v1-signing-enabled true --v2-signing-enabled true --v3-signing-enabled true --ks earthweather-debug.jks --ks-key-alias earthweather --ks-pass pass:android --key-pass pass:android --out EarthWeather.apk earth-weather-aligned.apk
           "$BT/apksigner" verify --verbose --print-certs EarthWeather.apk
           "$BT/aapt" dump badging EarthWeather.apk | tee apk-badging.txt
           grep -q "package: name='com.bmrinc.earthweather.app'" apk-badging.txt
