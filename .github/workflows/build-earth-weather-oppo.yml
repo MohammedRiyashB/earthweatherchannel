@@ -432,48 +432,65 @@ jobs:
           java -Xmx6g -jar apktool.jar b decoded -f -o earth-weather-unsigned.apk
           test -s earth-weather-unsigned.apk
           ls -lh earth-weather-unsigned.apk
-      - name: Validate providers and clean stale source signatures
+      - name: Align and sign APK
         run: |
           set -euo pipefail
           BT="$ANDROID_HOME/build-tools/35.0.0"
-          "$BT/aapt" dump xmltree earth-weather-unsigned.apk AndroidManifest.xml > decoded-manifest.txt
-          grep -q 'com.bmrinc.earthweather.app.providers.seedlingcard' decoded-manifest.txt
-          grep -q 'com.bmrinc.earthweather.app.providers.quickcard.exp' decoded-manifest.txt
-          grep -q 'com.bmrinc.earthweather.app.providers.quickcard' decoded-manifest.txt
-          grep -q 'com.bmrinc.earthweather.app.providers.weatherdata' decoded-manifest.txt
-          grep -q 'com.bmrinc.earthweather.app.providers.settings' decoded-manifest.txt
-          python3 - <<'PY'
-          import pathlib
-          import zipfile
-
-          apk = pathlib.Path("earth-weather-unsigned.apk")
-          cleaned = apk.with_name("earth-weather-unsigned-clean.apk")
-          signatures = (".SF", ".RSA", ".DSA", ".EC")
-          removed = []
-          with zipfile.ZipFile(apk, "r") as source, zipfile.ZipFile(cleaned, "w") as target:
-              for item in source.infolist():
-                  upper = item.filename.upper()
-                  is_signature = upper == "META-INF/MANIFEST.MF" or (
-                      upper.startswith("META-INF/")
-                      and "/" not in upper[len("META-INF/"):]
-                      and upper.endswith(signatures)
-                  )
-                  if is_signature:
-                      removed.append(item.filename)
-                      continue
-                  target.writestr(item, source.read(item.filename), compress_type=item.compress_type)
-          if any(name.upper().startswith("META-INF/") and (
-              name.upper() == "META-INF/MANIFEST.MF" or name.upper().endswith(signatures)
-          ) for name in zipfile.ZipFile(cleaned).namelist()):
-              raise SystemExit("Stale source APK signature files remain")
-          cleaned.replace(apk)
-          print("Removed stale signature metadata:", ", ".join(removed) if removed else "none")
-          PY
+          # Remove the source APK's exact old JAR-signature entries before creating our signature.
+          zip -q -d earth-weather-unsigned.apk META-INF/EARTHWEA.SF META-INF/EARTHWEA.RSA META-INF/MANIFEST.MF
+          if unzip -Z1 earth-weather-unsigned.apk | grep -Ei '^META-INF/(EARTHWEA\\.(SF|RSA)|MANIFEST\\.MF) -v -keystore earthweather-debug.jks -storepass android -alias earthweather -keypass android -dname "CN=Earth Weather,O=BMR Inc,C=IN" -keyalg RSA -keysize 2048 -validity 10000
+          "$BT/zipalign" -f -p 4 earth-weather-unsigned.apk earth-weather-aligned.apk
+          "$BT/zipalign" -c -v 4 earth-weather-aligned.apk
+          "$BT/apksigner" sign --v1-signing-enabled true --v2-signing-enabled true --v3-signing-enabled true --ks earthweather-debug.jks --ks-key-alias earthweather --ks-pass pass:android --key-pass pass:android --out EarthWeather.apk earth-weather-aligned.apk
+          "$BT/apksigner" verify --verbose --print-certs EarthWeather.apk
+          "$BT/aapt" dump badging EarthWeather.apk | tee apk-badging.txt
+          grep -q "package: name='com.bmrinc.earthweather.app'" apk-badging.txt
+          grep -q "application-label:'Earth Weather'" apk-badging.txt
+          test "$(stat -c%s EarthWeather.apk)" -gt 20000000
+          sha256sum EarthWeather.apk | tee apk-sha256.txt
+      - name: Upload full UI APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: earth-weather-standalone-full-oppo-ui-debug
+          path: |
+            EarthWeather.apk
+            apk-badging.txt
+            apk-sha256.txt
+          if-no-files-found: error
+          retention-days: 14
+; then
+            echo "Stale source signature metadata was not removed."
+            exit 1
+          fi
           unzip -t earth-weather-unsigned.apk | tail -2
       - name: Align and sign APK
         run: |
           set -euo pipefail
           BT="$ANDROID_HOME/build-tools/35.0.0"
+          keytool -genkeypair -v -keystore earthweather-debug.jks -storepass android -alias earthweather -keypass android -dname "CN=Earth Weather,O=BMR Inc,C=IN" -keyalg RSA -keysize 2048 -validity 10000
+          "$BT/zipalign" -f -p 4 earth-weather-unsigned.apk earth-weather-aligned.apk
+          "$BT/zipalign" -c -v 4 earth-weather-aligned.apk
+          "$BT/apksigner" sign --v1-signing-enabled true --v2-signing-enabled true --v3-signing-enabled true --ks earthweather-debug.jks --ks-key-alias earthweather --ks-pass pass:android --key-pass pass:android --out EarthWeather.apk earth-weather-aligned.apk
+          "$BT/apksigner" verify --verbose --print-certs EarthWeather.apk
+          "$BT/aapt" dump badging EarthWeather.apk | tee apk-badging.txt
+          grep -q "package: name='com.bmrinc.earthweather.app'" apk-badging.txt
+          grep -q "application-label:'Earth Weather'" apk-badging.txt
+          test "$(stat -c%s EarthWeather.apk)" -gt 20000000
+          sha256sum EarthWeather.apk | tee apk-sha256.txt
+      - name: Upload full UI APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: earth-weather-standalone-full-oppo-ui-debug
+          path: |
+            EarthWeather.apk
+            apk-badging.txt
+            apk-sha256.txt
+          if-no-files-found: error
+          retention-days: 14
+; then
+            echo "Old source APK signing files remain."
+            exit 1
+          fi
           keytool -genkeypair -v -keystore earthweather-debug.jks -storepass android -alias earthweather -keypass android -dname "CN=Earth Weather,O=BMR Inc,C=IN" -keyalg RSA -keysize 2048 -validity 10000
           "$BT/zipalign" -f -p 4 earth-weather-unsigned.apk earth-weather-aligned.apk
           "$BT/zipalign" -c -v 4 earth-weather-aligned.apk
