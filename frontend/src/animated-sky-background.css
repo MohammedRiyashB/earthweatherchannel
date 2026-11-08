@@ -1,0 +1,51 @@
+/* EARTH WEATHER — time-aware animated sky backdrop. Background layer only. */
+.weathercom-site{
+  --ew-scroll:0%;
+  --ew-scene-top:#a9d8f2;
+  --ew-scene-mid:#d8eafa;
+  --ew-scene-bottom:#eef6fb;
+  position:relative;
+  isolation:isolate;
+  background:transparent!important;
+}
+.weathercom-site::before,
+.weathercom-site::after{
+  content:"";
+  position:fixed;
+  inset:0;
+  z-index:-1;
+  pointer-events:none;
+}
+.weathercom-site::before{
+  background:
+    linear-gradient(180deg,
+      color-mix(in srgb,var(--ew-scene-top) calc(100% - var(--ew-scroll)),var(--ew-scene-mid) var(--ew-scroll)) 0%,
+      color-mix(in srgb,var(--ew-scene-mid) calc(100% - var(--ew-scroll)),var(--ew-scene-bottom) var(--ew-scroll)) 58%,
+      var(--ew-scene-bottom) 100%);
+  transition:background 1.8s ease;
+}
+.weathercom-site::after{
+  opacity:.46;
+  background:
+    radial-gradient(ellipse at 16% 24%,rgba(255,255,255,.56) 0 7%,transparent 24%),
+    radial-gradient(ellipse at 78% 32%,rgba(255,255,255,.38) 0 8%,transparent 27%),
+    radial-gradient(ellipse at 48% 78%,rgba(255,255,255,.2) 0 5%,transparent 24%);
+  background-size:145% 130%;
+  animation:ew-sky-drift 58s ease-in-out infinite alternate;
+  mix-blend-mode:soft-light;
+}
+.weathercom-site[data-ew-time="morning"]{--ew-scene-top:#9bcff0;--ew-scene-mid:#c8e4f5;--ew-scene-bottom:#eaf4fb}
+.weathercom-site[data-ew-time="day"]{--ew-scene-top:#65b8ed;--ew-scene-mid:#a9d9f5;--ew-scene-bottom:#e1f1fa}
+.weathercom-site[data-ew-time="evening"]{--ew-scene-top:#e99b83;--ew-scene-mid:#d99ab0;--ew-scene-bottom:#f2d1bd}
+.weathercom-site[data-ew-time="night"]{--ew-scene-top:#07112f;--ew-scene-mid:#111f4d;--ew-scene-bottom:#263a70}
+.weathercom-site .wx-shell,
+.weathercom-site .wx-main-area,
+.weathercom-site .news-footer{background:transparent!important}
+@keyframes ew-sky-drift{
+  from{background-position:0% 0%,100% 20%,45% 100%;transform:scale(1)}
+  to{background-position:100% 25%,0% 0%,60% 75%;transform:scale(1.07)}
+}
+@media(prefers-reduced-motion:reduce){
+  .weathercom-site::after{animation:none}
+  .weathercom-site::before{transition:none}
+}
