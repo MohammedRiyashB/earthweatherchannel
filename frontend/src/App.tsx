@@ -675,7 +675,11 @@ const [section,setSection]=useState("Weather Report");const page:"home"|SitePage
   return()=>{document.body.style.overflow=previousOverflow;window.removeEventListener("keydown",handleKeyDown);};
  },[locationPickerOpen]);
  const signIn=async()=>{if(!auth)return;try{await signInWithPopup(auth,googleProvider)}catch{setNotice("Google sign-in could not be completed.")}};
- return <div className={page==="home"?"earth-weather-site":"news-site"}>
+ const countryTab=visitorLocation?.country||"Country";
+ const stateTab=visitorLocation?.state||"State";
+ const localTab=visitorLocation?.name?(visitorLocation?.district?`${visitorLocation.name} · ${visitorLocation.district}`:visitorLocation.name):(visitorLocation?.district||"Local");
+ const newsTabs=[{key:"World",label:"World"},{key:"Country",label:countryTab},{key:"State",label:stateTab},{key:"Local",label:localTab}];
+ return <div className="news-site">
   {locationPickerOpen&&<div className="location-picker-overlay" role="dialog" aria-modal="true" aria-label="Search weather locations">
    <div className="location-picker-shell">
     <form className="location-picker-search" onSubmit={event=>{event.preventDefault();void search();}}>
