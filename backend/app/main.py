@@ -1163,7 +1163,7 @@ async def _fetch_weather_rss(url: str, source_name: str) -> list[dict[str, Any]]
             # NASA's current RSS has a missing whitespace between these two namespace attributes.
             content = content.replace('xmlns:apod="https://science.nasa.gov/apod/"xmlns:media=', 'xmlns:apod="https://science.nasa.gov/apod/" xmlns:media=')
             # Repair bare ampersands from legacy RSS descriptions, preserving valid entities.
-            content = re.sub(r"&(?!#\\d+;|#x[0-9a-fA-F]+;|amp;|lt;|gt;|apos;|quot;)", "&amp;", content)
+            content = re.sub(r"&(?!#\d+;|#x[0-9a-fA-F]+;|amp;|lt;|gt;|apos;|quot;)", "&amp;", content)
             root = ET.fromstring(content)
             items = [node for node in root.iter() if _xml_local(node) in {"item", "entry"}]
             stories: list[dict[str, Any]] = []
