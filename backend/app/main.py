@@ -256,8 +256,9 @@ async def _fetch_provider_current(client: httpx.AsyncClient, provider: str, lat:
             current = _normalize_metnorway(response.json())
             current["source"] = "MET Norway Locationforecast model analysis"
             current["source_url"] = "https://api.met.no/weatherapi/locationforecast/2.0/documentation"
-            expires = response.headers.get("expires")
-            cache_control = response.headers.get("cache-control", "")
+            response_headers = getattr(response, "headers", {}) or {}
+            expires = response_headers.get("expires")
+            cache_control = response_headers.get("cache-control", "")
             max_age = None
             for directive in cache_control.split(","):
                 directive = directive.strip().lower()
