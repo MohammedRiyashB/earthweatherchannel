@@ -139,10 +139,12 @@ def set_string_entries(path: Path) -> int:
             value = STRING_VALUES[key]
         elif key in KEY_URLS:
             value = KEY_URLS[key]
-        elif re.fullmatch(r"(?:export_)?(?:new_)?statement_\d+", key) or re.fullmatch(r"agreement_\d+", key):
+        elif re.fullmatch(r"agreement_\d+", key):
             value = f"Please read the EARTH WEATHER User Agreement at {TERMS_URL}."
-        elif re.fullmatch(r"(?:export_)?(?:new_)?statement_\d+", key) or re.fullmatch(r"service_\d+", key):
+        elif re.fullmatch(r"(?:export_)?(?:new_)?statement_\d+", key):
             value = f"Please read the EARTH WEATHER Privacy Policy at {POLICY_URL}."
+        elif re.fullmatch(r"service_\d+", key):
+            value = f"Please read the EARTH WEATHER Data Usage Policy at {DATA_URL}."
         elif any(t in key.lower() for t in ("oppo", "oplus", "heytap", "coloros")):
             value = SUPPORT_URL
         elif any(t in key.lower() for t in ("privacy", "policy", "protect")) and ("url" in key.lower() or "link" in key.lower()):
