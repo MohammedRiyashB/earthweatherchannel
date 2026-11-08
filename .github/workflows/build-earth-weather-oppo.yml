@@ -432,89 +432,22 @@ jobs:
           java -Xmx6g -jar apktool.jar b decoded -f -o earth-weather-unsigned.apk
           test -s earth-weather-unsigned.apk
           ls -lh earth-weather-unsigned.apk
-      - name: Align and sign APK
+      - name: Validate providers and clean stale source signatures
         run: |
           set -euo pipefail
           BT="$ANDROID_HOME/build-tools/35.0.0"
-          # Remove the source APK's exact old JAR-signature entries before creating our signature.
-          zip -q -d earth-weather-unsigned.apk META-INF/EARTHWEA.SF META-INF/EARTHWEA.RSA META-INF/MANIFEST.MF
-          if unzip -Z1 earth-weather-unsigned.apk | grep -Ei '^META-INF/(EARTHWEA\\.(SF|RSA)|MANIFEST\\.MF) -v -keystore earthweather-debug.jks -storepass android -alias earthweather -keypass android -dname "CN=Earth Weather,O=BMR Inc,C=IN" -keyalg RSA -keysize 2048 -validity 10000
-          "$BT/zipalign" -f -p 4 earth-weather-unsigned.apk earth-weather-aligned.apk
-          "$BT/zipalign" -c -v 4 earth-weather-aligned.apk
-          "$BT/apksigner" sign --v1-signing-enabled true --v2-signing-enabled true --v3-signing-enabled true --ks earthweather-debug.jks --ks-key-alias earthweather --ks-pass pass:android --key-pass pass:android --out EarthWeather.apk earth-weather-aligned.apk
-          "$BT/apksigner" verify --verbose --print-certs EarthWeather.apk
-          "$BT/aapt" dump badging EarthWeather.apk | tee apk-badging.txt
-          grep -q "package: name='com.bmrinc.earthweather.app'" apk-badging.txt
-          grep -q "application-label:'Earth Weather'" apk-badging.txt
-          test "$(stat -c%s EarthWeather.apk)" -gt 20000000
-          sha256sum EarthWeather.apk | tee apk-sha256.txt
-      - name: Upload full UI APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: earth-weather-standalone-full-oppo-ui-debug
-          path: |
-            EarthWeather.apk
-            apk-badging.txt
-            apk-sha256.txt
-          if-no-files-found: error
-          retention-days: 14
-; then
-            echo "Stale source signature metadata was not removed."
+          "$BT/aapt" dump xmltree earth-weather-unsigned.apk AndroidManifest.xml > decoded-manifest.txt
+          grep -q 'com.bmrinc.earthweather.app.providers.seedlingcard' decoded-manifest.txt
+          grep -q 'com.bmrinc.earthweather.app.providers.quickcard.exp' decoded-manifest.txt
+          grep -q 'com.bmrinc.earthweather.app.providers.quickcard' decoded-manifest.txt
+          grep -q 'com.bmrinc.earthweather.app.providers.weatherdata' decoded-manifest.txt
+          grep -q 'com.bmrinc.earthweather.app.providers.settings' decoded-manifest.txt
+          if grep -E 'android:authorities.*com\\.oplus\\.(weather|exp\\.weather)' decoded-manifest.txt; then
+            echo "An OEM Weather provider authority remains in the built manifest."
             exit 1
           fi
-          unzip -t earth-weather-unsigned.apk | tail -2
-      - name: Align and sign APK
-        run: |
-          set -euo pipefail
-          BT="$ANDROID_HOME/build-tools/35.0.0"
-          keytool -genkeypair -v -keystore earthweather-debug.jks -storepass android -alias earthweather -keypass android -dname "CN=Earth Weather,O=BMR Inc,C=IN" -keyalg RSA -keysize 2048 -validity 10000
-          "$BT/zipalign" -f -p 4 earth-weather-unsigned.apk earth-weather-aligned.apk
-          "$BT/zipalign" -c -v 4 earth-weather-aligned.apk
-          "$BT/apksigner" sign --v1-signing-enabled true --v2-signing-enabled true --v3-signing-enabled true --ks earthweather-debug.jks --ks-key-alias earthweather --ks-pass pass:android --key-pass pass:android --out EarthWeather.apk earth-weather-aligned.apk
-          "$BT/apksigner" verify --verbose --print-certs EarthWeather.apk
-          "$BT/aapt" dump badging EarthWeather.apk | tee apk-badging.txt
-          grep -q "package: name='com.bmrinc.earthweather.app'" apk-badging.txt
-          grep -q "application-label:'Earth Weather'" apk-badging.txt
-          test "$(stat -c%s EarthWeather.apk)" -gt 20000000
-          sha256sum EarthWeather.apk | tee apk-sha256.txt
-      - name: Upload full UI APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: earth-weather-standalone-full-oppo-ui-debug
-          path: |
-            EarthWeather.apk
-            apk-badging.txt
-            apk-sha256.txt
-          if-no-files-found: error
-          retention-days: 14
-; then
-            echo "Old source APK signing files remain."
-            exit 1
-          fi
-          keytool -genkeypair -v -keystore earthweather-debug.jks -storepass android -alias earthweather -keypass android -dname "CN=Earth Weather,O=BMR Inc,C=IN" -keyalg RSA -keysize 2048 -validity 10000
-          "$BT/zipalign" -f -p 4 earth-weather-unsigned.apk earth-weather-aligned.apk
-          "$BT/zipalign" -c -v 4 earth-weather-aligned.apk
-          "$BT/apksigner" sign --v1-signing-enabled true --v2-signing-enabled true --v3-signing-enabled true --ks earthweather-debug.jks --ks-key-alias earthweather --ks-pass pass:android --key-pass pass:android --out EarthWeather.apk earth-weather-aligned.apk
-          "$BT/apksigner" verify --verbose --print-certs EarthWeather.apk
-          "$BT/aapt" dump badging EarthWeather.apk | tee apk-badging.txt
-          grep -q "package: name='com.bmrinc.earthweather.app'" apk-badging.txt
-          grep -q "application-label:'Earth Weather'" apk-badging.txt
-          test "$(stat -c%s EarthWeather.apk)" -gt 20000000
-          sha256sum EarthWeather.apk | tee apk-sha256.txt
-      - name: Upload full UI APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: earth-weather-standalone-full-oppo-ui-debug
-          path: |
-            EarthWeather.apk
-            apk-badging.txt
-            apk-sha256.txt
-          if-no-files-found: error
-          retention-days: 14
-; then
-            echo "Stale source signature metadata was not removed."
-            exit 1
-          fi
+          # Remove only stale JAR-signature files carried over from the source APK.
+          zip -q -d earth-weather-unsigned.apk 'META-INF/*.SF' 'META-INF/*.RSA' 'META-INF/*.DSA' 'META-INF/*.EC' 'META-INF/MANIFEST.MF' || true
           unzip -t earth-weather-unsigned.apk | tail -2
       - name: Align and sign APK
         run: |
