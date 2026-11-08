@@ -80,15 +80,14 @@ Google sign-in uses a popup, which requires popups to be allowed by the browser.
 
 ## Weather provider failover
 
-Current weather requests use this ordered provider chain:
+Current weather and forecast requests use this ordered provider chain:
 
-1. WeatherAPI.com (primary; requires `WEATHERAPI_KEY`)
-2. OpenWeather (secondary; requires `OPENWEATHER_API_KEY`)
-3. MET Norway Locationforecast (final fallback; requires a real identifying `METNORWAY_USER_AGENT`)
+1. Open-Meteo (primary; no API key required for eligible non-commercial use).
+2. MET Norway Locationforecast (fallback; requires a real identifying `METNORWAY_USER_AGENT`).
 
-The backend switches to the next provider on connection errors, timeouts, HTTP errors, quota/rate-limit responses, or invalid payloads. A provider is only considered successful when it returns a valid temperature for every requested coordinate in the batch. The API reports which provider supplied the response. If none is configured or reachable, it returns HTTP 503 with per-provider reasons rather than inventing or silently reusing stale conditions.
+The backend switches provider on connection errors, timeouts, HTTP errors, rate limits or invalid responses. It validates temperature and time-series arrays before accepting a provider. Responses identify the provider that actually supplied the data. If every provider fails, the API returns a clear HTTP 503 response rather than inventing or silently reusing stale weather.
 
-Configure these variables in Render → Environment (and locally in `backend/.env`): `WEATHERAPI_KEY`, `OPENWEATHER_API_KEY`, and `METNORWAY_USER_AGENT`. The first two require free account/API-key registration. MET Norway requires an honest, contactable User-Agent and compliance with its request-rate and cache headers. Never commit API keys to GitHub.
+Configure `METNORWAY_USER_AGENT` and `CORS_ORIGINS` in Render → Environment (and locally in `backend/.env`). Use an honest, monitored contact in the MET Norway User-Agent and comply with provider request-rate and cache requirements. Do not commit private credentials to GitHub. WeatherAPI and OpenWeather normalization helpers remain in the backend for possible future adapters, but they are not in the active provider order.
 
 `/api/atmosphere` and `/api/wind-grid` currently return HTTP 503 because their previous model-only data products have no equivalent gridded/hourly adapter in this provider chain yet. Point current weather, featured cities, and bulk current weather use all three providers. Do not label those unavailable layers as live.
 
@@ -129,11 +128,20 @@ Set `VITE_API_BASE_URL=http://localhost:8000` in `frontend/.env`.
 - `GET /api/sources`
 - `GET /api/health/sources`
 - `GET /api/weather?latitude=...&longitude=...`
+- `GET /api/forecast?latitude=...&longitude=...&days=7&timezone=auto` (current + hourly + daily forecast, with Open-Meteo → MET Norway failover)
 - `GET /api/atmosphere?latitude=...&longitude=...`
 - `GET /api/wind-grid`
 - `GET /api/cyclones`
 - `GET /api/radar`
 - `GET /api/alerts?latitude=...&longitude=...` (US only)
+
+## Android app shell
+
+The `android-app/` directory contains a native Android WebView wrapper for the existing responsive EARTH WEATHER web app. It requests Android location permission only when the trusted website requests geolocation, blocks cleartext traffic and file access, and opens external links outside the app.
+
+A debug APK is built by the **EARTH WEATHER Android APK** GitHub Actions workflow. The APK is published as a downloadable workflow artifact; it is not automatically released to the Play Store.
+
+The OPPO resource archive is kept separate and untouched. `Uifprweather.zip` is a resource reference package, not an Android source project or installable APK. The Android shell currently opens the EARTH WEATHER website and does not yet embed the OPPO Weather layouts.
 
 ## Attribution and operations
 

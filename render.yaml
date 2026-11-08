@@ -13,6 +13,8 @@ services:
         value: 3.12.3
       - key: EARTH_WEATHER_USER_AGENT
         value: "EARTH-WEATHER/0.1 (replace-with-your-monitored-contact)"
+      - key: CORS_ORIGINS
+        value: "https://earthweatherchannel.web.app,https://earthweatherchannel.firebaseapp.com,https://earth-weather-web.onrender.com"
 
   - type: web
     name: earth-weather-web
