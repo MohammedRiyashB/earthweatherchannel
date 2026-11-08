@@ -59,7 +59,7 @@ export function WeatherChannelSidebar({active,onNavigate}:{active:string;onNavig
   </section>)}</aside>;
 }
 
-function ForecastHeader({location,mode,onNavigate,onSearchLocation}:{location:WeatherLocation;mode:WeatherMode;onNavigate:(page:string)=>void;onSearchLocation:()=>void}) {
+function ForecastHeader({location,mode,onNavigate,onSearchLocation}:{location:WeatherLocation;mode:WeatherChannelMode;onNavigate:(page:string)=>void;onSearchLocation:()=>void}) {
   return <>
     <div className="wc-breadcrumb"><span>Weather</span><b>›</b><span>{location?.region||"Your location"}</span><b>›</b><strong>{location?.name||"Local forecast"}</strong></div>
     <div className="wc-page-heading"><div><span className="wc-eyebrow">EARTH WEATHER FORECAST</span><h1>{location?.name?location.name+" Weather":"Weather Forecast"}</h1><p>{location?.region||"Choose a location to view local weather conditions and forecasts."}</p></div><button className="wc-location-button" type="button" onClick={onSearchLocation}>⌖ <span>Change location</span></button></div>
