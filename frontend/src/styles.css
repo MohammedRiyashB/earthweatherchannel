@@ -1251,3 +1251,53 @@
   .location-picker-overlay, .location-picker-shell { animation: none; }
   .location-picker-result { transition: none; }
 }
+
+/* Compact, neutral location picker aligned to the Weather.com reference. */
+.location-picker-overlay { padding: 205px 14px 20px; animation: ew-picker-fade .14s ease-out both; }
+.location-picker-shell {
+  width: min(100%, 590px); max-height: min(62vh, 570px); padding: 8px;
+  border-radius: 26px; box-shadow: 0 12px 34px rgba(15,23,42,.14);
+  animation: ew-picker-settle .18s ease-out both;
+}
+.location-picker-input-wrap {
+  min-height: 54px; gap: 11px; padding: 0 13px; border-radius: 20px;
+  background: #fff; border: 1px solid #e5e7eb; box-shadow: none !important;
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+.location-picker-input-wrap:focus-within {
+  border-color: #d1d5db !important;
+  outline: none !important;
+  box-shadow: 0 0 0 2px rgba(31,41,55,.07) !important;
+}
+.location-picker-input-wrap > svg { width: 23px; height: 23px; flex-basis: 23px; }
+.location-picker-input-wrap input { height: 50px; font-size: 18px; outline: none !important; box-shadow: none !important; }
+.location-picker-input-wrap input:focus,
+.location-picker-input-wrap input:focus-visible { outline: none !important; box-shadow: none !important; border-color: transparent !important; }
+.location-picker-cancel { display:none; }
+.location-picker-places { padding: 20px 8px 8px; }
+.location-picker-places h2 { margin: 0 0 14px; color:#292929; font-size:16px; font-weight:700; }
+.location-picker-place {
+  display:flex; width:100%; min-height:74px; align-items:center; gap:10px;
+  padding:10px 6px; border:0; border-radius:12px; background:transparent;
+  color:#292929; text-align:left; cursor:pointer; transition:background .15s ease;
+}
+.location-picker-place:hover, .location-picker-place:focus-visible { background:#f6f7f8; outline:none; }
+.location-place-weather { width:32px; flex:0 0 32px; font-size:25px; text-align:center; }
+.location-place-temperature { min-width:58px; color:#454545; font-size:20px; font-weight:500; }
+.location-place-name { display:flex; min-width:0; flex:1; flex-direction:column; gap:2px; }
+.location-place-name strong { overflow:hidden; color:#292929; font-size:18px; font-weight:700; text-overflow:ellipsis; white-space:nowrap; }
+.location-place-name small { overflow:hidden; color:#707070; font-size:14px; text-overflow:ellipsis; white-space:nowrap; }
+.location-place-arrow { color:#292929; font-size:18px; transform:rotate(-35deg); }
+.location-place-fetching { margin:0 0 4px 48px; font-size:12px; }
+@keyframes ew-picker-fade { from {opacity:0} to {opacity:1} }
+@keyframes ew-picker-settle { from {opacity:0; transform:translateY(-5px)} to {opacity:1; transform:translateY(0)} }
+@media(max-width:767px) {
+ .location-picker-overlay { padding: 205px 14px 20px; }
+ .location-picker-shell { width:100%; border-radius:24px; padding:7px; }
+ .location-picker-input-wrap { min-height:54px; border-radius:19px; }
+ .location-picker-input-wrap input { font-size:17px; }
+ .location-picker-places { padding-top:18px; }
+}
+@media(prefers-reduced-motion:reduce) {
+ .location-picker-overlay,.location-picker-shell { animation:none !important; }
+}
