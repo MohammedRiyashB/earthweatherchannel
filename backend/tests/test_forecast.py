@@ -55,19 +55,49 @@ class ForecastAdapterTests(unittest.IsolatedAsyncioTestCase):
             {"time":"2026-11-08T06:00:00Z","data":{"instant":{"details":{"air_temperature":28.0,"relative_humidity":70,"wind_speed":3.0,"wind_from_direction":180,"cloud_area_fraction":20}},"next_1_hours":{"summary":{"symbol_code":"clearsky_day"},"details":{"precipitation_amount":0.0}}}},
             {"time":"2026-11-08T07:00:00Z","data":{"instant":{"details":{"air_temperature":29.0,"relative_humidity":68,"wind_speed":4.0,"wind_from_direction":190,"cloud_area_fraction":25}},"next_1_hours":{"summary":{"symbol_code":"rain"},"details":{"precipitation_amount":0.5}}}},
         ]}}
+        supplement_payload = {
+            "latitude": 13.08,
+            "longitude": 80.27,
+            "timezone": "Asia/Kolkata",
+            "current": {"dew_point_2m": 18.5, "uv_index": 2.7, "pressure_msl": 1014.2},
+            "hourly": {
+                "time": ["2026-11-08T11:30", "2026-11-08T12:30"],
+                "uv_index": [1.2, 2.3],
+                "visibility": [18000, 22000],
+            },
+            "daily": {
+                "time": ["2026-11-08"],
+                "sunrise": ["2026-11-08T06:04"],
+                "sunset": ["2026-11-08T17:40"],
+                "uv_index_max": [7.1],
+            },
+        }
         class Client:
+            def __init__(self):
+                self.requests = []
             async def get(self, url, params, headers=None):
-                self.url = url
-                self.params = params
-                return FakeResponse(met_payload)
+                self.requests.append((url, params, headers))
+                return FakeResponse(met_payload if "api.met.no" in url else supplement_payload)
         client = Client()
         result = await fetch_forecast(client, 13.08, 80.27, days=2, timezone_name="Asia/Kolkata")
         self.assertEqual(result["source"]["provider"], "metnorway")
         self.assertEqual(result["current"]["temperature_2m"], 28.0)
-        self.assertEqual(len(result["hourly"]["time"]), 2)
-        self.assertEqual(len(result["daily"]["time"]), 1)
-        self.assertEqual(client.params["lat"], 13.08)
-        self.assertEqual(client.params["lon"], 80.27)
+        self.assertEqual(result["current"]["dew_point_2m"], 18.5)
+        self.assertEqual(result["current"]["uv_index"], 2.7)
+        self.assertEqual(result["current"]["pressure_msl"], 1014.2)
+        self.assertEqual(result["hourly"]["uv_index"], [1.2, 2.3])
+        self.assertEqual(result["hourly"]["visibility"], [18000, 22000])
+        self.assertEqual(result["daily"]["time"], ["2026-11-08"])
+        self.assertEqual(result["daily"]["sunrise"], ["2026-11-08T06:04"])
+        self.assertEqual(result["daily"]["sunset"], ["2026-11-08T17:40"])
+        self.assertEqual(result["daily"]["uv_index_max"], [7.1])
+        self.assertIn(result["astronomy"]["phase"], {
+            "New Moon", "Waxing Crescent", "First Quarter", "Waxing Gibbous",
+            "Full Moon", "Waning Gibbous", "Last Quarter", "Waning Crescent",
+        })
+        self.assertEqual(client.requests[0][1]["lat"], 13.08)
+        self.assertEqual(client.requests[0][1]["lon"], 80.27)
+        self.assertIn("supplemental_source", result)
 
     async def test_met_norway_invalid_payload_falls_back_to_open_meteo(self):
         met_payload = {
