@@ -59,10 +59,11 @@ class ForecastAdapterTests(unittest.IsolatedAsyncioTestCase):
             "latitude": 13.08,
             "longitude": 80.27,
             "timezone": "Asia/Kolkata",
-            "current": {"dew_point_2m": 18.5, "uv_index": 2.7, "pressure_msl": 1014.2},
+            "current": {"pressure_msl": 1014.2},
             "hourly": {
                 "time": ["2026-11-08T11:30", "2026-11-08T12:30"],
-                "uv_index": [1.2, 2.3],
+                "dew_point_2m": [18.5, 18.8],
+                "uv_index": [2.7, 3.0],
                 "visibility": [18000, 22000],
             },
             "daily": {
@@ -85,7 +86,8 @@ class ForecastAdapterTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["current"]["dew_point_2m"], 18.5)
         self.assertEqual(result["current"]["uv_index"], 2.7)
         self.assertEqual(result["current"]["pressure_msl"], 1014.2)
-        self.assertEqual(result["hourly"]["uv_index"], [1.2, 2.3])
+        self.assertEqual(result["hourly"]["dew_point_2m"], [18.5, 18.8])
+        self.assertEqual(result["hourly"]["uv_index"], [2.7, 3.0])
         self.assertEqual(result["hourly"]["visibility"], [18000, 22000])
         self.assertEqual(result["daily"]["time"], ["2026-11-08"])
         self.assertEqual(result["daily"]["sunrise"], ["2026-11-08T06:04"])
