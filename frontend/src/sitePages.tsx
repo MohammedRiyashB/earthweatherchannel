@@ -849,7 +849,6 @@ export function SitePageView({ slug }: { slug: SitePageId }) {
   }, [slug, page.title, page.lead]);
   return (
     <div className="site-content-page">
-      <div className="info-page-brand"><img src="/logo.png" alt="EARTH WEATHER" /></div>
       <article className="info-card site-page-card">
         <span className="eyebrow">{page.eyebrow}</span>
         <h1>{page.title}</h1>
