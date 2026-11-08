@@ -13,6 +13,9 @@ def params_for(points: int) -> dict[str, str]:
 
 
 class WeatherProviderTests(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        weather_api._METNORWAY_CACHE.clear()
+
     async def test_met_norway_is_the_primary_provider(self):
         class FakeResponse:
             headers = {"cache-control": "max-age=0"}

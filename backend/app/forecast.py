@@ -221,7 +221,9 @@ async def fetch_forecast(
     timezone_name: str = "auto",
 ) -> dict[str, Any]:
     """Return cached MET Norway forecast first, with a validated Open-Meteo fallback."""
-    cache_key = (round(latitude, 3), round(longitude, 3), days, timezone_name)
+    # MET Norway advises no more than four coordinate decimals; bucketing to 2
+    # decimals also prevents a moving GPS fix from defeating the cache.
+    cache_key = (round(latitude, 2), round(longitude, 2), days, timezone_name)
     async with _FORECAST_CACHE_LOCK:
         cached = _FORECAST_CACHE.get(cache_key)
         if cached and cached[0] > time.monotonic():
@@ -231,14 +233,14 @@ async def fetch_forecast(
     try:
         response = await client.get(
             METNORWAY_URL,
-            params={"lat": latitude, "lon": longitude},
+            params={"lat": cache_key[0], "lon": cache_key[1]},
             headers={"User-Agent": METNORWAY_USER_AGENT, "Accept": "application/json"},
         )
         response.raise_for_status()
         payload = response.json()
         if not isinstance(payload, dict):
             raise ValueError("MET Norway returned a non-object response")
-        forecast = _normalize_met_norway(payload, latitude, longitude, days)
+        forecast = _normalize_met_norway(payload, cache_key[0], cache_key[1], days)
         headers = getattr(response, "headers", {}) or {}
         ttl = float(_METNORWAY_MIN_CACHE_SECONDS)
         expires = headers.get("expires")

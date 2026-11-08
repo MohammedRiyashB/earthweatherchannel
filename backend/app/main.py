@@ -172,7 +172,7 @@ def _normalize_metnorway(payload: dict[str, Any]) -> dict[str, Any]:
     summary = next_hour.get("summary") or {}
     code = summary.get("symbol_code")
     return {"temperature_2m":details.get("air_temperature"),"relative_humidity_2m":details.get("relative_humidity"),
-        "apparent_temperature":details.get("air_temperature"),"precipitation":(next_hour.get("details") or {}).get("precipitation_amount",0),
+        "apparent_temperature":details.get("apparent_air_temperature", details.get("air_temperature")),"precipitation":(next_hour.get("details") or {}).get("precipitation_amount",0),
         "cloud_cover":details.get("cloud_area_fraction"),"pressure_msl":details.get("air_pressure_at_sea_level"),
         "wind_speed_10m":(details.get("wind_speed",0) or 0)*3.6,"wind_direction_10m":details.get("wind_from_direction"),
         "wind_gusts_10m":(details.get("wind_speed_of_gust",0) or 0)*3.6,"weather_code":_metnorway_wmo(code),
