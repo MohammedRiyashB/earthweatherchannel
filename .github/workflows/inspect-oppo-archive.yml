@@ -1,0 +1,51 @@
+name: Inspect OPPO UI UX archive
+on:
+  push:
+    paths:
+      - "Uifprweather.zip"
+      - ".github/workflows/inspect-oppo-archive.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect archive structure
+        run: |
+          python3 - <<'PY'
+          import zipfile, pathlib, json
+          p = pathlib.Path("Uifprweather.zip")
+          if not p.exists():
+              raise SystemExit("Uifprweather.zip missing")
+          with zipfile.ZipFile(p) as z:
+              bad = z.testzip()
+              infos = z.infolist()
+              report = {
+                  "archive": p.name,
+                  "archive_bytes": p.stat().st_size,
+                  "entries": len(infos),
+                  "corrupt_entry": bad,
+                  "total_uncompressed_bytes": sum(i.file_size for i in infos),
+                  "top_level": sorted({i.filename.split('/')[0] for i in infos if i.filename}),
+                  "sample_paths": [i.filename for i in infos[:300]],
+                  "extensions": {}
+              }
+              for i in infos:
+                  ext = pathlib.Path(i.filename).suffix.lower() or "[no extension]"
+                  report["extensions"][ext] = report["extensions"].get(ext, 0) + 1
+              pathlib.Path("archive-report.json").write_text(json.dumps(report, indent=2))
+              with open("archive-file-list.txt", "w") as f:
+                  for i in infos:
+                      f.write(f"{i.file_size}\t{i.filename}\n")
+              print(json.dumps({k:v for k,v in report.items() if k != "sample_paths"}, indent=2))
+              if bad:
+                  raise SystemExit(f"Corrupt ZIP entry: {bad}")
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: oppo-ui-ux-archive-inspection
+          path: |
+            archive-report.json
+            archive-file-list.txt
