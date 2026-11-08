@@ -298,8 +298,8 @@ export function WeatherChannelLayout({
               </div>
               <div className="flex shrink-0 items-center md:hidden">
                 <button type="button" onClick={onAccount} aria-label={accountName ? "Account profile" : "Sign in with Google"} title={accountName || "Sign in"}
-                  className="wx-header-profile-button">
-                  <img src={accountPhoto || "https://github.com/MohammedRiyashB.png?size=160"} alt="Mohammed Riyash B — EARTH WEATHER Founder" referrerPolicy="no-referrer"/>
+                  className="wx-header-profile-button wx-header-profile-animated">
+                  {accountPhoto ? <img src={accountPhoto} alt={accountName ? `${accountName} profile photo` : "Google account profile"} referrerPolicy="no-referrer"/> : <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4.5 21a7.5 7.5 0 0 1 15 0"/></svg>}
                 </button>
               </div>
             </div>
