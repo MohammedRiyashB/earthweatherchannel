@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Extract the original public Weather.com layout assets from the user's full capture ZIP.
 
-Only the three page CSS bundles, Inter font files and weather-background sprites are
-extracted. Proprietary application JavaScript, tracking code, vendor scripts and
-Weather.com logos are not copied. EARTH WEATHER React components and APIs provide
-the app behaviour and brand.
+Only the three page CSS bundles and weather-background sprites are extracted.
+The CSS's original Inter WOFF2 URLs are redirected to the public immutable CDN;
+font binaries, proprietary application JS, trackers, vendor scripts and Weather.com
+logos are not copied into EARTH WEATHER.
 """
 from pathlib import Path
 from zipfile import BadZipFile, ZipFile
@@ -48,10 +48,7 @@ try:
             raise SystemExit("The three original CSS bundles do not share one immutable asset root.")
         prefix = prefixes.pop()
 
-        selected = { "chunks/" + filename: path for filename, path in css_paths.items() }
-
-        # CSS uses ../media/<font> URLs, so place every captured WOFF2 file at
-        # the common immutable media path regardless of the capture's source folder.
+        selected = {"chunks/" + filename: path for filename, path in css_paths.items()}
         for name in names:
             basename = Path(name).name
             if name.lower().endswith(".woff2") or basename.startswith(SPRITE_PREFIX):
@@ -60,7 +57,7 @@ try:
         extracted = 0
         font_files = set()
         font_url_pattern = re.compile(
-            r"url\\(\\s*['\"]?\\.\\./media/([^'\"\\s)]+\\.woff2)['\"]?\\s*\\)",
+            r"url\(\s*['\"]?\.\./media/([^'\"\s)]+\.woff2)['\"]?\s*\)",
             re.IGNORECASE,
         )
 
@@ -69,10 +66,6 @@ try:
             target.parent.mkdir(parents=True, exist_ok=True)
             payload = archive.read(source_name)
 
-            # The reference capture contains CSS with Next.js-generated Inter font
-            # URLs, but not the WOFF2 binaries. Keep the original CSS and point those
-            # URLs at the same public immutable files on weather.com's CDN. The CDN
-            # advertises Access-Control-Allow-Origin: *, so browsers can load them.
             if relative.startswith("chunks/") and relative.lower().endswith(".css"):
                 css_text = payload.decode("utf-8")
 
@@ -93,16 +86,15 @@ try:
 
         if extracted < 5:
             raise SystemExit(
-                f"Only {extracted} CSS/font/sprite assets were extracted; expected at least five (three CSS bundles and two sprite images)."
+                f"Only {extracted} original CSS/sprite assets were extracted; expected at least five."
             )
         if not font_files:
             raise SystemExit("No original Inter WOFF2 references were found in the captured CSS.")
 except BadZipFile as exc:
     raise SystemExit(f"The full UI reference is not a valid ZIP: {exc}") from exc
 
-font_count = sum(1 for relative in selected if relative.lower().endswith(".woff2"))
 print(
     f"Extracted {extracted} original page CSS/sprite assets from {ARCHIVE.name}; "
     f"rewrote {len(font_files)} Inter WOFF2 references to the public Weather.com asset CDN. "
-    "Brand logos and application JavaScript are intentionally excluded."
+    "Brand logos, font binaries and application JavaScript are intentionally excluded."
 )
