@@ -44,6 +44,8 @@ jobs:
           curl -fL --retry 3 https://raw.githubusercontent.com/MohammedRiyashB/earthweatherchannel/main/applogo.png -o applogo.png
           file applogo.png
           test -s applogo.png
+      - name: Install PNG processing dependency
+        run: python3 -m pip install --disable-pip-version-check Pillow
       - name: Rebrand app and route its weather data to EARTH WEATHER
         run: |
           python3 - <<'PY'
@@ -357,8 +359,6 @@ jobs:
           )
           print(f"Updated package references in {changed} files.")
           PY
-      - name: Install PNG processing dependency
-        run: python3 -m pip install --disable-pip-version-check Pillow
       - name: Build original app resources and bytecode with Apktool
         run: |
           java -Xmx6g -jar apktool.jar b decoded -f -o earth-weather-unsigned.apk
