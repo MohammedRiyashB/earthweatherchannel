@@ -16,6 +16,7 @@ import os
 import time
 from typing import Any
 from bisect import bisect_left
+from math import cos, pi
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import httpx
@@ -72,7 +73,7 @@ def _moon_phase_details(moment: datetime | None = None) -> dict[str, Any]:
     synodic_days = 29.530588853
     age_days = ((instant.astimezone(timezone.utc) - reference_new_moon).total_seconds() / 86400) % synodic_days
     fraction = age_days / synodic_days
-    illumination = round((1 - __import__("math").cos(2 * __import__("math").pi * fraction)) * 50, 1)
+    illumination = round((1 - cos(2 * pi * fraction)) * 50, 1)
     if fraction < 0.03 or fraction >= 0.97:
         phase = "New Moon"
     elif fraction < 0.22:
@@ -275,6 +276,7 @@ def _normalize_met_norway(payload: dict[str, Any], latitude: float, longitude: f
 
     hourly: dict[str, list[Any]] = defaultdict(list)
     day_groups: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    local_zone = _zone_or_utc(timezone_name)
     for item in timeseries:
         timestamp = item.get("time")
         parsed = _parse_met_time(timestamp) if isinstance(timestamp, str) else None
@@ -304,7 +306,7 @@ def _normalize_met_norway(payload: dict[str, Any], latitude: float, longitude: f
         }
         for key, value in row.items():
             hourly[key].append(value)
-        day_groups[parsed.date().isoformat()].append(row)
+        day_groups[parsed.astimezone(local_zone).date().isoformat()].append(row)
 
     if not hourly.get("time"):
         raise ValueError("MET Norway returned no valid forecast timestamps")
@@ -347,6 +349,9 @@ def _normalize_met_norway(payload: dict[str, Any], latitude: float, longitude: f
         daily["precipitation_sum"].append(sum(rain) if rain else None)
         daily["weather_code"].append(next((r["weather_code"] for r in rows if r["weather_code"] is not None), None))
         daily["wind_speed_10m_max"].append(max(winds) if winds else None)
+        daily["sunrise"].append(None)
+        daily["sunset"].append(None)
+        daily["uv_index_max"].append(None)
 
     return {
         "location": {"latitude": latitude, "longitude": longitude},
