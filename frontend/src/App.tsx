@@ -719,8 +719,8 @@ const [section,setSection]=useState("Weather Report");const page:"home"|SitePage
     onNavigate={setSection}
     onSearchLocation={()=>{setQuery("");setLocationSearchResults([]);setLocationSearchError("");setLocationPickerOpen(true);}}
     onAccount={()=>{if(user)void signOut(auth!);else void signIn();}}
-    accountName={user?.displayName||null}
-    accountPhoto={user?.photoURL||"https://github.com/MohammedRiyashB.png?size=160"}
+    accountName={null}
+    accountPhoto="https://github.com/MohammedRiyashB.png?size=160"
    >
     {(["Weather Report","Hourly","10 Day","Radar","Air Quality","Allergy","Storm reports"] as string[]).includes(section)
       ?<WeatherChannelPage mode={section as WeatherChannelMode} location={local} cities={cities} storms={storms} onNavigate={setSection}/>
