@@ -76,6 +76,8 @@ async def earth_weather_location(request: Request) -> dict[str, Any]:
         "locationKeyUpdate": key,
         "lat": latitude,
         "lon": longitude,
+        "latitude": latitude,
+        "longitude": longitude,
         "geoHash": f"{latitude:.5f},{longitude:.5f}",
         "placeId": key,
         "placeType": 0,
@@ -83,6 +85,11 @@ async def earth_weather_location(request: Request) -> dict[str, Any]:
         "timezone": "auto",
         "language": "en",
         "dataSouceType": 0,
+        "placeDetailStatus": 0,
+        "parentLocationKey": "",
+        "sourceKey": key,
+        "parentSourceKey": "",
+        "highlightDisplayName": name,
         "order": 0,
     }
 
@@ -120,7 +127,7 @@ async def _build_location_weather(request: Request, key: str) -> dict[str, Any]:
         "todayDate": now_ms,
         "expireTime": now_ms + 300_000,
         "weatherIcon": current.get("weather_code"),
-        "localWeatherCode": current.get("weather_code"),
+        "localWeatherCode": str(current.get("weather_code")) if current.get("weather_code") is not None else None,
         "weatherAdLink": "",
         "forecastTimeSeconds": now_ms // 1000,
     }
@@ -149,7 +156,7 @@ async def _build_location_weather(request: Request, key: str) -> dict[str, Any]:
             "weatherCode": h("weather_code"),
             "weatherIcon": h("weather_code"),
             "windDegrees": h("wind_direction_10m"),
-            "windSpeed": h("wind_speed_10m"),
+            "windSpeed": round(h("wind_speed_10m")) if isinstance(h("wind_speed_10m"), (int, float)) else None,
         })
 
     daily_rows = []
@@ -158,7 +165,7 @@ async def _build_location_weather(request: Request, key: str) -> dict[str, Any]:
             values = daily.get(name) or []
             return values[i] if i < len(values) else None
         # Date-only values are interpreted as local-midnight timestamps.
-        day_ms = _epoch_ms(str(date_value) + "T00:00:00+00:00") or now_ms
+        day_ms = _epoch_ms(str(date_value) + "T12:00:00+00:00") or now_ms
         sunrise = daily.get("sunrise") or []
         sunset = daily.get("sunset") or []
         daily_rows.append({
