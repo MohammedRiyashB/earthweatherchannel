@@ -307,6 +307,41 @@ function WeatherNewsPage({section,location}:{section:"World"|"Country"|"State"|"
  </main>;
 }
 
+function ForecastExperience({location}:{location:Place|null}){
+ const [data,setData]=useState<any>(null);
+ const [loading,setLoading]=useState(false);
+ const [error,setError]=useState("");
+ const [refresh,setRefresh]=useState(0);
+ useEffect(()=>{
+  if(!location)return;
+  let active=true;
+  setLoading(true);setError("");
+  fetch(API+"/api/forecast?latitude="+encodeURIComponent(location.lat)+"&longitude="+encodeURIComponent(location.lon)+"&days=7&timezone=auto",{cache:"no-store"})
+   .then(r=>{if(!r.ok)throw new Error("Forecast temporarily unavailable");return r.json()})
+   .then(payload=>{if(active)setData(payload)})
+   .catch(e=>{if(active)setError(e instanceof Error?e.message:"Forecast unavailable")})
+   .finally(()=>{if(active)setLoading(false)});
+  return()=>{active=false};
+ },[location?.lat,location?.lon,refresh]);
+ const hourly=data?.hourly||{};
+ const daily=data?.daily||{};
+ const hourCount=Math.min(12,Array.isArray(hourly.time)?hourly.time.length:0);
+ const dayCount=Math.min(7,Array.isArray(daily.time)?daily.time.length:0);
+ const hour=(i:number)=>new Date(hourly.time[i]).toLocaleTimeString([],{hour:"numeric"});
+ const day=(i:number)=>new Date(daily.time[i]+"T12:00:00").toLocaleDateString([],{weekday:"short",day:"numeric",month:"short"});
+ const number=(v:any)=>typeof v==="number"?Math.round(v):"—";
+ const provider=data?.source?.name||data?.source?.provider||"Forecast provider";
+ return <section className="wx-forecast-shell" aria-label="Weather forecast">
+  <div className="wx-forecast-heading"><div><span className="wx-kicker">PLAN AHEAD</span><h2>Forecast for {location?.name||"your location"}</h2><p>Hourly conditions and the next 7 days</p></div><button onClick={()=>setRefresh(v=>v+1)} disabled={loading}>↻ {loading?"Updating":"Refresh"}</button></div>
+  <div className="wx-forecast-source"><span className="wx-source-dot"/><span>{provider}</span><span>{data?.source?.cache_seconds? "· Cached forecast":""}</span><span className="wx-source-status">{data?"FORECAST DATA":"WAITING FOR DATA"}</span></div>
+  {loading&&!data&&<div className="wx-forecast-message">Loading forecast…</div>}
+  {error&&!data&&<div className="wx-forecast-message">{error}</div>}
+  {!location&&<div className="wx-forecast-message">Choose a location to view its forecast.</div>}
+  {data&&<><div className="wx-forecast-section" id="hourly-forecast"><div className="wx-subhead"><h3>Hourly forecast</h3><span>Next 12 hours</span></div><div className="wx-hourly-rail">{Array.from({length:hourCount},(_,i)=><article className="wx-hour" key={hourly.time[i]}><span>{i===0?"Now":hour(i)}</span><b>{icon(hourly.weather_code?.[i])}</b><strong>{number(hourly.temperature_2m?.[i])}°</strong><small>{hourly.precipitation_probability?.[i]!=null?number(hourly.precipitation_probability[i])+"% rain":"— rain"}</small><small>{hourly.wind_speed_10m?.[i]!=null?number(hourly.wind_speed_10m[i])+" km/h":"—"}</small></article>)}</div></div>
+  <div className="wx-forecast-section" id="ten-day-forecast"><div className="wx-subhead"><h3>7-day forecast</h3><span>Daily outlook</span></div><div className="wx-daily-list">{Array.from({length:dayCount},(_,i)=><article className="wx-day" key={daily.time[i]}><strong>{i===0?"Today":day(i)}</strong><b>{icon(daily.weather_code?.[i])}</b><span>{weatherLabel(daily.weather_code?.[i])}</span><small>Rain {daily.precipitation_sum?.[i]!=null?Number(daily.precipitation_sum[i]).toFixed(1)+" mm":"—"}</small><strong className="wx-day-temps">{number(daily.temperature_2m_max?.[i])}° <i>/</i> {number(daily.temperature_2m_min?.[i])}°</strong></article>)}</div></div></>}
+ </section>;
+}
+
 export default function App(){
  const [cities,setCities]=useState<Place[]>(()=>readCache<Place[]>("cities",CITIES.map(x=>({...x,loading:true}))));
  const [storms,setStorms]=useState<Storm[]>(()=>readCache<Storm[]>("storms",[]));
@@ -677,10 +712,11 @@ const [section,setSection]=useState("Weather Report");const page:"home"|SitePage
    </div>
   </div>}
   <header className="masthead"><div className="masthead-row"><div className="brand-lockup"><img className="brand-wordmark" src="/logo.png" alt="EARTH WEATHER" width="1200" height="220" /></div><div className="masthead-actions"><button className="header-location-search" type="button" aria-label="Search city or region" title="Search city or region" onClick={()=>{setQuery("");setLocationSearchResults([]);setLocationSearchError("");setLocationPickerOpen(true);}}><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.6"/><path d="m16 16 4.1 4.1"/></svg></button>{user?<button className="masthead-account-button" onClick={()=>void signOut(auth!)}>{user.displayName||"Account"}</button>:<button className="masthead-account-button" onClick={()=>void signIn()}>Sign in</button>}</div></div></header>
+  {page==="home"&&section==="Weather Report"&&<nav className="wx-quick-nav" aria-label="Weather sections"><button onClick={()=>document.getElementById("today-weather")?.scrollIntoView({behavior:"smooth"})}>Today</button><button onClick={()=>document.getElementById("hourly-forecast")?.scrollIntoView({behavior:"smooth"})}>Hourly</button><button onClick={()=>document.getElementById("ten-day-forecast")?.scrollIntoView({behavior:"smooth"})}>7 Day</button><button onClick={()=>setSection("Satellite imagery")}>Radar & Satellite</button><button onClick={()=>setSection("Country")}>News</button></nav>}
   <nav className="news-nav">{[{key:"Weather Report",label:"Weather Report"},...newsTabs,{key:"Satellite imagery",label:"Satellite Intelligence 2.0"},{key:"Satellite Report",label:"Satellite Report"}].map(item=><button className={section===item.key?"active":""} key={item.key} onClick={()=>setSection(item.key)}>{item.label}</button>)}</nav>
   {page==="home"?(section==="Satellite Report"?<SatelliteNumericalReport/>:section==="Satellite imagery"?<SatelliteDashboard/>:section!=="Weather Report"?<WeatherNewsPage section={section as "World"|"Country"|"State"|"Local"} location={visitorLocation}/>:<main className="news-main">
    {notice&&<div className="notice">{notice}</div>}
-   <div className="weather-dashboard-grid">
+   <div className="weather-dashboard-grid" id="today-weather">
    <section className="local-weather-card" aria-live="polite">
     <div className="local-weather-heading">
      <div><span className="eyebrow">{isSearchLocation ? "SELECTED CITY" : "WEATHER NEAR YOU"}</span><h2>{isSearchLocation && local ? `Weather in ${local.name}` : "Your current location"}</h2><p>{isSearchLocation ? "Showing weather for the city you searched" : "Automatically detected using your device location"}</p></div>
@@ -704,6 +740,8 @@ const [section,setSection]=useState("Weather Report");const page:"home"|SitePage
    </section>
    <SatelliteLivePreview onExplore={()=>setSection("Satellite imagery")}/>
    </div>
+
+   <ForecastExperience location={local}/>
 
    <section className="lead-grid" id="weather-briefing">
     <aside className="top-brief"><div className="section-heading"><h2>Weather briefing</h2><span>GLOBAL</span></div>{hottest&&<div className="brief-highlight"><small>WARMEST CITY IN THIS LIST · NOT YOUR LOCATION</small><b>{hottest.name}</b><strong>{Math.round(hottest.current?.temperature_2m??0)}°C</strong><span>{weatherLabel(hottest.current?.weather_code)}</span></div>}<div className="brief-line"><span>Active severe-storm events</span><b>{storms.length}</b></div><div className="brief-line"><span>Reporting locations</span><b>{active.length}/{cities.length}</b></div><div className="brief-line"><span>Auto refresh</span><b>Local 60s · Cities 5m</b></div><button className="refresh-button" onClick={()=>{if(visitorLocation)void refreshWeather(visitorLocation);else void refreshPopularCities();void refreshFeeds()}} disabled={busy}>{busy?"Refreshing…":"↻ Refresh live reports"}</button></aside>
