@@ -32,7 +32,7 @@ class PremiumWeatherActivity : Activity() {
             settings.allowContentAccess = false
             settings.javaScriptCanOpenWindowsAutomatically = false
             settings.setSupportMultipleWindows(false)
-            settings.geolocationEnabled = true
+            settings.setGeolocationEnabled(true)
             settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_NEVER_ALLOW
             webViewClient = object : WebViewClient() {
                 override fun onPageFinished(view: WebView?, url: String?) {
