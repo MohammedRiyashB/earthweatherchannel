@@ -252,18 +252,6 @@ export function WeatherChannelLayout({
           <span className="tracking-tight line-clamp-1 text-xxs mt-1 h-[13px] pb-0 font-semibold text-inherit transition-opacity duration-200 xl:mt-0 xl:h-auto xl:text-sm">{item.label}</span>
         </button>
       </li>)}
-      <li className="relative">
-        <button type="button" aria-expanded={moreOpen} onClick={() => setMoreOpen(v => !v)}
-          className={"group relative box-border flex h-14 w-full cursor-pointer flex-col items-center justify-center rounded-2xl px-3 font-semibold text-gray-900 xl:h-12 xl:flex-row xl:justify-start " + (moreOpen ? "bg-gray-100" : "hover:bg-gray-100")}>
-          <Icon name="more" className="inline-block h-6 w-6 shrink-0 xl:mr-3" />
-          <span className="mt-1 text-xxs font-semibold xl:mt-0 xl:text-sm">More</span>
-        </button>
-        {moreOpen && <div className="absolute left-full top-0 z-50 ml-2 flex min-w-52 flex-col rounded-2xl border border-gray-200 bg-white p-2 shadow-xl max-xl:left-0 max-xl:top-full max-xl:ml-0">
-          {moreItems.map(([key, title]) => <button key={key} type="button"
-            onClick={() => { onNavigate(key); setMoreOpen(false); setMobileOpen(false); }}
-            className={"rounded-xl px-3 py-2 text-left text-sm hover:bg-gray-100 " + (active === key ? "bg-gray-100 font-bold text-[#003399]" : "")}>{title}</button>)}
-        </div>}
-      </li>
     </ul>
   </nav>;
 
