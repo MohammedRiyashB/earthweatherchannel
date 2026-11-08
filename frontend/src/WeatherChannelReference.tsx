@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 
 const API = import.meta.env.VITE_API_BASE_URL || "https://earthweather-api.onrender.com";
 
@@ -250,7 +250,7 @@ function WeatherSprite({ code }: { code: unknown }) {
     backgroundSize: "1031.25% 1266.6667%",
     backgroundPosition: positions[kind],
     "--wx-sprite-set": 'image-set(url("/_next/static/immutable/media/weather-bg-sprite.2ol3vhh5gt8dk.webp") type("image/webp"), url("/_next/static/immutable/media/weather-bg-sprite.32wix_aaq3qmi.jpg") type("image/jpeg"))'
-  } as React.CSSProperties;
+  } as CSSProperties;
   return <div className="WeatherSprite-module__Z3SuQq__sprite absolute inset-0" style={style} aria-hidden="true"/>;
 }
 
@@ -513,11 +513,11 @@ export function WeatherChannelPage({ mode, location, cities, storms, onNavigate 
     <section className="flex flex-col @container/card text-card-foreground bg-card border-gray-500 rounded-2xl p-4"><h2 className="text-xl font-bold text-gray-900">Storm and event reports</h2>{storms.length?storms.map(storm=><article key={storm.id} className="mt-3 rounded-xl border border-gray-200 p-4"><strong>{storm.title}</strong><p className="mt-1 text-sm text-gray-600">{storm.description||"Curated event entry from NASA EONET."}</p>{storm.link&&<a className="mt-2 inline-block text-sm text-blue-700" href={storm.link} target="_blank" rel="noreferrer">Source ↗</a>}</article>):<p className="mt-4 rounded-xl bg-gray-100 p-4 text-sm text-gray-600">No open event entries are currently available.</p>}<p className="mt-3 text-xs text-gray-500">NASA EONET is a curated natural-event catalogue, not an official warning authority or complete cyclone tracker.</p></section>
   </>;
 
-  return <div className="w-full grid mx-auto gap-6 p-4 max-w-8xl [grid-template-columns:minmax(0,1fr)] [grid-template-areas:'contentTop'_'main'_'sidebar'_'contentBottom'] md:[grid-template-columns:minmax(0,1fr)_minmax(0,340px)] md:[grid-template-areas:'contentTop_contentTop'_'main_sidebar'_'contentBottom_contentBottom']">
+  return <div className={'w-full grid mx-auto gap-6 p-4 max-w-8xl [grid-template-columns:minmax(0,1fr)] [grid-template-areas:"contentTop"_"main"_"sidebar"_"contentBottom"] md:[grid-template-columns:minmax(0,1fr)_minmax(0,340px)] md:[grid-template-areas:"contentTop_contentTop"_"main_sidebar"_"contentBottom_contentBottom"]'}>
     <div className="min-w-0" style={{gridArea:"contentTop"}}>
       <div className="flex flex-col gap-12">
         <section aria-label="Advertisement" className="flex min-h-[120px] flex-col @container/card text-card-foreground border-0 bg-card region-contentTop adContainer disableHeliosStyles overflow-hidden pb-0 rounded-3xl">
-          <div className="flex min-h-[120px] flex-1 items-center justify-center bg-gray-100 md:min-h-[90px]"><span className="text-xxs w-full px-4 py-1 text-center leading-4 text-gray-400">Advertisement</span></div>
+          <div className="flex min-h-[250px] flex-1 items-center justify-center bg-gray-100"><span className="text-xxs w-full px-4 py-1 text-center leading-4 text-gray-400">Advertisement</span></div>
         </section>
       </div>
     </div>
