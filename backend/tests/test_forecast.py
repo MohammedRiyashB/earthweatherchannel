@@ -76,7 +76,7 @@ class ForecastAdapterTests(unittest.IsolatedAsyncioTestCase):
         class Client:
             def __init__(self):
                 self.requests = []
-            async def get(self, url, params, headers=None):
+            async def get(self, url, params, headers=None, **kwargs):
                 self.requests.append((url, params, headers))
                 return FakeResponse(met_payload if "api.met.no" in url else supplement_payload)
         client = Client()
