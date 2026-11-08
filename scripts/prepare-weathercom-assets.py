@@ -8,6 +8,7 @@ the app behaviour and brand.
 """
 from pathlib import Path
 from zipfile import BadZipFile, ZipFile
+import re
 
 ROOT = Path(__file__).resolve().parents[1]
 ARCHIVE = ROOT / "weathercom-reference.zip"
@@ -57,23 +58,51 @@ try:
                 selected["media/" + basename] = name
 
         extracted = 0
+        font_files = set()
+        font_url_pattern = re.compile(
+            r"url\\(\\s*['\"]?\\.\\./media/([^'\"\\s)]+\\.woff2)['\"]?\\s*\\)",
+            re.IGNORECASE,
+        )
+
         for relative, source_name in selected.items():
             target = DEST / relative
             target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_bytes(archive.read(source_name))
+            payload = archive.read(source_name)
+
+            # The reference capture contains CSS with Next.js-generated Inter font
+            # URLs, but not the WOFF2 binaries. Keep the original CSS and point those
+            # URLs at the same public immutable files on weather.com's CDN. The CDN
+            # advertises Access-Control-Allow-Origin: *, so browsers can load them.
+            if relative.startswith("chunks/") and relative.lower().endswith(".css"):
+                css_text = payload.decode("utf-8")
+
+                def use_public_font(match):
+                    filename = match.group(1)
+                    font_files.add(filename)
+                    return (
+                        'url("https://weather.com/_next/static/immutable/media/'
+                        + filename
+                        + '")'
+                    )
+
+                css_text = font_url_pattern.sub(use_public_font, css_text)
+                payload = css_text.encode("utf-8")
+
+            target.write_bytes(payload)
             extracted += 1
 
         if extracted < 5:
             raise SystemExit(
                 f"Only {extracted} CSS/font/sprite assets were extracted; expected at least five (three CSS bundles and two sprite images)."
             )
+        if not font_files:
+            raise SystemExit("No original Inter WOFF2 references were found in the captured CSS.")
 except BadZipFile as exc:
     raise SystemExit(f"The full UI reference is not a valid ZIP: {exc}") from exc
 
 font_count = sum(1 for relative in selected if relative.lower().endswith(".woff2"))
 print(
-    f"Extracted {extracted} original page CSS/font/sprite assets "
-    f"from {ARCHIVE.name}; brand logos and application JS are intentionally excluded."
+    f"Extracted {extracted} original page CSS/sprite assets from {ARCHIVE.name}; "
+    f"rewrote {len(font_files)} Inter WOFF2 references to the public Weather.com asset CDN. "
+    "Brand logos and application JavaScript are intentionally excluded."
 )
-if font_count == 0:
-    print("Reference archive contains no WOFF2 fonts; the page will use the CSS/system sans-serif fallback.")
