@@ -99,26 +99,7 @@ export function WeatherChannelLayout({
   const [moreOpen, setMoreOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
 
-  useEffect(() => {
-    const files = [
-      "/_next/static/immutable/chunks/0j_ujswapoou6.css",
-      "/_next/static/immutable/chunks/1pgkiin1bsra2.css",
-      "/_next/static/immutable/chunks/2m3bu3_zwznmt.css"
-    ];
-    const links = files.map((href, index) => {
-      const link = document.createElement("link");
-      link.rel = "stylesheet";
-      link.href = href;
-      link.dataset.weatherReference = String(index);
-      document.head.appendChild(link);
-      return link;
-    });
-    document.documentElement.classList.add("wx-reference-active");
-    return () => {
-      links.forEach(link => link.remove());
-      document.documentElement.classList.remove("wx-reference-active");
-    };
-  }, []);
+
 
   const navItems = [
     { key: "Weather Report", label: "Forecasts", icon: "forecast" as const },
@@ -246,10 +227,13 @@ function WeatherSprite({ code }: { code: unknown }) {
   const kind = code === 0 ? "clear" : typeof code === "number" && [61,63,65,66,67,80,81,82,95,96,99].includes(code) ? "rain"
     : typeof code === "number" && [71,73,75,77,85,86].includes(code) ? "snow"
     : typeof code === "number" && [45,48].includes(code) ? "fog" : "cloud";
+  const spriteSet = 'image-set(url("/_next/static/immutable/media/weather-bg-sprite.2ol3vhh5gt8dk.webp") type("image/webp"), url("/_next/static/immutable/media/weather-bg-sprite.32wix_aaq3qmi.jpg") type("image/jpeg"))';
   const style = {
+    backgroundImage: spriteSet,
+    backgroundRepeat: "no-repeat",
     backgroundSize: "1031.25% 1266.6667%",
     backgroundPosition: positions[kind],
-    "--wx-sprite-set": 'image-set(url("/_next/static/immutable/media/weather-bg-sprite.2ol3vhh5gt8dk.webp") type("image/webp"), url("/_next/static/immutable/media/weather-bg-sprite.32wix_aaq3qmi.jpg") type("image/jpeg"))'
+    "--wx-sprite-set": spriteSet
   } as CSSProperties;
   return <div className="WeatherSprite-module__Z3SuQq__sprite absolute inset-0" style={style} aria-hidden="true"/>;
 }
@@ -513,7 +497,7 @@ export function WeatherChannelPage({ mode, location, cities, storms, onNavigate 
     <section className="flex flex-col @container/card text-card-foreground bg-card border-gray-500 rounded-2xl p-4"><h2 className="text-xl font-bold text-gray-900">Storm and event reports</h2>{storms.length?storms.map(storm=><article key={storm.id} className="mt-3 rounded-xl border border-gray-200 p-4"><strong>{storm.title}</strong><p className="mt-1 text-sm text-gray-600">{storm.description||"Curated event entry from NASA EONET."}</p>{storm.link&&<a className="mt-2 inline-block text-sm text-blue-700" href={storm.link} target="_blank" rel="noreferrer">Source ↗</a>}</article>):<p className="mt-4 rounded-xl bg-gray-100 p-4 text-sm text-gray-600">No open event entries are currently available.</p>}<p className="mt-3 text-xs text-gray-500">NASA EONET is a curated natural-event catalogue, not an official warning authority or complete cyclone tracker.</p></section>
   </>;
 
-  return <div className={'w-full grid mx-auto gap-6 p-4 max-w-8xl [grid-template-columns:minmax(0,1fr)] [grid-template-areas:"contentTop"_"main"_"sidebar"_"contentBottom"] md:[grid-template-columns:minmax(0,1fr)_minmax(0,340px)] md:[grid-template-areas:"contentTop_contentTop"_"main_sidebar"_"contentBottom_contentBottom"]'}>
+  return <div className="wx-weather-content-grid w-full mx-auto gap-6 p-4">
     <div className="min-w-0" style={{gridArea:"contentTop"}}>
       <div className="flex flex-col gap-12">
         <section aria-label="Advertisement" className="flex min-h-[120px] flex-col @container/card text-card-foreground border-0 bg-card region-contentTop adContainer disableHeliosStyles overflow-hidden pb-0 rounded-3xl">

@@ -10,7 +10,7 @@ from pathlib import Path
 from zipfile import BadZipFile, ZipFile
 
 ROOT = Path(__file__).resolve().parents[1]
-ARCHIVE = ROOT / "WEATHER-COM-FRONTEND.zip"
+ARCHIVE = ROOT / "weathercom-reference.zip"
 DEST = ROOT / "frontend" / "public" / "_next" / "static" / "immutable"
 CSS_FILES = (
     "0j_ujswapoou6.css",
@@ -47,32 +47,33 @@ try:
             raise SystemExit("The three original CSS bundles do not share one immutable asset root.")
         prefix = prefixes.pop()
 
-        selected = list(css_paths.values())
-        selected.extend(
-            name for name in names
-            if name.startswith(prefix + "media/")
-            and (
-                name.lower().endswith(".woff2")
-                or Path(name).name.startswith(SPRITE_PREFIX)
-            )
-        )
+        selected = { "chunks/" + filename: path for filename, path in css_paths.items() }
+
+        # CSS uses ../media/<font> URLs, so place every captured WOFF2 file at
+        # the common immutable media path regardless of the capture's source folder.
+        for name in names:
+            basename = Path(name).name
+            if name.lower().endswith(".woff2") or basename.startswith(SPRITE_PREFIX):
+                selected["media/" + basename] = name
 
         extracted = 0
-        for name in selected:
-            relative = name[len(prefix):]
+        for relative, source_name in selected.items():
             target = DEST / relative
             target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_bytes(archive.read(name))
+            target.write_bytes(archive.read(source_name))
             extracted += 1
 
-        if extracted < 12:
+        if extracted < 5:
             raise SystemExit(
-                f"Only {extracted} CSS/font/sprite assets were extracted; expected at least 12."
+                f"Only {extracted} CSS/font/sprite assets were extracted; expected at least five (three CSS bundles and two sprite images)."
             )
 except BadZipFile as exc:
     raise SystemExit(f"The full UI reference is not a valid ZIP: {exc}") from exc
 
+font_count = sum(1 for relative in selected if relative.lower().endswith(".woff2"))
 print(
     f"Extracted {extracted} original page CSS/font/sprite assets "
     f"from {ARCHIVE.name}; brand logos and application JS are intentionally excluded."
 )
+if font_count == 0:
+    print("Reference archive contains no WOFF2 fonts; the page will use the CSS/system sans-serif fallback.")

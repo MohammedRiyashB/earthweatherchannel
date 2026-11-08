@@ -679,7 +679,7 @@ const [section,setSection]=useState("Weather Report");const page:"home"|SitePage
  const stateTab=visitorLocation?.state||"State";
  const localTab=visitorLocation?.name?(visitorLocation?.district?`${visitorLocation.name} · ${visitorLocation.district}`:visitorLocation.name):(visitorLocation?.district||"Local");
  const newsTabs=[{key:"World",label:"World"},{key:"Country",label:countryTab},{key:"State",label:stateTab},{key:"Local",label:localTab}];
- return <div className="news-site">
+ return <div className={page==="home"?"weathercom-site earth-weather-site":"news-site"}>
   {locationPickerOpen&&<div className="location-picker-overlay" role="dialog" aria-modal="true" aria-label="Search weather locations">
    <div className="location-picker-shell">
     <form className="location-picker-search" onSubmit={event=>{event.preventDefault();void search();}}>
