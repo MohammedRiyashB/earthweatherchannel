@@ -378,9 +378,9 @@ export function WeatherChannelPage({ mode, location, cities, storms, onNavigate 
   const [radarLoading, setRadarLoading] = useState(false);
   const [radarError, setRadarError] = useState("");
   const [frameIndex, setFrameIndex] = useState(0);
-  const [playing, setPlaying] = useState(false);
+  const [playing, setPlaying] = useState(true);
   const [refresh, setRefresh] = useState(0);
-  const [zoom, setZoom] = useState(5);
+  const [zoom] = useState(7);
 
   useEffect(() => {
     if (!location) { setForecast(null); setForecastError("Choose a location to load the forecast."); return; }
@@ -432,7 +432,7 @@ export function WeatherChannelPage({ mode, location, cities, storms, onNavigate 
         const response = await fetch(API + "/api/radar", { cache: "no-store" });
         if (!response.ok) throw new Error("Radar service returned " + response.status);
         const payload = await response.json() as Radar;
-        if (active) { setRadar(payload); setFrameIndex(Math.max(0, (payload.frames?.length || 1) - 1)); setRadarError(""); }
+        if (active) { setRadar(payload); setFrameIndex(Math.max(0, (payload.frames?.length || 1) - 1)); setPlaying(true); setRadarError(""); }
       } catch (error) { if (active) setRadarError(error instanceof Error ? error.message : "Radar unavailable"); }
       finally { if (active) setRadarLoading(false); }
     };
@@ -620,8 +620,11 @@ export function WeatherChannelPage({ mode, location, cities, storms, onNavigate 
     {!airLoading&&!airError&&aqi==null&&<p className="text-sm text-gray-500">Air-quality data unavailable for this location.</p>}
   </section>;
 
+  const radarFrameTime = frame?.time
+    ? new Date(frame.time * 1000).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit", hour12: true })
+    : "Updating";
   const radarSection = <section className="flex flex-col @container/card text-card-foreground bg-card border-gray-500 @container/dynamicMap rounded-2xl p-4" aria-label="Radar">
-    <div className="flex items-center justify-between gap-3"><h2 className="text-xl leading-normal tracking-tight text-gray-900 mb-2 font-black">Radar</h2><button type="button" onClick={()=>onNavigate("Radar")} className="text-sm font-semibold text-[#003399]">Open Radar</button></div>
+    <h2 className="text-xl leading-normal tracking-tight text-gray-900 mb-2 font-black">Radar</h2>
     <div className="relative h-80 overflow-hidden rounded-2xl bg-gray-100">
       {radarLoading&&!radar&&<div className="absolute inset-0 grid place-items-center text-sm text-gray-500">Loading radar…</div>}
       {radarError&&!radar&&<div className="absolute inset-0 grid place-items-center p-4 text-sm text-gray-500">{radarError}</div>}
@@ -633,9 +636,9 @@ export function WeatherChannelPage({ mode, location, cities, storms, onNavigate 
         <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white px-3 py-1 text-xs font-bold shadow">⌖ {location.name}</span>
       </div>}
       {(!radar||!frame||!location)&&!radarLoading&&!radarError&&<div className="absolute inset-0 grid place-items-center text-sm text-gray-500">Radar coverage unavailable.</div>}
+      <span className="absolute left-3 top-3 rounded-lg bg-gray-900/75 px-3 py-2 text-xs font-semibold text-white shadow">{radarFrameTime}</span>
+      <span className="absolute bottom-2 right-2 rounded bg-white/90 px-2 py-1 text-[10px] font-medium text-gray-700">© OpenStreetMap</span>
     </div>
-    <div className="mt-3 flex items-center gap-3"><button type="button" className="rounded-xl bg-gray-900 px-3 py-2 text-sm font-semibold text-white" onClick={()=>setPlaying(v=>!v)}>{playing?"Pause":"Play"}</button><input className="min-w-0 flex-1" type="range" min="0" max={Math.max(0,frames.length-1)} value={Math.max(0,frameIndex)} aria-label="Radar timeline" onChange={e=>{setPlaying(false);setFrameIndex(Number(e.target.value));}}/><button type="button" onClick={()=>setZoom(v=>Math.min(7,v+1))} className="rounded border border-gray-300 px-3 py-2">+</button><button type="button" onClick={()=>setZoom(v=>Math.max(3,v-1))} className="rounded border border-gray-300 px-3 py-2">−</button></div>
-    <p className="mt-2 text-xs text-gray-500">Recent RainViewer radar frames · Map data © OpenStreetMap. Historical frames only; no live nowcast is implied.</p>
   </section>;
 
   const worldCities = <section className="flex flex-col @container/card text-card-foreground bg-card border-gray-500 rounded-2xl p-4">
