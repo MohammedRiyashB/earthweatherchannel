@@ -12,7 +12,7 @@ android {
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.earthweather.mobile"
+        applicationId = "com.bmrinc.earthweather"
         minSdk = 26
         targetSdk = 35
         versionCode = 1
