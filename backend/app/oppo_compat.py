@@ -224,7 +224,7 @@ async def earth_weather_legacy_weather_data(request: Request) -> dict[str, Any]:
         body = await request.json()
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid JSON request")
-    location_value = body.get("locationKey") or ""
+    location_value = body.get("locationKey") or body.get("cityId") or ""
     if isinstance(location_value, list):
         keys = [str(x) for x in location_value if x]
     elif isinstance(location_value, str):
