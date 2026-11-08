@@ -17,6 +17,7 @@ from contextlib import asynccontextmanager
 import httpx
 from fastapi import FastAPI, HTTPException, Query, Response
 from fastapi.middleware.cors import CORSMiddleware
+from app.forecast import ForecastUnavailable, fetch_forecast
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -44,7 +45,7 @@ app = FastAPI(
 )
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Set CORS_ORIGINS to comma-separated production origins.
+    allow_origins=[origin.strip() for origin in os.getenv("CORS_ORIGINS", "https://earthweatherchannel.web.app,https://earthweatherchannel.firebaseapp.com,http://localhost:5173").split(",") if origin.strip()],
     allow_credentials=False,
     allow_methods=["GET"],
     allow_headers=["*"],
@@ -680,6 +681,32 @@ async def weather(
     except (httpx.HTTPError, ValueError, TypeError) as exc:
         logger.exception("Current weather request failed")
         raise HTTPException(status_code=502, detail=f"Weather provider unavailable: {exc.__class__.__name__}") from exc
+
+
+@app.get("/api/forecast")
+async def forecast(
+    response: Response,
+    latitude: float = Query(..., ge=-90, le=90),
+    longitude: float = Query(..., ge=-180, le=180),
+    days: int = Query(7, ge=1, le=7),
+    timezone_name: str = Query("auto", alias="timezone", min_length=1, max_length=64),
+) -> dict[str, Any]:
+    """Return validated current, hourly and daily forecast with provider provenance."""
+    response.headers["Cache-Control"] = "public, max-age=0, s-maxage=300, stale-while-revalidate=60"
+    try:
+        return await fetch_forecast(
+            app.state.weather_http,
+            latitude=latitude,
+            longitude=longitude,
+            days=days,
+            timezone_name=timezone_name,
+        )
+    except ForecastUnavailable as exc:
+        logger.warning("Forecast providers unavailable for %.4f, %.4f: %s", latitude, longitude, exc)
+        raise HTTPException(
+            status_code=503,
+            detail={"message": "Forecast data is temporarily unavailable", "provider_errors": str(exc)},
+        ) from exc
 
 
 # Public Nominatim reverse-geocoding: one request at a time, cached by nearby coordinates.
