@@ -600,9 +600,9 @@ export function WeatherChannelPage({ mode, location, cities, storms, onNavigate 
     : mode==="Allergy" ? (location?.name||"Local")+" Allergy Forecast" : "Storm Reports";
 
   const main = mode==="Weather Report" ? <>
-    <div className="flex flex-col gap-2 mb-4">
-      <div className="flex min-h-7 items-center"><h1 className="text-2xl leading-normal tracking-tight font-extrabold text-gray-900 max-md:text-xl max-md:font-bold">{pageTitle}</h1></div>
-      <div className="flex flex-wrap items-center gap-1"><h2 className="text-sm leading-loose tracking-tight font-medium text-gray-900">{location?.region||"Your location"}</h2><p className="text-sm leading-loose tracking-tight font-medium text-gray-500">·</p><span className="text-sm text-gray-500">{forecast?.source?.name||"Local forecast"}</span></div>
+    <div className="flex flex-col gap-1 mb-3">
+      <div className="flex min-h-0 items-center"><h1 className="text-2xl leading-tight tracking-tight font-extrabold text-gray-900 max-md:text-xl max-md:font-bold">{pageTitle}</h1></div>
+      <div className="flex flex-wrap items-center gap-1"><h2 className="text-sm leading-snug tracking-tight font-medium text-gray-900">{location?.region||"Your location"}</h2></div>
     </div>
     <div className="flex flex-col gap-12">{currentCard}{hourlySection}{currentDetails}{dailySection}{radarSection}</div>
     <p className="mt-4 text-xs leading-relaxed text-gray-500">Forecasts are numerical weather-model guidance, not measurements from a local weather station or direct satellite observations. Source: {provider}.</p>
