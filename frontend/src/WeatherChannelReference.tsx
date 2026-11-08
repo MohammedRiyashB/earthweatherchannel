@@ -176,10 +176,10 @@ export function WeatherChannelLayout({
               </span>
               <div className="flex items-center md:hidden">
                 <button type="button" className="flex items-center md:hidden" onClick={() => onNavigate("Weather Report")} aria-label="EARTH WEATHER home">
-                  <img src="/logo.png" alt="EARTH WEATHER" className="h-9 w-auto max-w-[126px] object-contain" />
+                  <img src="/logo.png" alt="EARTH WEATHER" className="wx-mobile-brand-logo object-contain" />
                 </button>
               </div>
-              <div className="relative max-md:mr-auto">
+              <div className="relative hidden md:block">
                 <div className="rounded-4xl bg-white md:p-1 md:shadow-[0_4px_16px_0_rgba(0,0,0,0.08),_0_0_32px_0_rgba(0,0,0,0.12)]">
                   <button type="button" onClick={onSearchLocation} aria-label="Search weather location"
                     className="inline-flex h-10 max-w-[190px] cursor-pointer items-center justify-center gap-2 rounded-3xl bg-[#252422] px-3 py-0 text-sm font-bold text-white transition-colors hover:bg-[#3A3938] active:bg-[#0C0B0B] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 md:h-12 md:max-w-[240px] md:bg-gray-100 md:text-gray-900 md:hover:bg-gray-200 md:px-4">
@@ -202,12 +202,14 @@ export function WeatherChannelLayout({
           </div>
         </header>
 
-        <div className="z-40 sticky top-2 mb-6 block px-3 md:hidden">
-          <div className="relative overflow-hidden rounded-3xl bg-white p-1 shadow-[0_4px_16px_0_rgba(0,0,0,0.08),_0_0_32px_0_rgba(0,0,0,0.12)]">
-            <div className="scrollbar-hide flex h-10 items-center gap-1 overflow-x-auto">
-              {(["Weather Report", "Hourly", "10 Day"] as const).map((key, index) => <button key={key} type="button" onClick={() => onNavigate(key)}
-                className={"inline-flex h-full shrink-0 items-center rounded-3xl px-4 text-sm font-bold whitespace-nowrap transition-colors hover:bg-gray-100 " + (active === key ? "text-[#003399]" : "text-gray-900")}>{["Today", "Hourly", "10 Day"][index]}</button>)}
-            </div>
+        <div className="wx-mobile-location-sticky md:hidden" data-testid="mobile-sticky-location">
+          <div className="wx-mobile-location-surface">
+            <button type="button" onClick={onSearchLocation} aria-label="Search weather location"
+              className="wx-mobile-location-button">
+              <Icon name="pin" className="size-5 shrink-0"/>
+              <span className="min-w-0 truncate">{location?.name || "Choose location"}</span>
+              <Icon name="chevron" className="size-4 shrink-0"/>
+            </button>
           </div>
         </div>
 
