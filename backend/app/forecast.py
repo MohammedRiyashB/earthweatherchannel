@@ -7,7 +7,7 @@ as satellite observations.
 """
 from __future__ import annotations
 
-from collections import defaultdict
+from collections import OrderedDict, defaultdict
 from copy import deepcopy
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
@@ -23,8 +23,9 @@ import httpx
 
 OPEN_METEO_URL = "https://api.open-meteo.com/v1/forecast"
 METNORWAY_USER_AGENT = os.getenv("METNORWAY_USER_AGENT", "EARTH-WEATHER/1.0 (+https://earthweatherchannel.web.app)")
-_FORECAST_CACHE: dict[tuple[float, float, int, str], tuple[float, dict[str, Any]]] = {}
+_FORECAST_CACHE: OrderedDict[tuple[float, float, int, str], tuple[float, dict[str, Any]]] = OrderedDict()
 _FORECAST_CACHE_LOCK = asyncio.Lock()
+_FORECAST_CACHE_MAX_ENTRIES = 512
 _METNORWAY_MIN_CACHE_SECONDS = 3 * 60 * 60
 METNORWAY_URL = "https://api.met.no/weatherapi/locationforecast/2.0/complete"
 
@@ -407,8 +408,13 @@ async def fetch_forecast(
     # decimals also prevents a moving GPS fix from defeating the cache.
     cache_key = (round(latitude, 2), round(longitude, 2), days, timezone_name)
     async with _FORECAST_CACHE_LOCK:
+        now = time.monotonic()
+        for old_key, (expires_at, _) in list(_FORECAST_CACHE.items()):
+            if expires_at <= now:
+                _FORECAST_CACHE.pop(old_key, None)
         cached = _FORECAST_CACHE.get(cache_key)
-        if cached and cached[0] > time.monotonic():
+        if cached and cached[0] > now:
+            _FORECAST_CACHE.move_to_end(cache_key)
             return deepcopy(cached[1])
 
     errors: list[str] = []
@@ -417,6 +423,7 @@ async def fetch_forecast(
             METNORWAY_URL,
             params={"lat": cache_key[0], "lon": cache_key[1]},
             headers={"User-Agent": METNORWAY_USER_AGENT, "Accept": "application/json"},
+            timeout=15.0,
         )
         response.raise_for_status()
         payload = response.json()
@@ -437,6 +444,9 @@ async def fetch_forecast(
         forecast["source"]["last_modified"] = headers.get("last-modified")
         async with _FORECAST_CACHE_LOCK:
             _FORECAST_CACHE[cache_key] = (time.monotonic() + ttl, deepcopy(forecast))
+            _FORECAST_CACHE.move_to_end(cache_key)
+            while len(_FORECAST_CACHE) > _FORECAST_CACHE_MAX_ENTRIES:
+                _FORECAST_CACHE.popitem(last=False)
         return forecast
     except (httpx.HTTPError, ValueError, TypeError, KeyError) as exc:
         errors.append(f"metnorway:{exc.__class__.__name__}")
@@ -454,7 +464,7 @@ async def fetch_forecast(
         "precipitation_unit": "mm",
     }
     try:
-        response = await client.get(OPEN_METEO_URL, params=params)
+        response = await client.get(OPEN_METEO_URL, params=params, timeout=12.0)
         response.raise_for_status()
         payload = response.json()
         if not isinstance(payload, dict):
@@ -487,6 +497,9 @@ async def fetch_forecast(
         payload["fallback_reason"] = errors[0]
         async with _FORECAST_CACHE_LOCK:
             _FORECAST_CACHE[cache_key] = (time.monotonic() + 10 * 60, deepcopy(payload))
+            _FORECAST_CACHE.move_to_end(cache_key)
+            while len(_FORECAST_CACHE) > _FORECAST_CACHE_MAX_ENTRIES:
+                _FORECAST_CACHE.popitem(last=False)
         return payload
     except (httpx.HTTPError, ValueError, TypeError, KeyError) as exc:
         errors.append(f"open-meteo:{exc.__class__.__name__}")
