@@ -154,7 +154,7 @@ jobs:
                   if any(x in lower for x in ("privacy", "policy", "opush")):
                       return "https://earthweatherchannel.web.app/privacy-policy"
                   return "https://earthweatherchannel.web.app/"
-              pattern = re.compile(r"https?://(?:[A-Za-z0-9-]+\\.)*(?:oppo|oplus|heytap|oneplus|realme)\\.(?:com|cn)(?:/[^\\s\\"'<>]*)?", re.I)
+              pattern = re.compile(r"https?://(?:[A-Za-z0-9-]+\.)*(?:oppo|oplus|heytap|oneplus|realme)\.(?:com|cn)(?:/[^\s\"'<>]*)?", re.I)
               return pattern.sub(_map, value)
 
           def clean_visible_text(value):
@@ -178,8 +178,8 @@ jobs:
               ]
               for old_text, new_text in replacements:
                   value = value.replace(old_text, new_text)
-              value = re.sub(r"(?i)\\bOPPO\\b", "EARTH WEATHER", value)
-              value = re.sub(r"(?i)\\bOppo\\b", "Earth Weather", value)
+              value = re.sub(r"(?i)\bOPPO\b", "EARTH WEATHER", value)
+              value = re.sub(r"(?i)\bOppo\b", "Earth Weather", value)
               return value
 
           # Make the built-in legal hyperlinks point to the published BMR INC. pages.
@@ -288,7 +288,7 @@ jobs:
 
           # Fail if OEM branding or vendor legal links remain in user-visible text nodes.
           visible_hits = []
-          forbidden = re.compile(r"(?i)Guangdong OPPO|\\bOPPO\\b|\\bColorOS\\b|\\bHeyTap\\b|\\bOPlus\\b|https?://[^\\s\\"'<>]*(?:oppo|oplus|heytap|oneplus|realme)\\.(?:com|cn)")
+          forbidden = re.compile(r"(?i)Guangdong OPPO|\bOPPO\b|\bColorOS\b|\bHeyTap\b|\bOPlus\b|https?://[^\s\"'<>]*(?:oppo|oplus|heytap|oneplus|realme)\.(?:com|cn)")
           for p in values_dir.glob("values*/strings.xml"):
               tree = ET.parse(p)
               for node in tree.iter():
