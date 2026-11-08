@@ -73,7 +73,7 @@ def replace_text_file(path: Path) -> int:
         original = path.read_text(encoding="utf-8")
     except (UnicodeDecodeError, OSError):
         return 0
-    updated = original
+    updated = original.replace("@font/oplus_sans3_nogx", "sans-serif")
     for old, new in PACKAGE_REPLACEMENTS:
         updated = updated.replace(old, new)
     updated = updated.replace("oplus_sans3_nogx", "sans-serif")
