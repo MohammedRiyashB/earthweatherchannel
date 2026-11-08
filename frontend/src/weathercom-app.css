@@ -1,0 +1,19 @@
+/* Original captured Weather.com CSS and assets are loaded from the extracted public files. */
+@import url("/_next/static/immutable/chunks/0j_ujswapoou6.css");
+@import url("/_next/static/immutable/chunks/1pgkiin1bsra2.css");
+@import url("/_next/static/immutable/chunks/2m3bu3_zwznmt.css");
+
+.weathercom-site{min-height:100vh;background:#fff!important;color:#171717!important;font-family:Inter,Inter Fallback,Arial,sans-serif!important}
+.weathercom-site .news-site,.weathercom-site .news-main{background:#fff!important;color:#171717!important}
+.weathercom-site .news-footer{background:#fff!important;color:#171717!important;border-top:1px solid #e5e7eb;padding:36px max(16px,calc((100% - 1180px)/2)) 24px!important}
+.weathercom-site .footer-brand,.weathercom-site .footer-group h3,.weathercom-site .footer-group a,.weathercom-site .footer-copyright,.weathercom-site .footer-copyright strong{color:#222!important}
+.weathercom-site .footer-brand span,.weathercom-site .footer-copyright{color:#666!important}
+.weathercom-site .footer-navigation{border-color:#e5e7eb!important}
+.weathercom-site .footer-group a:hover{color:#003399!important}
+.weathercom-site button:focus-visible,.weathercom-site a:focus-visible{outline:2px solid #003399;outline-offset:3px}
+.weathercom-site .location-picker-overlay{z-index:200}
+.weathercom-site .info-page{min-height:60vh}
+.weathercom-site .weather-news-page,.weathercom-site .satellite-page,.weathercom-site .satellite-report-page{max-width:1180px;margin:0 auto;padding:24px 16px 52px;background:#fff;color:#171717}
+.weathercom-site .news-toolbar h1,.weathercom-site .news-toolbar p,.weathercom-site .news-toolbar .eyebrow{color:#202020}
+.weathercom-site .footer-logo{max-width:170px;height:auto}
+@media(max-width:767px){.weathercom-site .news-footer{padding:26px 14px!important}.weathercom-site .weather-news-page,.weathercom-site .satellite-page,.weathercom-site .satellite-report-page{padding:16px 12px 38px}}

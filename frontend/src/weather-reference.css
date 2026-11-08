@@ -1,0 +1,26 @@
+/* EARTH WEATHER uses the captured page geometry but keeps its own site identity. */
+.earth-weather-site { min-height: 100vh; background: #fff; color: #252422; }
+.earth-weather-site .news-footer { background: #fff !important; color: #252422 !important; border-top: 1px solid #e5e7eb; padding-inline: 24px !important; }
+.earth-weather-site .footer-brand,
+.earth-weather-site .footer-group h3,
+.earth-weather-site .footer-group a,
+.earth-weather-site .footer-copyright,
+.earth-weather-site .footer-copyright strong { color: #252422 !important; }
+.earth-weather-site .footer-brand span,
+.earth-weather-site .footer-copyright { color: #747b82 !important; }
+.earth-weather-site .footer-navigation { border-color: #e5e7eb !important; }
+.earth-weather-site .footer-group a:hover { color: #003399 !important; }
+.wx-icon-weather { display:inline-flex; align-items:center; justify-content:center; line-height:1; color:currentColor; }
+.wx-mobile-menu-overlay { position:fixed; inset:0; z-index:1000; background:rgba(0,0,0,.35); }
+.wx-mobile-drawer { position:absolute; left:0; top:0; bottom:0; width:min(300px,85vw); overflow-y:auto; background:#fff; box-shadow:0 10px 40px rgba(0,0,0,.18); }
+.wx-drawer-close { position:absolute; z-index:2; right:12px; top:8px; width:40px; height:40px; border-radius:999px; background:#f2f3f4; color:#252422; font-size:28px; line-height:1; }
+.wx-mobile-drawer nav { padding-top:36px; }
+.wx-mobile-drawer nav > div:first-child { justify-content:flex-start; padding-left:20px; padding-right:60px; }
+.wx-mobile-drawer nav ul button { flex-direction:row; justify-content:flex-start; height:48px; }
+.wx-mobile-drawer nav ul button .wx-side-label { margin-left:12px; font-size:14px; }
+.wx-mobile-drawer nav ul button .wx-side-icon { margin-right:0; }
+.earth-weather-site .wx-weather-site { background:#fff; }
+@media (min-width:768px) {
+  .earth-weather-site footer.news-footer { margin-left:0; }
+}
+body:has(.earth-weather-site) { background:#fff !important; }
