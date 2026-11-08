@@ -29,12 +29,12 @@ _METNORWAY_MIN_CACHE_SECONDS = 3 * 60 * 60
 METNORWAY_URL = "https://api.met.no/weatherapi/locationforecast/2.0/complete"
 
 CURRENT_FIELDS = (
-    "temperature_2m,relative_humidity_2m,dew_point_2m,apparent_temperature,is_day,uv_index,"
+    "temperature_2m,relative_humidity_2m,apparent_temperature,is_day,"
     "precipitation,rain,showers,snowfall,weather_code,cloud_cover,pressure_msl,"
     "wind_speed_10m,wind_direction_10m,wind_gusts_10m"
 )
 HOURLY_FIELDS = (
-    "temperature_2m,relative_humidity_2m,apparent_temperature,"
+    "temperature_2m,relative_humidity_2m,dew_point_2m,apparent_temperature,"
     "precipitation_probability,precipitation,rain,showers,snowfall,weather_code,"
     "cloud_cover,wind_speed_10m,wind_direction_10m,wind_gusts_10m,uv_index,visibility"
 )
@@ -116,8 +116,8 @@ async def _supplement_met_forecast_details(
     params = {
         "latitude": latitude,
         "longitude": longitude,
-        "current": "dew_point_2m,uv_index,pressure_msl",
-        "hourly": "uv_index,visibility",
+        "current": "pressure_msl",
+        "hourly": "dew_point_2m,uv_index,visibility",
         "daily": "sunrise,sunset,uv_index_max",
         "forecast_days": days,
         "timezone": timezone_name,
@@ -131,7 +131,7 @@ async def _supplement_met_forecast_details(
 
         supplemental_current = payload.get("current") or {}
         current = forecast.setdefault("current", {})
-        for key in ("dew_point_2m", "uv_index", "pressure_msl"):
+        for key in ("pressure_msl",):
             value = supplemental_current.get(key)
             if _is_number(value) and (key != "pressure_msl" or not _is_number(current.get(key))):
                 current[key] = value
@@ -159,7 +159,7 @@ async def _supplement_met_forecast_details(
 
         hourly = forecast.setdefault("hourly", {})
         met_times = hourly.get("time") or []
-        for key in ("uv_index", "visibility"):
+        for key in ("dew_point_2m", "uv_index", "visibility"):
             source_values = supplemental_hourly.get(key) or []
             aligned: list[Any] = []
             for raw_time in met_times:
@@ -184,6 +184,10 @@ async def _supplement_met_forecast_details(
                     aligned.append(None)
             if aligned and any(_is_number(value) for value in aligned):
                 hourly[key] = aligned
+                if key in ("dew_point_2m", "uv_index") and not _is_number(current.get(key)):
+                    current_value = next((value for value in aligned if _is_number(value)), None)
+                    if current_value is not None:
+                        current[key] = current_value
 
         supplemental_daily = payload.get("daily") or {}
         source_dates = supplemental_daily.get("time") or []
