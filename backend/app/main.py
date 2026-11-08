@@ -1055,8 +1055,10 @@ async def _assert_public_article_host(url: str) -> None:
         raise HTTPException(status_code=403, detail="Private or non-public article hosts are not allowed")
 
 
-_WEATHER_RSS_CACHE: dict[str, tuple[float, float, list[dict[str, Any]]]] = {}
+_WEATHER_RSS_CACHE: OrderedDict[str, tuple[float, float, list[dict[str, Any]]]] = OrderedDict()
 _WEATHER_RSS_LOCK = asyncio.Lock()
+_WEATHER_RSS_FEED_LOCKS: dict[str, asyncio.Lock] = {}
+_WEATHER_RSS_MAX_ENTRIES = 96
 NDMA_RSS_BASE = "https://sachet.ndma.gov.in/cap_public_website/rss/"
 NDMA_STATE_FEEDS = {
     "andaman and nicobar islands":"rss_andaman.xml", "andaman":"rss_andaman.xml",
@@ -1131,24 +1133,39 @@ def _rss_item_to_story(item: ET.Element, source_name: str) -> dict[str, Any]:
 
 
 async def _fetch_weather_rss(url: str, source_name: str) -> list[dict[str, Any]]:
-    """Fetch and cache an official RSS feed; handles known namespace quirks in NASA's feed."""
+    """Fetch an RSS feed with per-feed request coalescing and a bounded stale cache."""
     async with _WEATHER_RSS_LOCK:
+        feed_lock = _WEATHER_RSS_FEED_LOCKS.setdefault(url, asyncio.Lock())
         now = asyncio.get_running_loop().time()
         cached = _WEATHER_RSS_CACHE.get(url)
         if cached and cached[0] > now:
-            return cached[2]
+            _WEATHER_RSS_CACHE.move_to_end(url)
+            return list(cached[2])
+
+    # Only requests for the same feed wait on one another. NASA, NOAA and regional
+    # NDMA feeds can therefore be refreshed concurrently without duplicating a feed fetch.
+    async with feed_lock:
+        async with _WEATHER_RSS_LOCK:
+            now = asyncio.get_running_loop().time()
+            cached = _WEATHER_RSS_CACHE.get(url)
+            if cached and cached[0] > now:
+                _WEATHER_RSS_CACHE.move_to_end(url)
+                return list(cached[2])
         try:
-            async with httpx.AsyncClient(timeout=15.0, follow_redirects=True, headers={
-                "User-Agent": "EARTH-WEATHER/1.0 (+https://earthweatherchannel.web.app)",
-                "Accept": "application/rss+xml, application/xml, text/xml;q=0.9, */*;q=0.5",
-            }) as client:
-                response = await client.get(url)
-                response.raise_for_status()
-                content = response.text
+            response = await app.state.weather_http.get(
+                url,
+                headers={
+                    "User-Agent": "EARTH-WEATHER/1.0 (+https://earthweatherchannel.web.app)",
+                    "Accept": "application/rss+xml, application/xml, text/xml;q=0.9, */*;q=0.5",
+                },
+                timeout=15.0,
+            )
+            response.raise_for_status()
+            content = response.text
             # NASA's current RSS has a missing whitespace between these two namespace attributes.
             content = content.replace('xmlns:apod="https://science.nasa.gov/apod/"xmlns:media=', 'xmlns:apod="https://science.nasa.gov/apod/" xmlns:media=')
             # Repair bare ampersands from legacy RSS descriptions, preserving valid entities.
-            content = re.sub(r"&(?!#\d+;|#x[0-9a-fA-F]+;|amp;|lt;|gt;|apos;|quot;)", "&amp;", content)
+            content = re.sub(r"&(?!#\\d+;|#x[0-9a-fA-F]+;|amp;|lt;|gt;|apos;|quot;)", "&amp;", content)
             root = ET.fromstring(content)
             items = [node for node in root.iter() if _xml_local(node) in {"item", "entry"}]
             stories: list[dict[str, Any]] = []
@@ -1163,15 +1180,20 @@ async def _fetch_weather_rss(url: str, source_name: str) -> list[dict[str, Any]]
                     if urlparse(story["image"]).scheme not in {"http", "https"}:
                         story["image"] = None
                 stories.append(story)
-            _WEATHER_RSS_CACHE[url] = (now + 5 * 60, now + 30 * 60, stories)
-            if len(_WEATHER_RSS_CACHE) > 80:
+            now = asyncio.get_running_loop().time()
+            async with _WEATHER_RSS_LOCK:
+                _WEATHER_RSS_CACHE[url] = (now + 5 * 60, now + 30 * 60, stories)
+                _WEATHER_RSS_CACHE.move_to_end(url)
                 for old_url, value in list(_WEATHER_RSS_CACHE.items()):
-                    if value[1] < now or len(_WEATHER_RSS_CACHE) > 80:
+                    if value[1] <= now:
                         _WEATHER_RSS_CACHE.pop(old_url, None)
-            return stories
+                while len(_WEATHER_RSS_CACHE) > _WEATHER_RSS_MAX_ENTRIES:
+                    _WEATHER_RSS_CACHE.popitem(last=False)
+            return list(stories)
         except (httpx.HTTPError, ET.ParseError, ValueError):
-            if cached and cached[1] > asyncio.get_running_loop().time():
-                return cached[2]
+            now = asyncio.get_running_loop().time()
+            if cached and cached[1] > now:
+                return list(cached[2])
             raise
 
 
