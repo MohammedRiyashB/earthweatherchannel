@@ -380,7 +380,7 @@ export function WeatherChannelPage({ mode, location, cities, storms, onNavigate 
   const [frameIndex, setFrameIndex] = useState(0);
   const [playing, setPlaying] = useState(true);
   const [refresh, setRefresh] = useState(0);
-  const [zoom] = useState(7);
+  const [zoom] = useState(11);
 
   useEffect(() => {
     if (!location) { setForecast(null); setForecastError("Choose a location to load the forecast."); return; }
@@ -633,10 +633,10 @@ export function WeatherChannelPage({ mode, location, cities, storms, onNavigate 
           <img className="absolute inset-0 h-full w-full object-cover" src={"https://tile.openstreetmap.org/"+zoom+"/"+tile.x+"/"+tile.y+".png"} alt="" loading="lazy"/>
           <img className="absolute inset-0 h-full w-full object-cover opacity-80 mix-blend-multiply" src={(radar.host||"")+frame.path+"/256/"+zoom+"/"+tile.x+"/"+tile.y+"/2/1_1.png"} alt="" loading="lazy"/>
         </div>)}
-        <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white px-3 py-1 text-xs font-bold shadow">⌖ {location.name}</span>
+        <span aria-label={location.name + " map location"} title={location.name} className="absolute left-1/2 top-1/2 z-10 h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-[3px] border-white bg-blue-600 shadow-[0_1px_8px_rgba(0,0,0,0.55)]"/>
       </div>}
       {(!radar||!frame||!location)&&!radarLoading&&!radarError&&<div className="absolute inset-0 grid place-items-center text-sm text-gray-500">Radar coverage unavailable.</div>}
-      <span className="absolute left-3 top-3 rounded-lg bg-gray-900/75 px-3 py-2 text-xs font-semibold text-white shadow">{radarFrameTime}</span>
+      <span className="absolute left-3 top-3 z-20 rounded-lg bg-gray-900/80 px-3 py-2 text-sm font-bold text-white shadow-lg">{radarFrameTime}</span>
       <span className="absolute bottom-2 right-2 rounded bg-white/90 px-2 py-1 text-[10px] font-medium text-gray-700">© OpenStreetMap</span>
     </div>
   </section>;
