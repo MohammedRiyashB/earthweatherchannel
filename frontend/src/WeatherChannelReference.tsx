@@ -23,6 +23,8 @@ type Forecast = {
   current?: Record<string, any>;
   hourly?: Record<string, any[]>;
   daily?: Record<string, any[]>;
+  astronomy?: { phase?: string; illumination_percent?: number; age_days?: number; calculated_at?: string; method?: string };
+  supplemental_source?: { name?: string; provider?: string; fields?: string[] };
   source?: { name?: string; provider?: string; url?: string };
 };
 type AirQuality = { current?: Record<string, any>; source?: { name?: string; resolution_km?: number }; note?: string };
@@ -382,17 +384,30 @@ export function WeatherChannelPage({ mode, location, cities, storms, onNavigate 
 
   useEffect(() => {
     if (!location) { setForecast(null); setForecastError("Choose a location to load the forecast."); return; }
-    const controller = new AbortController();
-    setForecastLoading(true); setForecastError("");
-    const params = new URLSearchParams({ latitude: String(location.lat), longitude: String(location.lon), days: "10", timezone: "auto" });
-    fetch(API + "/api/forecast?" + params.toString(), { cache: "no-store", signal: controller.signal })
-      .then(async response => {
+    let active = true;
+    let controller: AbortController | null = null;
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "auto";
+    const params = new URLSearchParams({ latitude: String(location.lat), longitude: String(location.lon), days: "10", timezone });
+    const loadForecast = async () => {
+      controller?.abort();
+      const request = new AbortController();
+      controller = request;
+      setForecastLoading(true);
+      setForecastError("");
+      try {
+        const response = await fetch(API + "/api/forecast?" + params.toString(), { cache: "no-store", signal: request.signal });
         if (!response.ok) throw new Error("Forecast service returned " + response.status);
-        return response.json() as Promise<Forecast>;
-      }).then(setForecast)
-      .catch(error => { if (!controller.signal.aborted) setForecastError(error instanceof Error ? error.message : "Forecast unavailable"); })
-      .finally(() => { if (!controller.signal.aborted) setForecastLoading(false); });
-    return () => controller.abort();
+        const payload = await response.json() as Forecast;
+        if (active && !request.signal.aborted) setForecast(payload);
+      } catch (error) {
+        if (active && !request.signal.aborted) setForecastError(error instanceof Error ? error.message : "Forecast unavailable");
+      } finally {
+        if (active && !request.signal.aborted) setForecastLoading(false);
+      }
+    };
+    void loadForecast();
+    const timer = window.setInterval(() => void loadForecast(), 5 * 60 * 1000);
+    return () => { active = false; window.clearInterval(timer); controller?.abort(); };
   }, [location?.lat, location?.lon, refresh]);
 
   useEffect(() => {
@@ -428,7 +443,33 @@ export function WeatherChannelPage({ mode, location, cities, storms, onNavigate 
 
   const hourly = forecast?.hourly || {};
   const daily = forecast?.daily || {};
-  const current = location?.current || forecast?.current || {};
+  // The location endpoint provides live near-surface observations; the forecast endpoint
+  // adds dew point, UV, visibility and solar fields. Merge them instead of discarding the
+  // richer forecast object whenever a location-current object exists.
+  const current = {
+    ...(forecast?.current || {}),
+    ...Object.fromEntries(Object.entries(location?.current || {}).filter(([, fieldValue]) => fieldValue !== null && fieldValue !== undefined))
+  };
+  const currentHourIndex = (() => {
+    const times = hourly.time || [];
+    if (!times.length) return 0;
+    const raw = current.time ?? forecast?.current?.time;
+    const target = typeof raw === "number"
+      ? (raw < 1e12 ? raw * 1000 : raw)
+      : (raw ? new Date(String(raw)).getTime() : Number.NaN);
+    if (!Number.isFinite(target)) return 0;
+    let bestIndex = 0;
+    let bestDistance = Number.POSITIVE_INFINITY;
+    times.forEach((rawTime, index) => {
+      const parsed = typeof rawTime === "number"
+        ? (rawTime < 1e12 ? rawTime * 1000 : rawTime)
+        : new Date(String(rawTime)).getTime();
+      if (!Number.isFinite(parsed)) return;
+      const distance = Math.abs(parsed - target);
+      if (distance < bestDistance) { bestDistance = distance; bestIndex = index; }
+    });
+    return bestIndex;
+  })();
   const hours = (hourly.time || []).slice(0, 24);
   const days = (daily.time || []).slice(0, 10);
   const frames = radar?.frames || [];
@@ -453,19 +494,28 @@ export function WeatherChannelPage({ mode, location, cities, storms, onNavigate 
     return result;
   }, [location?.lat, location?.lon, zoom]);
 
-  const provider = forecast?.source?.name || forecast?.source?.provider || "Configured forecast provider";
+  const provider = forecast?.source?.provider === "metnorway"
+    ? "Connected global weather-model service"
+    : forecast?.source?.name || forecast?.source?.provider || "Connected forecast service";
   const aqi = typeof air?.current?.us_aqi === "number" ? Math.round(air.current.us_aqi) : null;
   const high = daily.temperature_2m_max?.[0], low = daily.temperature_2m_min?.[0];
   const rainChance = hourly.precipitation_probability?.[0] ?? daily.precipitation_probability_max?.[0];
+  const uvIndex = typeof current.uv_index === "number"
+    ? current.uv_index
+    : hourly.uv_index?.[currentHourIndex];
+  const visibility = hourly.visibility?.[currentHourIndex];
+  const moonPhase = forecast?.astronomy?.phase
+    ? forecast.astronomy.phase + (typeof forecast.astronomy.illumination_percent === "number" ? " · " + value(forecast.astronomy.illumination_percent) + "%" : "")
+    : "—";
   const details = [
-    ["Wind", value(current.wind_speed_10m,1) + " km/h", "↗"],
-    ["Humidity", value(current.relative_humidity_2m) + "%", "◌"],
+    ["Wind", typeof current.wind_speed_10m === "number" ? value(current.wind_speed_10m,1) + " km/h" : "—", "↗"],
+    ["Humidity", typeof current.relative_humidity_2m === "number" ? value(current.relative_humidity_2m) + "%" : "—", "◌"],
     ["Air Quality", aqi == null ? "—" : String(aqi), "◉"],
-    ["Dew Point", value(current.dew_point_2m) + "°", "◍"],
-    ["Pressure", value(current.pressure_msl,1) + " hPa", "⌁"],
-    ["UV Index", value(hourly.uv_index?.[0]), "☼"],
-    ["Visibility", typeof hourly.visibility?.[0] === "number" ? value(hourly.visibility[0]/1000,1)+" km" : "—", "◎"],
-    ["Moon Phase", "—", "◐"],
+    ["Dew Point", typeof current.dew_point_2m === "number" ? value(current.dew_point_2m,1) + "°" : "—", "◍"],
+    ["Pressure", typeof current.pressure_msl === "number" ? value(current.pressure_msl,1) + " hPa" : "—", "⌁"],
+    ["UV Index", typeof uvIndex === "number" ? value(uvIndex,1) : "—", "☼"],
+    ["Visibility", typeof visibility === "number" ? value(visibility/1000,1) + " km" : "—", "◎"],
+    ["Moon Phase", moonPhase, "◐"],
     ["Sunrise", daily.sunrise?.[0] ? clock(daily.sunrise[0]) : "—", "↑"],
     ["Sunset", daily.sunset?.[0] ? clock(daily.sunset[0]) : "—", "↓"]
   ];
