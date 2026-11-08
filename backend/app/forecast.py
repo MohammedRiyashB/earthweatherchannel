@@ -20,6 +20,7 @@ from math import cos, pi
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import httpx
+from app.runtime_cache import prune_expired_lru
 
 OPEN_METEO_URL = "https://api.open-meteo.com/v1/forecast"
 METNORWAY_USER_AGENT = os.getenv("METNORWAY_USER_AGENT", "EARTH-WEATHER/1.0 (+https://earthweatherchannel.web.app)")
@@ -409,9 +410,7 @@ async def fetch_forecast(
     cache_key = (round(latitude, 2), round(longitude, 2), days, timezone_name)
     async with _FORECAST_CACHE_LOCK:
         now = time.monotonic()
-        for old_key, (expires_at, _) in list(_FORECAST_CACHE.items()):
-            if expires_at <= now:
-                _FORECAST_CACHE.pop(old_key, None)
+        prune_expired_lru(_FORECAST_CACHE, now, _FORECAST_CACHE_MAX_ENTRIES)
         cached = _FORECAST_CACHE.get(cache_key)
         if cached and cached[0] > now:
             _FORECAST_CACHE.move_to_end(cache_key)
@@ -445,8 +444,7 @@ async def fetch_forecast(
         async with _FORECAST_CACHE_LOCK:
             _FORECAST_CACHE[cache_key] = (time.monotonic() + ttl, deepcopy(forecast))
             _FORECAST_CACHE.move_to_end(cache_key)
-            while len(_FORECAST_CACHE) > _FORECAST_CACHE_MAX_ENTRIES:
-                _FORECAST_CACHE.popitem(last=False)
+            prune_expired_lru(_FORECAST_CACHE, time.monotonic(), _FORECAST_CACHE_MAX_ENTRIES)
         return forecast
     except (httpx.HTTPError, ValueError, TypeError, KeyError) as exc:
         errors.append(f"metnorway:{exc.__class__.__name__}")
@@ -498,8 +496,7 @@ async def fetch_forecast(
         async with _FORECAST_CACHE_LOCK:
             _FORECAST_CACHE[cache_key] = (time.monotonic() + 10 * 60, deepcopy(payload))
             _FORECAST_CACHE.move_to_end(cache_key)
-            while len(_FORECAST_CACHE) > _FORECAST_CACHE_MAX_ENTRIES:
-                _FORECAST_CACHE.popitem(last=False)
+            prune_expired_lru(_FORECAST_CACHE, time.monotonic(), _FORECAST_CACHE_MAX_ENTRIES)
         return payload
     except (httpx.HTTPError, ValueError, TypeError, KeyError) as exc:
         errors.append(f"open-meteo:{exc.__class__.__name__}")
