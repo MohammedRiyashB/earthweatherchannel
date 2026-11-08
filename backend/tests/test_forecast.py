@@ -1,5 +1,7 @@
 import unittest
 
+import httpx
+
 from app.forecast import (
     ForecastUnavailable,
     _normalize_met_norway,
@@ -126,7 +128,7 @@ class ForecastAdapterTests(unittest.IsolatedAsyncioTestCase):
     async def test_all_forecast_providers_down_returns_explicit_failure(self):
         class Client:
             async def get(self, url, params):
-                raise OSError("offline")
+                raise httpx.ConnectError("offline")
 
         with self.assertRaises(ForecastUnavailable):
             await fetch_forecast(Client(), 0.0, 0.0)
