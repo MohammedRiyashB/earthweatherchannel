@@ -83,7 +83,7 @@ jobs:
               except (UnicodeDecodeError, OSError):
                   continue
               for name, value in label_replacements.items():
-                  pattern = re.compile(r'(<string\\s+name="' + re.escape(name) + r'"[^>]*>)(.*?)(</string>)', re.S)
+                  pattern = re.compile(r'(<string\s+name="' + re.escape(name) + r'"[^>]*>)(.*?)(</string>)', re.S)
                   s, n = pattern.subn(lambda m: m.group(1) + value + m.group(3), s)
               p.write_text(s, encoding="utf-8")
 
@@ -97,7 +97,7 @@ jobs:
               const-string v0, "https://earth-weather-api.onrender.com"
               return-object v0
           .end method"""
-          hs, count = re.subn(r"(?ms)^\\.method public getAddress\\(\\)Ljava/lang/String;.*?^\\.end method", method, hs, count=1)
+          hs, count = re.subn(r"(?ms)^\.method public getAddress\(\)Ljava/lang/String;.*?^\.end method", method, hs, count=1)
           if count != 1:
               raise SystemExit("Could not safely patch Host.getAddress()")
           host.write_text(hs)
@@ -113,7 +113,7 @@ jobs:
               move-result-object v0
               return-object v0
           .end method"""
-          cs, count = re.subn(r"(?ms)^\\.method public intercept\\(Lokhttp3/Interceptor\\$Chain;\\)Lokhttp3/Response;.*?^\\.end method", passthrough, cs, count=1)
+          cs, count = re.subn(r"(?ms)^\.method public intercept\(Lokhttp3/Interceptor\$Chain;\)Lokhttp3/Response;.*?^\.end method", passthrough, cs, count=1)
           if count != 1:
               raise SystemExit("Could not safely patch CryptoInterceptor.intercept()")
           crypto.write_text(cs)
@@ -131,14 +131,14 @@ jobs:
               :cond_0
               return-void
           .end method"""
-          ms, count = re.subn(r"(?ms)^\\.method public static cryptoInit\\(\\)V.*?^\\.end method", init_method, ms, count=1)
+          ms, count = re.subn(r"(?ms)^\.method public static cryptoInit\(\)V.*?^\.end method", init_method, ms, count=1)
           if count != 1:
               raise SystemExit("Could not safely patch WeatherDataClientManager.cryptoInit()")
           manager.write_text(ms)
 
           # Record the intended product identity in the build workspace.
           (Path("earth-weather-build.properties")).write_text(
-              "applicationId=com.bmrinc.earthweather\\nappName=Earth Weather\\napiBase=https://earth-weather-api.onrender.com\\n"
+              "applicationId=com.bmrinc.earthweather\nappName=Earth Weather\napiBase=https://earth-weather-api.onrender.com\n"
           )
           print(f"Updated package references in {changed} files.")
           PY
