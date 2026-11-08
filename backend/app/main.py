@@ -18,6 +18,7 @@ import httpx
 from fastapi import FastAPI, HTTPException, Query, Response
 from fastapi.middleware.cors import CORSMiddleware
 from app.forecast import ForecastUnavailable, fetch_forecast
+from app.runtime_cache import prune_expired_lru
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -244,9 +245,7 @@ async def _fetch_provider_current(client: httpx.AsyncClient, provider: str, lat:
         cache_key = (round(lat, 2), round(lon, 2))
         loop_time = asyncio.get_running_loop().time()
         async with _METNORWAY_CACHE_LOCK:
-            for old_key, (expires_at, _) in list(_METNORWAY_CACHE.items()):
-                if expires_at <= loop_time:
-                    _METNORWAY_CACHE.pop(old_key, None)
+            prune_expired_lru(_METNORWAY_CACHE, loop_time, _METNORWAY_CACHE_MAX_ENTRIES)
             cached = _METNORWAY_CACHE.get(cache_key)
             if cached and cached[0] > loop_time:
                 _METNORWAY_CACHE.move_to_end(cache_key)
@@ -286,8 +285,7 @@ async def _fetch_provider_current(client: httpx.AsyncClient, provider: str, lat:
             async with _METNORWAY_CACHE_LOCK:
                 _METNORWAY_CACHE[cache_key] = (asyncio.get_running_loop().time() + ttl, dict(current))
                 _METNORWAY_CACHE.move_to_end(cache_key)
-                while len(_METNORWAY_CACHE) > _METNORWAY_CACHE_MAX_ENTRIES:
-                    _METNORWAY_CACHE.popitem(last=False)
+                prune_expired_lru(_METNORWAY_CACHE, asyncio.get_running_loop().time(), _METNORWAY_CACHE_MAX_ENTRIES)
     if not isinstance(current.get("temperature_2m"), (int,float)):
         raise ValueError(f"{provider} returned no valid temperature")
     return {"current":current,"provider":provider}
