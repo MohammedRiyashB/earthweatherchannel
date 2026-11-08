@@ -1,5 +1,5 @@
 /* EARTH WEATHER uses the captured page geometry but keeps its own site identity. */
-.earth-weather-site { min-height: 100vh; background: #fff; color: #252422; }
+.earth-weather-site { min-height: 100vh; background: #fff; color: #252422; font-family: Inter, Inter Fallback, Arial, sans-serif !important; }
 .earth-weather-site .news-footer { background: #fff !important; color: #252422 !important; border-top: 1px solid #e5e7eb; padding-inline: 24px !important; }
 .earth-weather-site .footer-brand,
 .earth-weather-site .footer-group h3,
@@ -33,3 +33,5 @@ body:has(.earth-weather-site) { background:#fff !important; }
 .wx-weather-site .wx-mobile-drawer nav ul button>svg{margin-right:12px}
 .wx-weather-site .wx-mobile-drawer nav ul button>span{font-size:14px}
 @media(max-width:767px){.wx-weather-content-grid{padding:12px;gap:24px}.wx-weather-site .wx-mobile-drawer nav ul{padding-left:10px;padding-right:10px}}
+
+/* Original Inter WOFF2 references are redirected to Weather.com public immutable assets during prebuild. */
