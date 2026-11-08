@@ -639,10 +639,10 @@ const PAGES: Record<SitePageId, PageData> = {
         "Temperature, humidity, wind, cloud cover and precipitation fields in the current weather report are obtained from the configured numerical weather providers. The platform labels these as model or provider data. Satellite imagery products are shown separately, and no satellite measurement is invented to fill a missing weather field."
       ]},
       { heading: "3. Source selection and failover", paragraphs: [
-        "The backend tries Open-Meteo first for current model fields and MET Norway if the primary provider cannot return a valid response. The selected provider is included in backend response metadata where available. A failover is a different model/provider, not a guarantee that two sources will agree."
+        "The forecast backend uses MET Norway Locationforecast as its primary global model source and falls back to Open-Meteo when MET Norway data is unavailable or invalid. Open-Meteo may also supplement selected fields. The selected provider is included in response metadata where available. A fallback is a different model/provider, not a guarantee that two sources will agree."
       ]},
       { heading: "4. Refresh and caching", paragraphs: [
-        "The web app caches static files and selected display state to improve loading. Weather API responses are requested from the backend for current conditions and are not treated as immutable assets. Provider-side caching instructions and update intervals may still affect freshness."
+        "The frontend periodically requests updated forecast data (about every five minutes while the weather view is open) and refreshes available RainViewer radar metadata on its provider cadence (about every ten minutes). These requests do not force upstream providers to generate new observations: MET Norway data is cached in accordance with its minimum three-hour request interval, CAMS air-quality guidance updates on a slower model cycle, and RainViewer supplies past radar frames rather than a live nowcast. NASA GIBS imagery is product-dependent and may be daily or near-real-time. Provider-side update schedules therefore determine actual data freshness."
       ]},
       { heading: "5. Third-party licences and attribution", paragraphs: [
         "Users and downstream developers must follow the licence, attribution, usage and redistribution terms of each upstream data source. Open-Meteo attribution, MET Norway attribution and OpenStreetMap attribution/ODbL requirements are particularly relevant to current integrations."
