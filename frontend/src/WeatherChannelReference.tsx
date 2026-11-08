@@ -212,7 +212,7 @@ const dateLabel = (v: unknown) => {
 const aqiText = (n: number) => n <= 50 ? "Good" : n <= 100 ? "Moderate" : n <= 150 ? "Unhealthy for sensitive groups" : n <= 200 ? "Unhealthy" : n <= 300 ? "Very unhealthy" : "Hazardous";
 
 export function WeatherChannelLayout({
-  active, location, onNavigate, onSearchLocation, onAccount, accountName, children
+  active, location, onNavigate, onSearchLocation, onAccount, accountName, accountPhoto, children
 }: {
   active: string;
   location: WeatherChannelLocation;
@@ -220,6 +220,7 @@ export function WeatherChannelLayout({
   onSearchLocation: () => void;
   onAccount: () => void;
   accountName?: string | null;
+  accountPhoto?: string;
   children: ReactNode;
 }) {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -296,7 +297,10 @@ export function WeatherChannelLayout({
                 </div>
               </div>
               <div className="flex shrink-0 items-center md:hidden">
-                <button type="button" onClick={onAccount} className="h-10 rounded-xl bg-[#252422] px-4 text-sm font-bold text-white">{accountName || "Sign in"}</button>
+                <button type="button" onClick={onAccount} aria-label={accountName ? "Account profile" : "Sign in with Google"} title={accountName || "Sign in"}
+                  className="wx-header-profile-button">
+                  <img src={accountPhoto || "https://github.com/MohammedRiyashB.png?size=160"} alt="Profile" referrerPolicy="no-referrer"/>
+                </button>
               </div>
             </div>
           </div>
