@@ -39,6 +39,11 @@ jobs:
           test -f input/OppoWeather2/resources.arsc
           (cd input/OppoWeather2 && zip -q -r ../oppo-original.apk .)
           java -Xmx5g -jar apktool.jar d -f input/oppo-original.apk -o decoded
+      - name: Download the repository's applogo.png
+        run: |
+          curl -fL --retry 3 https://raw.githubusercontent.com/MohammedRiyashB/earthweatherchannel/main/applogo.png -o applogo.png
+          file applogo.png
+          test -s applogo.png
       - name: Rebrand app and route its weather data to EARTH WEATHER
         run: |
           python3 - <<'PY'
@@ -328,12 +333,32 @@ jobs:
           if visible_hits:
               raise SystemExit("OEM branding/vendor links remain in visible strings: " + " | ".join(visible_hits[:20]))
 
+          # Replace ONLY launcher icon raster assets with the user's repository applogo.png.
+          # Keep the existing resource names, adaptive icon XML, UI assets and all app behavior unchanged.
+          from PIL import Image
+          logo = Image.open("applogo.png").convert("RGBA")
+          launcher_dirs = [p for p in (root / "res").glob("mipmap*") if p.is_dir()]
+          icon_files = []
+          for d in launcher_dirs:
+              for p in d.rglob("*.png"):
+                  icon_files.append(p)
+          if not icon_files:
+              raise SystemExit("No launcher mipmap PNGs found; refusing to build with the old icon")
+          for p in icon_files:
+              with Image.open(p) as existing:
+                  size = existing.size
+              resized = logo.resize(size, Image.Resampling.LANCZOS)
+              resized.save(p, format="PNG", optimize=True)
+          print(f"Replaced {len(icon_files)} launcher icon PNG files from applogo.png.")
+
           # Record the intended product identity in the build workspace.
           (Path("earth-weather-build.properties")).write_text(
               "applicationId=com.bmrinc.earthweather.app\nappName=Earth Weather\napiBase=https://earth-weather-api.onrender.com\n"
           )
           print(f"Updated package references in {changed} files.")
           PY
+      - name: Install PNG processing dependency
+        run: python3 -m pip install --disable-pip-version-check Pillow
       - name: Build original app resources and bytecode with Apktool
         run: |
           java -Xmx6g -jar apktool.jar b decoded -f -o earth-weather-unsigned.apk
