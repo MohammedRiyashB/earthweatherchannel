@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { auth, firebaseReady, googleProvider } from "./firebase";
-import { onAuthStateChanged, signInWithPopup, signOut, type User } from "firebase/auth";
+import { onAuthStateChanged, signInWithPopup, signOut, createUserWithEmailAndPassword, signInWithEmailAndPassword, type User } from "firebase/auth";
 import { FOOTER_GROUPS, resolveSitePage, SITE_PATHS, SitePageView, type SitePageId } from "./sitePages";
 import "./intelligence.css";
 import { WeatherChannelLayout, WeatherChannelPage, type WeatherChannelMode } from "./WeatherChannelReference";
@@ -349,6 +349,8 @@ export default function App(){
  const [storms,setStorms]=useState<Storm[]>(()=>readCache<Storm[]>("storms",[]));
   const [updated,setUpdated]=useState<string>(()=>readCache<string>("cities-updated",""));const [busy,setBusy]=useState(false);const [query,setQuery]=useState("");
  const [locationPickerOpen,setLocationPickerOpen]=useState(false);
+ const [recentPlaces,setRecentPlaces]=useState<Place[]>(()=>readCache<Place[]>("recent-places",[]));
+ const [authScreen,setAuthScreen]=useState<"signup"|"signin"|null>(null);const [authEmail,setAuthEmail]=useState("");const [authPassword,setAuthPassword]=useState("");const [authBusy,setAuthBusy]=useState(false);const [authError,setAuthError]=useState("");
  const [locationSearchResults,setLocationSearchResults]=useState<Place[]>([]);
  const [locationSearching,setLocationSearching]=useState(false);
  const [locationSelectionPending,setLocationSelectionPending]=useState("");
@@ -656,7 +658,7 @@ const [section,setSection]=useState("Weather Report");const page:"home"|SitePage
    const selected:Place={...place,source:"search",current:data.current||{},loading:false,error:!hasValidCurrent(data.current)};
    setLocal(selected);writeCache("local",selected);
    const selectedLocation:Place={...place,source:"search"};
-   setVisitorLocation(selectedLocation);writeCache("visitor-location",selectedLocation);
+   setVisitorLocation(selectedLocation);writeCache("visitor-location",selectedLocation);setRecentPlaces(previous=>{const next=[selectedLocation,...previous.filter(item=>Math.abs(item.lat-place.lat)>0.0001||Math.abs(item.lon-place.lon)>0.0001)].slice(0,20);writeCache("recent-places",next);return next;});
    setIsSearchLocation(true);setLocationStatus("ready");
    setLocationMessage(hasValidCurrent(data.current)?"":"Weather data is temporarily unavailable for this location.");
    setNotice("");setQuery("");setLocationSearchResults([]);setLocationPickerOpen(false);
@@ -674,12 +676,13 @@ const [section,setSection]=useState("Weather Report");const page:"home"|SitePage
   window.addEventListener("keydown",handleKeyDown);
   return()=>{document.body.style.overflow=previousOverflow;window.removeEventListener("keydown",handleKeyDown);};
  },[locationPickerOpen]);
- const signIn=async()=>{if(!auth)return;try{await signInWithPopup(auth,googleProvider)}catch{setNotice("Google sign-in could not be completed.")}};
+ const signIn=async()=>{if(!auth){setNotice("Firebase Authentication is not configured yet.");return;}try{await signInWithPopup(auth,googleProvider);setAuthScreen(null);setAuthError("");}catch{setNotice("Google sign-in could not be completed. Check popup permission and Firebase Authorized domains.");}};const submitEmailAuth=async(event:React.FormEvent)=>{event.preventDefault();if(!auth)return;setAuthBusy(true);setAuthError("");try{if(authScreen==="signup")await createUserWithEmailAndPassword(auth,authEmail.trim(),authPassword);else await signInWithEmailAndPassword(auth,authEmail.trim(),authPassword);setAuthScreen(null);setAuthEmail("");setAuthPassword("");}catch(error:any){setAuthError(error?.message||"Authentication could not be completed.");}finally{setAuthBusy(false);}};const openSignup=()=>{setLocationPickerOpen(false);setAuthScreen("signup");};const openRecentPlace=(place:Place)=>{setSection("Weather Report");void chooseLocation(place);};
  const countryTab=visitorLocation?.country||"Country";
  const stateTab=visitorLocation?.state||"State";
  const localTab=visitorLocation?.name?(visitorLocation?.district?`${visitorLocation.name} · ${visitorLocation.district}`:visitorLocation.name):(visitorLocation?.district||"Local");
  const newsTabs=[{key:"World",label:"World"},{key:"Country",label:countryTab},{key:"State",label:stateTab},{key:"Local",label:localTab}];
  return <div className={page==="home"?"weathercom-site earth-weather-site":"news-site"}>
+  {authScreen&&<div className="ew-auth-overlay" role="dialog" aria-modal="true"><section className="ew-auth-panel"><button type="button" onClick={()=>setAuthScreen(null)}>←</button><img src="/logo.png" alt="EARTH WEATHER"/><h1>{authScreen==="signup"?"Sign up for free":"Sign in"}</h1><p>Create a free account with Google or your email and password to:</p><ul><li>Unlock 24-hour radar forecasts</li><li>Experience an immersive full-screen radar</li><li>Save locations for easy access anywhere</li></ul><button type="button" onClick={()=>void signIn()}>G&nbsp; {authScreen==="signup"?"Sign up":"Continue"} with Google</button><form onSubmit={submitEmailAuth}><input type="email" required value={authEmail} onChange={e=>setAuthEmail(e.target.value)} placeholder="Email"/><input type="password" required minLength={6} value={authPassword} onChange={e=>setAuthPassword(e.target.value)} placeholder="Password"/><button type="submit" disabled={authBusy}>{authBusy?"Please wait…":authScreen==="signup"?"Create free account":"Sign in"}</button></form>{authError&&<p role="alert">{authError}</p>}<p>{authScreen==="signup"?"Already have an account?":"New to EARTH WEATHER?"} <button type="button" onClick={()=>setAuthScreen(authScreen==="signup"?"signin":"signup")}>{authScreen==="signup"?"Sign in":"Sign up for free"}</button></p></section></div>}
   {locationPickerOpen&&<div className="location-picker-overlay" role="dialog" aria-modal="true" aria-label="Search weather locations">
    <div className="location-picker-shell">
     <form className="location-picker-search" onSubmit={event=>{event.preventDefault();void search();}}>
@@ -693,13 +696,10 @@ const [section,setSection]=useState("Weather Report");const page:"home"|SitePage
      <p className="location-picker-heading">Search results</p>
      {locationSearching&&<p className="location-picker-message">Searching locations…</p>}
      {locationSelectionPending&&<p className="location-picker-message">Loading weather for {locationSelectionPending}…</p>}
-     {!locationSearching&&locationSearchResults.map(place=><button className="location-picker-result" type="button" key={`${place.name}-${place.lat}-${place.lon}`} onClick={()=>void chooseLocation(place)} disabled={Boolean(locationSelectionPending)}><span className="location-result-pin">⌖</span><span><strong>{place.name}</strong><small>{place.region}</small></span><span className="location-result-arrow">›</span></button>)}
+     {!locationSearching&&locationSearchResults.map(place=><div className="ew-search-place-row" key={`${place.name}-${place.lat}-${place.lon}`}><button className="location-picker-result" type="button" onClick={()=>void chooseLocation(place)} disabled={Boolean(locationSelectionPending)}><span className="location-result-pin">⌖</span><span><strong>{place.name}</strong><small>{place.region}</small></span></button><button type="button" onClick={openSignup} aria-label="Save place">☆</button></div>)}
      {!locationSearching&&locationSearchError&&<p className="location-picker-message error">{locationSearchError}</p>}
     </section>:<>
-     <section className="location-picker-section">
-      <p className="location-picker-heading">Current city</p>
-      {currentLocation?<button className="location-city-pill current" type="button" onClick={()=>{setLocationPickerOpen(false);setQuery("");setLocationSearchResults([]);}} disabled={Boolean(locationSelectionPending)}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 10c0 5-8 11-8 11S4 15 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/></svg><span>{currentLocation.name}</span></button>:<button className="location-city-pill current" type="button" onClick={()=>{setLocationPickerOpen(false);detectLocalWeather();}}>◎ <span>Detect current location</span></button>}
-     </section>
+     <section className="location-picker-section"><p className="location-picker-heading">My Places</p>{currentLocation?<div className="ew-place-row"><button className="location-picker-result" type="button" onClick={()=>openRecentPlace(currentLocation)}><strong>{currentLocation.name}</strong><small>{currentLocation.region}</small></button><button type="button" onClick={()=>openRecentPlace(currentLocation)}>➤</button></div>:<button className="location-city-pill current" type="button" onClick={()=>{setLocationPickerOpen(false);detectLocalWeather();}}>◎ <span>Detect current location</span></button>}</section><section className="location-picker-section"><div className="ew-recents-heading"><p className="location-picker-heading">Recents</p>{recentPlaces.length>0&&<button type="button" onClick={()=>{setRecentPlaces([]);writeCache("recent-places",[]);}}>Clear</button>}</div>{recentPlaces.map(place=><div className="ew-place-row" key={place.lat+"-"+place.lon}><button type="button" className="location-picker-result" onClick={()=>openRecentPlace(place)}><strong>{place.name}</strong><small>{place.region}</small></button><button type="button" onClick={()=>setRecentPlaces(previous=>{const next=previous.filter(item=>item.lat!==place.lat||item.lon!==place.lon);writeCache("recent-places",next);return next;})}>×</button></div>)}</section>
      <section className="location-picker-section">
       <p className="location-picker-heading">Top cities · {currentLocation?.country||"Your region"}</p>
       <div className="location-city-grid">{topCities.map(place=><button className="location-city-pill" type="button" key={`${place.name}-${place.country_code}`} onClick={()=>void chooseLocation(place)} disabled={Boolean(locationSelectionPending)}>{place.name}</button>)}</div>
