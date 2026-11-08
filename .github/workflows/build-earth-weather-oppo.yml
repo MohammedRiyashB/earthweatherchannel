@@ -67,6 +67,14 @@ jobs:
           tree = ET.parse(manifest)
           m = tree.getroot()
           m.set("package", new)
+          # This APK's native .so libraries are ZIP-compressed by Apktool.
+          # Android must therefore extract them at install time; false requires
+          # uncompressed page-aligned libraries and makes this APK invalid.
+          android_ns = "{http://schemas.android.com/apk/res/android}"
+          application = m.find("application")
+          if application is None:
+              raise SystemExit("AndroidManifest has no application node")
+          application.set(android_ns + "extractNativeLibs", "true")
           # Do not carry over the original OEM package alias into a separately installable app.
           for child in list(m):
               if child.tag == "original-package":
