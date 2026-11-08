@@ -23,8 +23,8 @@ from app.forecast import ForecastUnavailable, fetch_forecast
 async def lifespan(app: FastAPI):
     """Keep one pooled upstream connection client for fast, uncached live requests."""
     app.state.weather_http = httpx.AsyncClient(
-        timeout=httpx.Timeout(connect=2.5, read=6.0, write=3.0, pool=2.0),
-        limits=httpx.Limits(max_connections=40, max_keepalive_connections=20, keepalive_expiry=30.0),
+        timeout=httpx.Timeout(connect=3.0, read=12.0, write=5.0, pool=3.0),
+        limits=httpx.Limits(max_connections=60, max_keepalive_connections=30, keepalive_expiry=30.0),
         follow_redirects=True,
         headers={
             "User-Agent": os.getenv("METNORWAY_USER_AGENT", "EARTH-WEATHER/1.0 (+https://earthweatherchannel.web.app)"),
@@ -394,23 +394,19 @@ async def satellite_catalog() -> dict[str, Any]:
     """Return provider readiness plus actual live NASA GIBS WMTS imagery layers."""
     import os
 
-    async with httpx.AsyncClient(
-        timeout=httpx.Timeout(12.0, connect=4.0),
-        follow_redirects=True,
-        headers={"User-Agent": "EARTH-WEATHER/1.0 (+https://earthweatherchannel.web.app)"},
-    ) as client:
-        try:
-            live_imagery = await fetch_gibs_layers(client)
-        except (httpx.HTTPError, ValueError, TypeError) as exc:
-            logger.warning("NASA GIBS layer catalogue unavailable: %s", exc.__class__.__name__)
-            live_imagery = {
-                "provider": "NASA EOSDIS GIBS",
-                "status": "degraded",
-                "retrieved_layers": 0,
-                "layers": [],
-                "capabilities_url": NASA_GIBS_CAPABILITIES,
-                "error": exc.__class__.__name__,
-            }
+    client = app.state.weather_http
+    try:
+        live_imagery = await fetch_gibs_layers(client)
+    except (httpx.HTTPError, ValueError, TypeError) as exc:
+        logger.warning("NASA GIBS layer catalogue unavailable: %s", exc.__class__.__name__)
+        live_imagery = {
+            "provider": "NASA EOSDIS GIBS",
+            "status": "degraded",
+            "retrieved_layers": 0,
+            "layers": [],
+            "capabilities_url": NASA_GIBS_CAPABILITIES,
+            "error": exc.__class__.__name__,
+        }
 
     providers = []
     for provider in SATELLITE_PROVIDERS:
@@ -462,7 +458,7 @@ async def source_health() -> dict[str, Any]:
         headers = {"User-Agent": METNORWAY_USER_AGENT, "Accept": "application/json"} if source_id == "metnorway" else None
         started = datetime.now(timezone.utc)
         try:
-            response = await client.get(url, params=params, headers=headers)
+            response = await client.get(url, params=params, headers=headers, timeout=10.0)
             elapsed = (datetime.now(timezone.utc) - started).total_seconds() * 1000
             response.raise_for_status()
             return {"id": source_id, "role": roles[source_id], "status": "online",
@@ -480,11 +476,8 @@ async def source_health() -> dict[str, Any]:
             return {"id": source_id, "role": roles[source_id], "status": "degraded",
                     "error": exc.__class__.__name__, "checked_at": utc_now()}
 
-    async with httpx.AsyncClient(
-        timeout=10.0, follow_redirects=True,
-        headers={"User-Agent": METNORWAY_USER_AGENT, "Accept": "application/json"},
-    ) as client:
-        results = await asyncio.gather(*(probe(client, item) for item in checks))
+    client = app.state.weather_http
+    results = await asyncio.gather(*(probe(client, item) for item in checks))
     return {
         "checked_at": utc_now(),
         "weather_pipeline": {"primary": "metnorway", "fallback": "open-meteo", "order": list(WEATHER_PROVIDER_ORDER)},
@@ -844,14 +837,14 @@ async def reverse_location(
         }
         _last_reverse_location_request = asyncio.get_running_loop().time()
         try:
-            async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
-                response = await client.get(
-                    "https://nominatim.openstreetmap.org/reverse",
-                    params=params,
-                    headers=headers,
-                )
-                response.raise_for_status()
-                payload = response.json()
+            response = await app.state.weather_http.get(
+                "https://nominatim.openstreetmap.org/reverse",
+                params=params,
+                headers=headers,
+                timeout=15.0,
+            )
+            response.raise_for_status()
+            payload = response.json()
         except (httpx.HTTPError, ValueError) as exc:
             raise HTTPException(status_code=502, detail="Nearby place lookup is temporarily unavailable") from exc
 
@@ -905,10 +898,13 @@ async def atmosphere(
 async def cyclones() -> dict[str, Any]:
     """NASA EONET curated active severe-storm events; not an official warning/complete cyclone track service."""
     try:
-        async with httpx.AsyncClient(timeout=20.0) as client:
-            response = await client.get(EONET_EVENTS, params={"category":"severeStorms","status":"open","limit":100})
-            response.raise_for_status()
-            payload = response.json()
+        response = await app.state.weather_http.get(
+            EONET_EVENTS,
+            params={"category":"severeStorms","status":"open","limit":100},
+            timeout=20.0,
+        )
+        response.raise_for_status()
+        payload = response.json()
         events = []
         for event in payload.get("events", []):
             geometries = event.get("geometry", [])
@@ -933,10 +929,14 @@ async def alerts(
         return {"source":"NOAA/NWS","coverage":"United States only","features":[],"message":"NWS alerts are not available for this location."}
     headers = {"User-Agent": os.getenv("EARTH_WEATHER_USER_AGENT", "EARTH-WEATHER/0.2 (set a monitored contact before production)")}
     try:
-        async with httpx.AsyncClient(timeout=15.0, headers=headers) as client:
-            response = await client.get("https://api.weather.gov/alerts/active", params={"point":f"{latitude},{longitude}"})
-            response.raise_for_status()
-            return response.json()
+        response = await app.state.weather_http.get(
+            "https://api.weather.gov/alerts/active",
+            params={"point":f"{latitude},{longitude}"},
+            headers=headers,
+            timeout=15.0,
+        )
+        response.raise_for_status()
+        return response.json()
     except httpx.HTTPError as exc:
         raise HTTPException(status_code=502, detail="NOAA/NWS alert service unavailable") from exc
 
@@ -944,11 +944,10 @@ async def alerts(
 async def radar() -> dict[str, Any]:
     """Return RainViewer's available past radar frames; never a nowcast."""
     try:
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            response = await client.get(RAINVIEWER)
-            response.raise_for_status()
-            payload = response.json()
-            return {
+        response = await app.state.weather_http.get(RAINVIEWER, timeout=15.0)
+        response.raise_for_status()
+        payload = response.json()
+        return {
                 "source":"RainViewer","host":payload.get("host"),"generated":payload.get("generated"),
                 "frames":payload.get("radar",{}).get("past",[]),
                 "note":"Past radar frames only. Coverage is incomplete; transparent tiles do not mean guaranteed dry weather."
@@ -1482,8 +1481,8 @@ async def satellite_provider_health() -> dict[str, Any]:
                 "data_type": provider["data_type"],
             }
 
-    async with httpx.AsyncClient(timeout=12.0, headers={"User-Agent": "EARTH-WEATHER/1.0"}) as client:
-        results = await asyncio.gather(*(probe(client, item) for item in SATELLITE_PROVIDER_CHECKS))
+    client = app.state.weather_http
+    results = await asyncio.gather(*(probe(client, item) for item in SATELLITE_PROVIDER_CHECKS))
     reachable = sum(item["status"] in ("reachable", "reachable_auth_required") for item in results)
     return {
         "checked_at": utc_now(),
