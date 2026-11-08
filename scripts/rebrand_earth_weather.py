@@ -47,22 +47,8 @@ IDENTITY_REPLACEMENTS = [
     ("OPPOFeedAdManager", "EarthWeatherFeedAdManager"),
     ("OPPOInternalAdManager", "EarthWeatherInternalAdManager"),
     ("OppoWeather2", "EarthWeather"),
-    ("OPLUS", "EARTH WEATHER"),
-    ("OPlus", "Earth Weather"),
-    ("Oplus", "Earth Weather"),
-    ("colorOs", "earthweather"),
-    ("ColorOs", "Earth Weather"),
-    ("oplus", "earthweather"),
-    ("OPPO", "EARTH WEATHER"),
-    ("Oppo", "Earth Weather"),
-    ("oppo", "earthweather"),
-    ("ColorOS", "EARTH WEATHER"),
-    ("coloros", "earthweather"),
-    ("Heytap", "EARTH WEATHER"),
-    ("heytap", "earthweather"),
-    ("OPOS", "EARTH WEATHER"),
-    ("Opos", "Earth Weather"),
-    ("opos", "earthweather"),
+    ("OplusMaterialSdkInterceptor", "EarthWeatherMaterialSdkInterceptor"),
+    ("ColorOsUtil", "EarthWeatherUtil"),
 ]
 
 POLICY_URL = f"{SITE}/privacy-policy"
@@ -81,16 +67,29 @@ def replace_text_file(path: Path) -> int:
     updated = original.replace("@font/oplus_sans3_nogx", "sans-serif")
     for old, new in PACKAGE_REPLACEMENTS:
         updated = updated.replace(old, new)
-    updated = updated.replace("oplus_sans3_nogx", "sans-serif")
-    # Replace only old vendor legal/support URLs; leave unrelated data providers intact.
-    updated = re.sub(
-        r"https?://(?:www\.)?(?:privacy\.)?(?:oppo|oplus|heytap|coloros)\.[^\s\"'<>]+",
-        POLICY_URL,
-        updated,
-        flags=re.IGNORECASE,
-    )
+    # Replace branded identifiers and standalone brand names only; do not alter
+    # ordinary words such as "opposite" or "opportunity".
     for old, new in IDENTITY_REPLACEMENTS:
         updated = updated.replace(old, new)
+    for pattern, replacement in (
+        (r"\\bOPPO\\b", "EARTH WEATHER"),
+        (r"\\bOPLUS\\b", "EARTH WEATHER"),
+        (r"\\bOPlus\\b", "Earth Weather"),
+        (r"\\bColorOS\\b", "EARTH WEATHER"),
+        (r"\\bColorOs\\b", "Earth Weather"),
+        (r"\\bHeytap\\b", "EARTH WEATHER"),
+        (r"\\bOPOS\\b", "EARTH WEATHER"),
+        (r"\\bOpos\\b", "Earth Weather"),
+    ):
+        updated = re.sub(pattern, replacement, updated, flags=re.IGNORECASE)
+    updated = re.sub(r"\\bOplus(?=[A-Z])", "EarthWeather", updated)
+    updated = re.sub(r"\\bColorOs(?=[A-Z])", "EarthWeather", updated)
+    # Map old provider domains, including bare URLs, to the published EARTH WEATHER pages.
+    updated = re.sub(
+        r"(?i)(?:https?://)?(?:www\\.)?(?:privacy\\.)?(?:oppo|oplus|heytap|coloros)\\.[a-z.]+(?:/[^\\s\\\"<>]*)?",
+        POLICY_URL,
+        updated,
+    )
     if updated != original:
         path.write_text(updated, encoding="utf-8")
         return 1
