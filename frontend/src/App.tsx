@@ -668,11 +668,9 @@ const [section,setSection]=useState("Weather Report");const page:"home"|SitePage
  };
  useEffect(()=>{
   if(!locationPickerOpen)return;
-  const previousOverflow=document.body.style.overflow;
-  document.body.style.overflow="hidden";
-  const handleKeyDown=(event:KeyboardEvent)=>{if(event.key==="Escape"){setLocationPickerOpen(false);setQuery("");setLocationSearchResults([]);}};
+  const handleKeyDown=(event:KeyboardEvent)=>{if(event.key==="Escape"){setLocationPickerOpen(false);setQuery("");setLocationSearchResults([]);setLocationSearchError("");}};
   window.addEventListener("keydown",handleKeyDown);
-  return()=>{document.body.style.overflow=previousOverflow;window.removeEventListener("keydown",handleKeyDown);};
+  return()=>{window.removeEventListener("keydown",handleKeyDown);};
  },[locationPickerOpen]);
  const signIn=async()=>{if(!auth)return;try{await signInWithPopup(auth,googleProvider)}catch{setNotice("Google sign-in could not be completed.")}};
  const countryTab=visitorLocation?.country||"Country";
@@ -680,14 +678,14 @@ const [section,setSection]=useState("Weather Report");const page:"home"|SitePage
  const localTab=visitorLocation?.name?(visitorLocation?.district?`${visitorLocation.name} · ${visitorLocation.district}`:visitorLocation.name):(visitorLocation?.district||"Local");
  const newsTabs=[{key:"World",label:"World"},{key:"Country",label:countryTab},{key:"State",label:stateTab},{key:"Local",label:localTab}];
  return <div className={page==="home"?"weathercom-site earth-weather-site":"news-site"}>
-  {locationPickerOpen&&<div className="location-picker-overlay" role="dialog" aria-modal="true" aria-label="Search weather locations">
+  {locationPickerOpen&&<div className="location-picker-overlay" role="dialog" aria-modal="false" aria-label="Search weather locations" onMouseDown={event=>{if(event.target===event.currentTarget){setLocationPickerOpen(false);setQuery("");setLocationSearchResults([]);setLocationSearchError("");}}}>
    <div className="location-picker-shell">
     <form className="location-picker-search" onSubmit={event=>{event.preventDefault();void search();}}>
      <div className="location-picker-input-wrap">
       <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.6"/><path d="m16 16 4.1 4.1"/></svg>
       <input autoFocus value={query} onChange={event=>setQuery(event.target.value)} placeholder="Search" aria-label="Search city or region" autoComplete="off"/>
      </div>
-     <button type="button" className="location-picker-cancel" onClick={()=>{setLocationPickerOpen(false);setQuery("");setLocationSearchResults([]);setLocationSearchError("");}}>Cancel</button>
+     <button type="button" className="location-picker-cancel" aria-label="Close location search" onClick={()=>{setLocationPickerOpen(false);setQuery("");setLocationSearchResults([]);setLocationSearchError("");}}>×</button>
     </form>
     {query.trim().length>=2?<section className="location-picker-results">
      <p className="location-picker-heading">Search results</p>
@@ -720,6 +718,7 @@ const [section,setSection]=useState("Weather Report");const page:"home"|SitePage
     onSearchLocation={()=>{setQuery("");setLocationSearchResults([]);setLocationSearchError("");setLocationPickerOpen(true);}}
     onAccount={()=>{if(user)void signOut(auth!);else void signIn();}}
     accountName={user?.displayName||null}
+    accountPhoto={user?.photoURL||"https://github.com/MohammedRiyashB.png?size=160"}
    >
     {(["Weather Report","Hourly","10 Day","Radar","Air Quality","Allergy","Storm reports"] as string[]).includes(section)
       ?<WeatherChannelPage mode={section as WeatherChannelMode} location={local} cities={cities} storms={storms} onNavigate={setSection}/>
