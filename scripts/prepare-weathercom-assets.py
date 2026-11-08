@@ -47,26 +47,23 @@ try:
             raise SystemExit("The three original CSS bundles do not share one immutable asset root.")
         prefix = prefixes.pop()
 
-        selected = list(css_paths.values())
-        selected.extend(
-            name for name in names
-            if name.startswith(prefix)
-            and name not in selected
-            and (
-                name.lower().endswith(".woff2")
-                or Path(name).name.startswith(SPRITE_PREFIX)
-            )
-        )
+        selected = { "chunks/" + filename: path for filename, path in css_paths.items() }
+
+        # CSS uses ../media/<font> URLs, so place every captured WOFF2 file at
+        # the common immutable media path regardless of the capture's source folder.
+        for name in names:
+            basename = Path(name).name
+            if name.lower().endswith(".woff2") or basename.startswith(SPRITE_PREFIX):
+                selected["media/" + basename] = name
 
         extracted = 0
-        for name in selected:
-            relative = name[len(prefix):]
+        for relative, source_name in selected.items():
             target = DEST / relative
             target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_bytes(archive.read(name))
+            target.write_bytes(archive.read(source_name))
             extracted += 1
 
-        if extracted < 5:
+        if extracted < 12:
             raise SystemExit(
                 f"Only {extracted} CSS/font/sprite assets were extracted; expected at least 12."
             )
