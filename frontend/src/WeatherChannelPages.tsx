@@ -8,12 +8,12 @@ type WeatherLocation = {
 } | null;
 type WeatherCity = { name: string; region?: string; current?: Record<string, any> };
 type StormEvent = { id: string; title: string; description?: string; link?: string; coordinates?: {lat:number;lon:number;date?:string}[] };
-type WeatherMode = "Weather Report" | "Hourly" | "10 Day" | "Radar" | "Air Quality" | "Allergy" | "Storm reports";
+export type WeatherChannelMode = "Weather Report" | "Hourly" | "10 Day" | "Radar" | "Air Quality" | "Allergy" | "Storm reports";
 type Forecast = { current?: Record<string, any>; hourly?: Record<string, any[]>; daily?: Record<string, any[]>; source?: {name?:string;provider?:string;url?:string} };
 type Radar = { host?:string; frames?: {time:number;path:string}[]; note?:string };
 type Air = { current?:Record<string,any>; source?:{name?:string;resolution_km?:number}; note?:string };
 type Props = {
-  mode: WeatherMode; location: WeatherLocation; cities: WeatherCity[]; storms: StormEvent[];
+  mode: WeatherChannelMode; location: WeatherLocation; cities: WeatherCity[]; storms: StormEvent[];
   onNavigate: (page:string)=>void; onSearchLocation: ()=>void;
 };
 const fmt = (v:unknown,d=0) => typeof v==="number" && Number.isFinite(v) ? Number(v.toFixed(d)).toString() : "—";
