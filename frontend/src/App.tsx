@@ -124,6 +124,56 @@ const published=(value?:string)=>{
  return Number.isNaN(date.getTime())?"Recently indexed":date.toLocaleString(undefined,{dateStyle:"medium",timeStyle:"short"});
 };
 type SatelliteLayer={id:string;title:string;formats?:string[];tile_templates?:string[];default_time?:string|null;time_extent?:string|null};
+function SatelliteLivePreview({onExplore}:{onExplore:()=>void}){
+ const [frames,setFrames]=useState<Array<{time:string;url:string}>>([]);
+ const [index,setIndex]=useState(0);
+ const [nearRealtime,setNearRealtime]=useState(false);
+ const [layerTitle,setLayerTitle]=useState("NASA VIIRS · True colour");
+ const [loaded,setLoaded]=useState(false);
+ const [failed,setFailed]=useState(false);
+ const [checkedAt,setCheckedAt]=useState("");
+ useEffect(()=>{
+  let active=true;
+  const load=async()=>{
+   try{
+    const response=await fetch(API+"/api/satellites/catalog",{cache:"no-store"});
+    if(!response.ok)throw new Error("Satellite catalogue unavailable");
+    const data=await response.json();
+    const all=(data?.live_imagery?.layers||[]) as SatelliteLayer[];
+    const geo=all.find((item:any)=>/(himawari|ahi|geocolor|abi)/i.test(String(item.id)+" "+String(item.title))&&/T.*PT\d+/i.test(item.time_extent||""));
+    const chosen:any=geo||all.find((item:any)=>item.id==="VIIRS_SNPP_CorrectedReflectance_TrueColor")||{id:"VIIRS_SNPP_CorrectedReflectance_TrueColor",title:"Suomi-NPP VIIRS · True colour",default_time:new Date().toISOString().slice(0,10),time_extent:""};
+    const extent=String(chosen.time_extent||"").split(",").filter(Boolean).pop()||"";
+    const parts=extent.split("/");
+    const end=new Date(parts.length>1?parts[1]:chosen.default_time||new Date().toISOString());
+    let stepMs=86400000;let isSubdaily=false;
+    if(parts[2]){const m=parts[2].match(/PT(?:(\d+(?:\.\d+)?)H)?(?:(\d+(?:\.\d+)?)M)?(?:(\d+(?:\.\d+)?)S)?/i);if(m){stepMs=((Number(m[1]||0)*3600)+(Number(m[2]||0)*60)+Number(m[3]||0))*1000;isSubdaily=stepMs>0&&stepMs<86400000;}}
+    if(!Number.isFinite(end.getTime()))throw new Error("No valid satellite acquisition time");
+    if(!isSubdaily)stepMs=86400000;
+    const next=Array.from({length:6},(_,i)=>{
+     const d=new Date(end.getTime()-(5-i)*stepMs);
+     const time=isSubdaily?d.toISOString().replace(/\.\d{3}Z$/,"Z"):d.toISOString().slice(0,10);
+     const query=new URLSearchParams({SERVICE:"WMS",REQUEST:"GetMap",VERSION:"1.1.1",LAYERS:chosen.id,STYLES:"",SRS:"EPSG:4326",BBOX:"65,5,100,40",WIDTH:"1000",HEIGHT:"650",FORMAT:"image/jpeg",TIME:time});
+     return {time:time,url:"https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi?"+query.toString()};
+    });
+    if(active){setFrames(next);setIndex(0);setNearRealtime(isSubdaily);setLayerTitle(chosen.title||chosen.id);setCheckedAt(new Date().toISOString());setFailed(false);setLoaded(false);}
+   }catch{
+    const today=new Date();const fallback=Array.from({length:6},(_,i)=>{const d=new Date(today.getTime()-(5-i)*86400000);const time=d.toISOString().slice(0,10);const query=new URLSearchParams({SERVICE:"WMS",REQUEST:"GetMap",VERSION:"1.1.1",LAYERS:"VIIRS_SNPP_CorrectedReflectance_TrueColor",STYLES:"",SRS:"EPSG:4326",BBOX:"65,5,100,40",WIDTH:"1000",HEIGHT:"650",FORMAT:"image/jpeg",TIME:time});return {time:time,url:"https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi?"+query.toString()};});
+    if(active){setFrames(fallback);setIndex(0);setNearRealtime(false);setLayerTitle("Suomi-NPP VIIRS · True colour");setCheckedAt(new Date().toISOString());}
+   }
+  };
+  void load();const refreshTimer=window.setInterval(()=>void load(),10*60*1000);
+  return()=>{active=false;window.clearInterval(refreshTimer)};
+ },[]);
+ useEffect(()=>{if(frames.length<2)return;const timer=window.setInterval(()=>setIndex(i=>(i+1)%frames.length),1800);return()=>window.clearInterval(timer)},[frames]);
+ const frame=frames[index];
+ const displayTime=frame?.time?new Date(frame.time).toLocaleString("en-IN",{timeZone:"UTC",day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit",timeZoneName:"short"}):"Waiting for imagery";
+ return <aside className="weather-earth-panel">
+  <div className="weather-earth-panel-top"><span className={nearRealtime?"live-pill":"satellite-loop-pill"}><i/> {nearRealtime?"NEAR-REAL-TIME LOOP":"SATELLITE LOOP"}</span><span>NASA GIBS · INDIA</span></div>
+  <div className="weather-earth-image weather-earth-animated">{frame&&!failed?<img key={frame.url} src={frame.url} alt={layerTitle+" satellite frame over India, acquisition "+frame.time} loading="lazy" onLoad={()=>setLoaded(true)} onError={()=>{setFailed(true);setLoaded(false)}}/>:<div className="satellite-frame-fallback">Satellite imagery is temporarily unavailable. Try the full satellite viewer.</div>}<div className="satellite-animation-overlay"><span className="satellite-play-indicator"><i/>{loaded?"PLAYING FRAMES":"LOADING SATELLITE"}</span><span>{index+1}/{Math.max(frames.length,1)}</span></div></div>
+  <div className="weather-earth-caption"><div><strong>Earth from orbit</strong><span>{layerTitle} · {nearRealtime?"Sub-daily imagery, where available":"Recent daily satellite snapshots"}</span><small>Frame acquisition: {displayTime} · checked {checkedAt?new Date(checkedAt).toLocaleTimeString("en-IN"):"—"}</small></div><button type="button" onClick={onExplore}>Explore satellite intelligence <span>↗</span></button></div>
+ </aside>;
+}
+
 function SatelliteDashboard(){
  const [layer,setLayer]=useState("VIIRS_SNPP_CorrectedReflectance_TrueColor");
  const [catalog,setCatalog]=useState<any>(null);
@@ -652,11 +702,7 @@ const [section,setSection]=useState("Weather Report");const page:"home"|SitePage
     </div>
     </>:<div className="local-weather-prompt"><span>{locationMessage}</span><button onClick={detectLocalWeather} disabled={locationStatus==="locating"}>{locationStatus==="denied"?"Try location again":"Retry location"}</button></div>}
    </section>
-   <aside className="weather-earth-panel">
-    <div className="weather-earth-panel-top"><span className="live-pill"><i/> SATELLITE VIEW</span><span>NASA GIBS · INDIA</span></div>
-    <div className="weather-earth-image"><img src="https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi?SERVICE=WMS&REQUEST=GetMap&VERSION=1.1.1&LAYERS=VIIRS_SNPP_CorrectedReflectance_TrueColor&STYLES=&SRS=EPSG:4326&BBOX=65,5,100,40&WIDTH=1000&HEIGHT=700&FORMAT=image/jpeg" alt="NASA satellite imagery over India and the Indian Ocean" loading="lazy"/></div>
-    <div className="weather-earth-caption"><div><strong>Earth from orbit</strong><span>True-colour satellite imagery · acquisition time varies by product</span></div><button type="button" onClick={()=>setSection("Satellite imagery")}>Explore satellite intelligence <span>↗</span></button></div>
-   </aside>
+   <SatelliteLivePreview onExplore={()=>setSection("Satellite imagery")}/>
    </div>
 
    <section className="lead-grid" id="weather-briefing">
