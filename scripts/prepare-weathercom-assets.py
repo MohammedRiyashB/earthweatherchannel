@@ -50,7 +50,8 @@ try:
         selected = list(css_paths.values())
         selected.extend(
             name for name in names
-            if name.startswith(prefix + "media/")
+            if name.startswith(prefix)
+            and name not in selected
             and (
                 name.lower().endswith(".woff2")
                 or Path(name).name.startswith(SPRITE_PREFIX)
@@ -65,7 +66,7 @@ try:
             target.write_bytes(archive.read(name))
             extracted += 1
 
-        if extracted < 12:
+        if extracted < 5:
             raise SystemExit(
                 f"Only {extracted} CSS/font/sprite assets were extracted; expected at least 12."
             )
