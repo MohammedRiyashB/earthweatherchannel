@@ -685,32 +685,17 @@ const [section,setSection]=useState("Weather Report");const page:"home"|SitePage
     <form className="location-picker-search" onSubmit={async event=>{event.preventDefault();const matches=await search();if(matches[0])void chooseLocation(matches[0]);}}>
      <div className="location-picker-input-wrap">
       <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.6"/><path d="m16 16 4.1 4.1"/></svg>
-      <input autoFocus value={query} onChange={event=>setQuery(event.target.value)} placeholder="Search" aria-label="Search city or region" autoComplete="off"/>
+      <input autoFocus value={query} onChange={event=>setQuery(event.target.value)} placeholder="Search city or region" aria-label="Search city or region" autoComplete="off"/>
+      {query&&<button type="button" className="location-picker-clear" aria-label="Clear search" onClick={()=>{setQuery("");setLocationSearchResults([]);setLocationSearchError("");}}>×</button>}
+      <button type="button" className="location-picker-cancel" aria-label="Close location search" onClick={()=>{setLocationPickerOpen(false);setQuery("");setLocationSearchResults([]);setLocationSearchError("");}}>×</button>
      </div>
-     <button type="button" className="location-picker-cancel" aria-label="Close location search" onClick={()=>{setLocationPickerOpen(false);setQuery("");setLocationSearchResults([]);setLocationSearchError("");}}>×</button>
     </form>
-    {query.trim().length>=2?<section className="location-picker-results">
-     <p className="location-picker-heading">Search results</p>
+    {query.trim().length>=2&&<section className="location-picker-results" aria-live="polite">
      {locationSearching&&<p className="location-picker-message">Searching locations…</p>}
      {locationSelectionPending&&<p className="location-picker-message">Loading weather for {locationSelectionPending}…</p>}
      {!locationSearching&&locationSearchResults.map(place=><button className="location-picker-result" type="button" key={`${place.name}-${place.lat}-${place.lon}`} onClick={()=>void chooseLocation(place)} disabled={Boolean(locationSelectionPending)}><span className="location-result-pin">⌖</span><span><strong>{place.name}</strong><small>{place.region}</small></span><span className="location-result-arrow">›</span></button>)}
      {!locationSearching&&locationSearchError&&<p className="location-picker-message error">{locationSearchError}</p>}
-    </section>:<>
-     <section className="location-picker-section">
-      <p className="location-picker-heading">Current city</p>
-      {currentLocation?<button className="location-city-pill current" type="button" onClick={()=>{setLocationPickerOpen(false);setQuery("");setLocationSearchResults([]);}} disabled={Boolean(locationSelectionPending)}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 10c0 5-8 11-8 11S4 15 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/></svg><span>{currentLocation.name}</span></button>:<button className="location-city-pill current" type="button" onClick={()=>{setLocationPickerOpen(false);detectLocalWeather();}}>◎ <span>Detect current location</span></button>}
-     </section>
-     <section className="location-picker-section">
-      <p className="location-picker-heading">Top cities · {currentLocation?.country||"Your region"}</p>
-      <div className="location-city-grid">{topCities.map(place=><button className="location-city-pill" type="button" key={`${place.name}-${place.country_code}`} onClick={()=>void chooseLocation(place)} disabled={Boolean(locationSelectionPending)}>{place.name}</button>)}</div>
-     </section>
-     <section className="location-picker-section world">
-      <p className="location-picker-heading">Top cities - World</p>
-      <div className="location-city-grid">{WORLD_TOP_CITIES.map(place=><button className="location-city-pill" type="button" key={`${place.name}-${place.country_code}`} onClick={()=>void chooseLocation(place)} disabled={Boolean(locationSelectionPending)}>{place.name}</button>)}</div>
-     </section>
-     {locationSelectionPending&&<p className="location-picker-message">Loading weather for {locationSelectionPending}…</p>}
-     {locationSearchError&&<p className="location-picker-message error">{locationSearchError}</p>}
-    </>}
+    </section>}
    </div>
   </div>}
   {page==="home"?<WeatherChannelLayout
