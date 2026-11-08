@@ -196,8 +196,8 @@ function SatelliteDashboard(){
  const options=imageryLayers.length?imageryLayers:fallbackLayers;
  const selectedMeta=layers.find(item=>item.id===layer);
  const selectedTitle=selectedMeta?.title||options.find(item=>item.id===layer)?.title||layer;
- const imageUrl=`https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi?SERVICE=WMS&REQUEST=GetMap&VERSION=1.1.1&LAYERS=${encodeURIComponent(layer)}&STYLES=&SRS=EPSG:4326&BBOX=${area.bbox}&WIDTH=1200&HEIGHT=720&FORMAT=image/jpeg`;
- useEffect(()=>{let active=true;fetch(`${API}/api/satellites/catalog`,{cache:"no-store"}).then(r=>{if(!r.ok)throw new Error(`HTTP ${r.status}`);return r.json()}).then(d=>{if(active)setCatalog(d)}).catch(e=>{if(active)setCatalogError(e instanceof Error?e.message:"Satellite catalogue unavailable")});return()=>{active=false}},[refresh]);
+ const imageUrl=`https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi?SERVICE=WMS&REQUEST=GetMap&VERSION=1.1.1&LAYERS=${encodeURIComponent(layer)}&STYLES=&SRS=EPSG:4326&BBOX=${area.bbox}&WIDTH=1200&HEIGHT=720&FORMAT=image/jpeg&TIME=${encodeURIComponent(selectedMeta?.default_time||"")}&v=${refresh}`;
+ useEffect(()=>{let active=true;const loadCatalogue=()=>fetch(`${API}/api/satellites/catalog`,{cache:"no-store"}).then(r=>{if(!r.ok)throw new Error(`HTTP ${r.status}`);return r.json()}).then(d=>{if(active){setCatalog(d);setCatalogError("");setRefresh(x=>x+1)}}).catch(e=>{if(active)setCatalogError(e instanceof Error?e.message:"Satellite catalogue unavailable")});void loadCatalogue();const timer=window.setInterval(loadCatalogue,15*60*1000);return()=>{active=false;window.clearInterval(timer)}},[]);
  useEffect(()=>{setImageError(false);setImageLoaded(false)},[layer,region,refresh]);
  const catalogueTime=selectedMeta?.default_time||"NASA GIBS default valid acquisition time";
  return <main className="news-main satellite-page">

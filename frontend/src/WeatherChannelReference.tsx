@@ -222,7 +222,6 @@ export function WeatherChannelLayout({
   accountName?: string | null;
   children: ReactNode;
 }) {
-  const [moreOpen, setMoreOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
 
 
@@ -232,12 +231,6 @@ export function WeatherChannelLayout({
     { key: "Radar", label: "Radar", icon: "radar" as const },
     { key: "Allergy", label: "Allergy Tracker", icon: "allergy" as const },
     { key: "Air Quality", label: "Air Quality Index", icon: "air" as const }
-  ];
-  const moreItems = [
-    ["Hourly", "Hourly forecast"], ["10 Day", "10-day forecast"],
-    ["Satellite imagery", "Satellite"], ["Satellite Report", "Satellite report"],
-    ["Storm reports", "Storm reports"], ["World", "World weather news"],
-    ["Country", "Country weather news"], ["State", "State weather news"], ["Local", "Local weather news"]
   ];
   const nav = (drawer = false) => <nav
     aria-label="Weather navigation"
@@ -259,25 +252,6 @@ export function WeatherChannelLayout({
           <span className="tracking-tight line-clamp-1 text-xxs mt-1 h-[13px] pb-0 font-semibold text-inherit transition-opacity duration-200 xl:mt-0 xl:h-auto xl:text-sm">{item.label}</span>
         </button>
       </li>)}
-      <li className="relative">
-        <button type="button" aria-expanded={moreOpen} onClick={() => setMoreOpen(v => !v)}
-          className={"group relative box-border flex h-14 w-full cursor-pointer flex-col items-center justify-center rounded-2xl px-3 font-semibold text-gray-900 xl:h-12 xl:flex-row xl:justify-start " + (moreOpen ? "bg-gray-100" : "hover:bg-gray-100")}>
-          <Icon name="more" className="inline-block h-6 w-6 shrink-0 xl:mr-3" />
-          <span className="mt-1 text-xxs font-semibold xl:mt-0 xl:text-sm">More</span>
-        </button>
-        {moreOpen && <div className="absolute left-full top-0 z-50 ml-2 flex min-w-52 flex-col rounded-2xl border border-gray-200 bg-white p-2 shadow-xl max-xl:left-0 max-xl:top-full max-xl:ml-0">
-          {moreItems.map(([key, title]) => <button key={key} type="button"
-            onClick={() => { onNavigate(key); setMoreOpen(false); setMobileOpen(false); }}
-            className={"rounded-xl px-3 py-2 text-left text-sm hover:bg-gray-100 " + (active === key ? "bg-gray-100 font-bold text-[#003399]" : "")}>{title}</button>)}
-        </div>}
-      </li>
-    </ul>
-    <ul className="m-0 mt-auto flex w-full flex-col gap-1 px-3 pb-4">
-      <li><button type="button" onClick={onAccount}
-        className="group relative box-border flex h-14 w-full cursor-pointer flex-col items-center justify-center rounded-2xl bg-[#252422] px-3 font-semibold text-white xl:h-12 xl:flex-row xl:justify-start">
-        <Icon name="user" className="inline-block h-6 w-6 shrink-0 text-white xl:mr-3" />
-        <span className="mt-1 line-clamp-1 text-xxs font-semibold text-white xl:mt-0 xl:text-sm">{accountName || "Sign in"}</span>
-      </button></li>
     </ul>
   </nav>;
 
@@ -380,7 +354,15 @@ export function WeatherChannelPage({ mode, location, cities, storms, onNavigate 
   const [frameIndex, setFrameIndex] = useState(0);
   const [playing, setPlaying] = useState(true);
   const [refresh, setRefresh] = useState(0);
+  const [showAllHours, setShowAllHours] = useState(false);
+  const [showAllDays, setShowAllDays] = useState(false);
   const [zoom] = useState(11);
+
+  useEffect(() => {
+    const refreshWhenVisible = () => { if (document.visibilityState === "visible") setRefresh(value => value + 1); };
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+    return () => document.removeEventListener("visibilitychange", refreshWhenVisible);
+  }, []);
 
   useEffect(() => {
     if (!location) { setForecast(null); setForecastError("Choose a location to load the forecast."); return; }
@@ -499,7 +481,10 @@ export function WeatherChannelPage({ mode, location, cities, storms, onNavigate 
     : forecast?.source?.name || forecast?.source?.provider || "Connected forecast service";
   const aqi = typeof air?.current?.us_aqi === "number" ? Math.round(air.current.us_aqi) : null;
   const high = daily.temperature_2m_max?.[0], low = daily.temperature_2m_min?.[0];
-  const rainChance = hourly.precipitation_probability?.[0] ?? daily.precipitation_probability_max?.[0];
+  const rainChance = (hourly.precipitation_probability || []).slice(0,24).filter((n: unknown): n is number => typeof n === "number" && Number.isFinite(n)).reduce((max: number, n: number) => Math.max(max,n), -1);
+  const next24RainChance = rainChance >= 0 ? rainChance : daily.precipitation_probability_max?.[0];
+  const next24RainValues = (hourly.precipitation || []).slice(0,24).filter((n: unknown): n is number => typeof n === "number" && Number.isFinite(n));
+  const next24RainAmount = next24RainValues.length ? next24RainValues.reduce((sum: number,n: number) => sum+n,0) : daily.precipitation_sum?.[0];
   const dewPoint = typeof hourly.dew_point_2m?.[currentHourIndex] === "number"
     ? hourly.dew_point_2m[currentHourIndex]
     : current.dew_point_2m;
@@ -523,7 +508,7 @@ export function WeatherChannelPage({ mode, location, cities, storms, onNavigate 
     ["Sunset", daily.sunset?.[0] ? clock(daily.sunset[0]) : "—", "↓"]
   ];
 
-  const hourlyCards = hours.slice(0,12).map((time,index) => <div className="flex min-w-[74px] flex-col items-center gap-2 rounded-xl px-2 py-3 text-center hover:bg-gray-100" key={String(time)+index}>
+  const hourlyCards = hours.slice(0, showAllHours ? 24 : 12).map((time,index) => <div className="flex min-w-[74px] flex-col items-center gap-2 rounded-xl px-2 py-3 text-center hover:bg-gray-100" key={String(time)+index}>
     <span className="text-xs font-semibold text-gray-600">{index===0?"Now":clock(time)}</span>
     <WeatherGlyph code={hourly.weather_code?.[index]} className="text-3xl"/>
     <strong className="text-xl font-bold text-gray-900">{value(hourly.temperature_2m?.[index])}°</strong>
@@ -579,8 +564,8 @@ export function WeatherChannelPage({ mode, location, cities, storms, onNavigate 
         <span><span className="wx-hero-muted">L</span> <strong>{value(low)}°</strong></span>
       </div>
       <div className="wx-hero-rain">
-        <span><span className="wx-hero-muted">Chance of Rain</span> <strong>{rainChance==null?"—":value(rainChance)+"%"}</strong></span>
-        {current.precipitation!=null&&<><i/><strong>{value(current.precipitation,1)} mm</strong></>}
+        <span><span className="wx-hero-muted">Chance of Rain</span> <strong>{next24RainChance==null?"—":value(next24RainChance)+"%"}</strong></span>
+        <i/><strong>{value(next24RainAmount,1)} mm</strong>
       </div>
     </div>
   </section>;
@@ -599,7 +584,7 @@ export function WeatherChannelPage({ mode, location, cities, storms, onNavigate 
   const hourlySection = <section className="flex flex-col gap-2" aria-label="Hourly forecast">
     <div className="flex min-h-7 items-center justify-between gap-3">
       <h2 className="text-xl leading-normal tracking-tight text-gray-900 mb-2 font-black">Today's outlook</h2>
-      <button type="button" onClick={()=>onNavigate("Hourly")} className="text-sm font-bold text-[#003399]">Next 24 hours ›</button>
+      <button type="button" aria-expanded={showAllHours} onClick={()=>setShowAllHours(v=>!v)} className="text-sm font-bold text-[#003399]">{showAllHours ? "Show less ↑" : "Next 24 hours ›"}</button>
     </div>
     <div className="overflow-hidden rounded-3xl border border-gray-200 bg-white">
       <div className="flex items-center justify-between px-4 pt-4"><span className="text-sm font-semibold text-gray-900">Hourly forecast</span><span className="text-xs text-gray-500">Local time</span></div>
@@ -608,15 +593,15 @@ export function WeatherChannelPage({ mode, location, cities, storms, onNavigate 
   </section>;
 
   const dailySection = <section className="flex flex-col @container/card text-card-foreground bg-card border-gray-500 not-prose @container/daily order-0" aria-label="Daily forecast">
-    <div className="mb-4 flex flex-col gap-2"><div className="flex min-h-7 items-center justify-between gap-3"><h2 className="text-xl leading-normal tracking-tight font-bold text-gray-900">{location?.name||"Local"} Daily Forecast</h2>{mode!=="10 Day"&&<button type="button" onClick={()=>onNavigate("10 Day")} className="text-sm font-bold text-[#003399]">Next 10 days ›</button>}</div></div>
-    <div className="flex-1 rounded-2xl border border-gray-200 bg-white px-4 py-2">{forecastRows(mode==="10 Day"?10:7)}</div>
+    <div className="mb-4 flex flex-col gap-2"><div className="flex min-h-7 items-center justify-between gap-3"><h2 className="text-xl leading-normal tracking-tight font-bold text-gray-900">{location?.name||"Local"} Daily Forecast</h2>{mode!=="10 Day"&&<button type="button" aria-expanded={showAllDays} onClick={()=>setShowAllDays(v=>!v)} className="text-sm font-bold text-[#003399]">{showAllDays ? "‹ Previous 10 days" : "Next 10 days ›"}</button>}</div></div>
+    <div className="flex-1 rounded-2xl border border-gray-200 bg-white px-4 py-2">{forecastRows(mode==="10 Day"||showAllDays?10:7)}</div>
   </section>;
 
   const aqiCard = <section className="flex flex-col @container/card text-card-foreground bg-card border-gray-500 rounded-2xl p-4" aria-label="Air Quality Index">
     <div className="flex items-center justify-between gap-2"><h2 className="text-xl leading-normal tracking-tight font-bold text-gray-900 pb-4">Air Quality Index</h2><button type="button" onClick={()=>onNavigate("Air Quality")} className="text-sm font-semibold text-[#003399]">Details</button></div>
     {airLoading&&!air&&<div className="h-20 animate-pulse rounded-xl bg-gray-100"/>}
     {airError&&!air&&<p className="text-sm text-gray-500">{airError}</p>}
-    {aqi!=null&&<div className="rounded-2xl bg-gray-100 p-4"><div className="flex items-end gap-3"><strong className="text-4xl font-extrabold text-gray-900">{aqi}</strong><span className="pb-1 text-sm font-semibold text-gray-700">{aqiText(aqi)}</span></div><div className="mt-3 h-2 overflow-hidden rounded-full bg-gray-300"><div className="h-full rounded-full bg-[#42a86c]" style={{width:Math.min(100,aqi/3)+"%"}}/></div><p className="mt-3 text-xs leading-relaxed text-gray-500">CAMS model guidance · US AQI reference, not an official CPCB station reading.</p></div>}
+    {aqi!=null&&<div className="rounded-2xl bg-gray-100 p-4"><div className="flex items-end gap-3"><strong className="text-4xl font-extrabold text-gray-900">{aqi}</strong><span className="pb-1 text-sm font-semibold text-gray-700">{aqiText(aqi)}</span></div><div className="relative mt-4 h-3 overflow-hidden rounded-full" style={{background:"linear-gradient(to right,#16a34a 0%,#16a34a 10%,#eab308 10%,#eab308 20%,#f97316 20%,#f97316 30%,#ef4444 30%,#ef4444 40%,#a855f7 40%,#a855f7 60%,#7f1d1d 60%,#7f1d1d 100%)"}}><span className="absolute top-1/2 size-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-gray-950 shadow" style={{left:Math.min(100,Math.max(0,aqi/5))+"%"}}/></div><div className="mt-2 flex justify-between text-[10px] font-medium text-gray-500"><span>Good</span><span>Moderate</span><span>Unhealthy</span><span>Hazardous</span></div><p className="mt-3 text-xs leading-relaxed text-gray-500">CAMS model guidance · US AQI reference, not an official CPCB station reading.</p></div>}
     {!airLoading&&!airError&&aqi==null&&<p className="text-sm text-gray-500">Air-quality data unavailable for this location.</p>}
   </section>;
 
@@ -675,7 +660,7 @@ export function WeatherChannelPage({ mode, location, cities, storms, onNavigate 
     <div className="mb-4"><h1 className="text-2xl leading-normal tracking-tight font-extrabold text-gray-900 max-md:text-xl">{pageTitle}</h1><p className="text-sm text-gray-600">CAMS modelled pollutant concentration and AQI reference.</p></div>
     <section className="flex flex-col @container/card text-card-foreground bg-card border-gray-500 rounded-2xl p-4">
       <h2 className="text-xl leading-normal tracking-tight font-bold text-gray-900">Air Quality Index</h2>
-      {aqi==null?<p className="mt-4 rounded-2xl bg-gray-100 p-6 text-sm text-gray-600">{airError||"Air-quality data unavailable."}</p>:<div className="mt-4 rounded-2xl bg-gray-100 p-6"><span className="text-xs font-bold uppercase tracking-wider text-gray-600">US AQI reference scale</span><strong className="block text-6xl font-extrabold text-gray-900">{aqi}</strong><span className="text-lg font-semibold text-gray-700">{aqiText(aqi)}</span><p className="mt-3 text-xs text-gray-600">{air?.note||"Modelled CAMS guidance, not an official CPCB station observation."}</p></div>}
+      {aqi==null?<p className="mt-4 rounded-2xl bg-gray-100 p-6 text-sm text-gray-600">{airError||"Air-quality data unavailable."}</p>:<div className="mt-4 rounded-2xl bg-gray-100 p-6"><span className="text-xs font-bold uppercase tracking-wider text-gray-600">US AQI reference scale</span><strong className="block text-6xl font-extrabold text-gray-900">{aqi}</strong><span className="text-lg font-semibold text-gray-700">{aqiText(aqi)}</span><div className="relative mt-5 h-4 overflow-hidden rounded-full" style={{background:"linear-gradient(to right,#16a34a 0%,#16a34a 10%,#eab308 10%,#eab308 20%,#f97316 20%,#f97316 30%,#ef4444 30%,#ef4444 40%,#a855f7 40%,#a855f7 60%,#7f1d1d 60%,#7f1d1d 100%)"}}><span className="absolute top-1/2 size-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-gray-950 shadow" style={{left:Math.min(100,Math.max(0,aqi/5))+"%"}}/></div><div className="mt-2 flex justify-between text-xs text-gray-600"><span>Good · 0–50</span><span>Moderate · 51–100</span><span>Hazardous · 301–500</span></div><p className="mt-3 text-xs text-gray-600">{air?.note||"Modelled CAMS guidance, not an official CPCB station observation."}</p></div>}
       <div className="mt-6 grid grid-cols-2 gap-3 md:grid-cols-3">{[["PM2.5",air?.current?.pm2_5],["PM10",air?.current?.pm10],["Ozone",air?.current?.ozone],["Nitrogen dioxide",air?.current?.nitrogen_dioxide],["Sulphur dioxide",air?.current?.sulphur_dioxide],["Carbon monoxide",air?.current?.carbon_monoxide]].map(([name,n])=><div key={String(name)} className="rounded-xl bg-gray-100 p-4"><span className="text-sm text-gray-600">{name}</span><strong className="mt-2 block text-2xl text-gray-900">{value(n,1)}</strong><small className="text-xs text-gray-500">μg/m³</small></div>)}</div>
       <p className="mt-4 text-xs leading-relaxed text-gray-500">Source: {air?.source?.name||"Open-Meteo CAMS"} · nominal resolution {air?.source?.resolution_km||45} km. Not a local monitor or official Indian CPCB AQI station.</p>
     </section>
@@ -702,13 +687,6 @@ export function WeatherChannelPage({ mode, location, cities, storms, onNavigate 
     <div className="min-w-0" style={{gridArea:"sidebar"}}>
       <div className="flex flex-col gap-12">
         {aqiCard}
-        <section className="flex flex-col @container/card text-card-foreground bg-card border-gray-500 rounded-2xl p-4">
-          <h2 className="flex pb-4 text-xl leading-normal tracking-tight font-bold text-gray-900">Health & Activities</h2>
-          <button type="button" onClick={()=>onNavigate("Allergy")} className="flex items-start gap-3 rounded-xl bg-gray-100 p-3 text-left">
-            <Icon name="allergy" className="size-7 shrink-0 text-gray-700"/>
-            <span><strong className="text-sm text-gray-900">Seasonal Allergies & Pollen</strong><small className="mt-1 block text-xs text-gray-600">Pollen data is not available for this region.</small></span>
-          </button>
-        </section>
         {mode==="Weather Report"&&worldCities}
       </div>
     </div>
