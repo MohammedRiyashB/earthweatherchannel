@@ -679,7 +679,7 @@ const [section,setSection]=useState("Weather Report");const page:"home"|SitePage
  const stateTab=visitorLocation?.state||"State";
  const localTab=visitorLocation?.name?(visitorLocation?.district?`${visitorLocation.name} · ${visitorLocation.district}`:visitorLocation.name):(visitorLocation?.district||"Local");
  const newsTabs=[{key:"World",label:"World"},{key:"Country",label:countryTab},{key:"State",label:stateTab},{key:"Local",label:localTab}];
- return <div className={page==="home"?"weathercom-site earth-weather-site":"news-site"}>
+ return <div className="weathercom-site earth-weather-site">
   {locationPickerOpen&&<div className="location-picker-overlay" role="dialog" aria-modal="false" aria-label="Search weather locations" onMouseDown={event=>{if(event.target===event.currentTarget){setLocationPickerOpen(false);setQuery("");setLocationSearchResults([]);setLocationSearchError("");}}}>
    <div className="location-picker-shell">
     <form className="location-picker-search" onSubmit={async event=>{event.preventDefault();const matches=await search();if(matches[0])void chooseLocation(matches[0]);}}>
@@ -708,8 +708,8 @@ const [section,setSection]=useState("Weather Report");const page:"home"|SitePage
     </section>}
    </div>
   </div>}
-  {page==="home"?<WeatherChannelLayout
-    active={section}
+  <WeatherChannelLayout
+    active={page==="home"?section:""}
     location={local}
     onNavigate={setSection}
     onSearchLocation={()=>{setQuery("");setLocationSearchResults([]);setLocationSearchError("");setLocationPickerOpen(true);}}
@@ -717,15 +717,14 @@ const [section,setSection]=useState("Weather Report");const page:"home"|SitePage
     accountName={user?.displayName||null}
     accountPhoto={user?.photoURL||undefined}
    >
-    {(["Weather Report","Hourly","10 Day","Radar","Air Quality","Allergy","Storm reports"] as string[]).includes(section)
-      ?<WeatherChannelPage mode={section as WeatherChannelMode} location={local} cities={cities} storms={storms} onNavigate={setSection}/>
-      :section==="Satellite Report"?<SatelliteNumericalReport/>
-      :section==="Satellite imagery"?<SatelliteDashboard/>
-      :<WeatherNewsPage section={section as "World"|"Country"|"State"|"Local"} location={visitorLocation}/>} 
-   </WeatherChannelLayout>:<>
-    <header className="masthead"><div className="masthead-row"><div className="brand-lockup"><img className="brand-wordmark" src="/logo.png" alt="EARTH WEATHER" width="1200" height="220"/></div><div className="masthead-actions"><button className="header-location-search" type="button" aria-label="Search city or region" title="Search city or region" onClick={()=>{setQuery("");setLocationSearchResults([]);setLocationSearchError("");setLocationPickerOpen(true);}}><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.6"/><path d="m16 16 4.1 4.1"/></svg></button>{user?<button className="masthead-account-button" onClick={()=>void signOut(auth!)}>{user.displayName||"Account"}</button>:<button className="masthead-account-button" onClick={()=>void signIn()}>Sign in</button>}</div></div></header>
-    <main className="news-main info-page"><SitePageView slug={page}/></main>
-   </>}
+    {page==="home"
+      ? ((["Weather Report","Hourly","10 Day","Radar","Air Quality","Allergy","Storm reports"] as string[]).includes(section)
+        ?<WeatherChannelPage mode={section as WeatherChannelMode} location={local} cities={cities} storms={storms} onNavigate={setSection}/>
+        :section==="Satellite Report"?<SatelliteNumericalReport/>
+        :section==="Satellite imagery"?<SatelliteDashboard/>
+        :<WeatherNewsPage section={section as "World"|"Country"|"State"|"Local"} location={visitorLocation}/>)
+      :<main className="news-main info-page"><SitePageView slug={page}/></main>}
+   </WeatherChannelLayout>
   <footer className="news-footer">
    <div className="footer-heading">
     <img className="footer-logo" src="/logo.png" alt="EARTH WEATHER logo" />
