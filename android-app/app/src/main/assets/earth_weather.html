@@ -34,6 +34,24 @@ body{overflow-x:hidden}
 .sky.storm .cloud{background:linear-gradient(180deg,rgba(205,220,237,.78),rgba(125,149,174,.74))}
 .sun-glow{position:absolute;top:11%;right:13%;width:160px;height:160px;border-radius:50%;background:radial-gradient(circle,#fff4c6 0 10%,#ffe18a88 21%,rgba(255,211,114,.15) 48%,transparent 72%);filter:blur(2px);opacity:.76;animation:sunPulse 7s ease-in-out infinite alternate}
 .sky.storm .sun-glow,.sky.rain .sun-glow{opacity:.18}
+/* Original Earth Weather motion layers: CSS-only, lightweight and offline-safe. */
+.sky.snow{background:linear-gradient(180deg,#526d91 0%,#91abc7 58%,#d5e0ec 100%)}
+.sky.fog{background:linear-gradient(180deg,#71859c 0%,#a9b9c8 58%,#d3dce3 100%)}
+.sky.snow .cloud,.sky.fog .cloud{background:linear-gradient(180deg,rgba(250,253,255,.96),rgba(211,226,240,.82))}
+.snow-particles{position:absolute;inset:-12% 0;pointer-events:none;opacity:0;background-image:radial-gradient(circle,rgba(255,255,255,.96) 0 1.5px,transparent 2px),radial-gradient(circle,rgba(255,255,255,.8) 0 2px,transparent 2.5px),radial-gradient(circle,rgba(255,255,255,.85) 0 1px,transparent 1.8px);background-size:73px 91px,119px 137px,47px 61px;background-position:4px 0,32px 22px,15px 41px}
+.sky.snow .snow-particles{opacity:.78;animation:snowDrift 12s linear infinite}
+.lightning-flash{position:absolute;inset:0;pointer-events:none;opacity:0;background:rgba(224,240,255,.72)}
+.sky.storm .lightning-flash{animation:lightningPulse 8s linear infinite}
+.night-stars{position:absolute;inset:0;pointer-events:none;opacity:0;background-image:radial-gradient(2px 2px at 18% 18%,#fff 45%,transparent 100%),radial-gradient(1.5px 1.5px at 68% 13%,#fff 45%,transparent 100%),radial-gradient(1.5px 1.5px at 84% 32%,#fff 45%,transparent 100%),radial-gradient(2px 2px at 39% 27%,#fff 45%,transparent 100%);background-size:230px 180px;animation:starTwinkle 4s ease-in-out infinite alternate}
+.sky.night .night-stars{opacity:.62}
+.weather-mist{position:absolute;left:-20%;right:-20%;bottom:12%;height:28%;pointer-events:none;opacity:0;background:radial-gradient(ellipse at 50% 50%,rgba(239,247,255,.52),transparent 68%);filter:blur(18px)}
+.sky.fog .weather-mist{opacity:.9;animation:mistMove 18s ease-in-out infinite alternate}
+@keyframes snowDrift{from{transform:translate3d(-1%, -5%,0)}to{transform:translate3d(3%, 12%,0)}}
+@keyframes lightningPulse{0%,91%,93%,96%,100%{opacity:0}91.5%,92.2%,94%{opacity:.7}}
+@keyframes starTwinkle{from{opacity:.3}to{opacity:.78}}
+@keyframes mistMove{from{transform:translateX(-4%) scale(1)}to{transform:translateX(5%) scale(1.12)}}
+@media(prefers-reduced-motion:reduce){.sky:before,.cloud,.sun-glow,.rain-lines,.snow-particles,.lightning-flash,.night-stars,.weather-mist{animation:none!important}}
+
 @keyframes skyDrift{to{transform:translate3d(2.5%,2%,0) scale(1.08)}}
 @keyframes cloudMove{from{translate:-2vw 0}to{translate:8vw 8px}}
 @keyframes rainFall{to{background-position:0 160%}}
@@ -184,7 +202,7 @@ body{overflow-x:hidden}
 </style>
 </head>
 <body>
-<div class="sky" id="sky"><div class="sun-glow"></div><div class="cloud one"></div><div class="cloud two"></div><div class="cloud three"></div><div class="rain-lines"></div></div>
+<div class="sky" id="sky"><div class="sun-glow"></div><div class="cloud one"></div><div class="cloud two"></div><div class="cloud three"></div><div class="rain-lines"></div><div class="snow-particles" aria-hidden="true"></div><div class="lightning-flash" aria-hidden="true"></div><div class="night-stars" aria-hidden="true"></div><div class="weather-mist" aria-hidden="true"></div></div>
 <main class="app" id="homeScreen">
   <header class="topbar">
     <button class="cityhead" type="button" onclick="showScreen('cities')">
@@ -345,7 +363,7 @@ function weatherLabel(code){const c=Number(code);if(c===0)return"Sunny";if(c===1
 function weatherIcon(code){const c=Number(code);if(c===0)return"☀️";if(c===1||c===2)return"🌤";if(c===3)return"☁️";if(c===45||c===48)return"🌫";if([51,53,55,56,57].includes(c))return"🌦";if([61,63,65,66,67,80,81,82].includes(c))return"🌧";if([71,73,75,77,85,86].includes(c))return"❄️";if([95,96,99].includes(c))return"⛈";return"☁"}
 function windDir(d){if(d===null||d===undefined)return"";return["N","NE","E","SE","S","SW","W","NW"][Math.round((Number(d)%360)/45)%8]}
 function moonPhase(date=new Date()){const known=Date.UTC(2000,0,6,18,14);const days=(date.getTime()-known)/86400000;const age=((days%29.530588853)+29.530588853)%29.530588853;const p=age/29.530588853;const names=["New moon","Waxing crescent","First quarter","Waxing gibbous","Full moon","Waning gibbous","Last quarter","Waning crescent"];return{age,name:names[Math.floor((p*8+.5)%8)],icon:p<.03||p>.97?"🌑":p<.22?"🌒":p<.28?"🌓":p<.47?"🌔":p<.53?"🌕":p<.72?"🌖":p<.78?"🌗":"🌘"}}
-function setSky(code){const s=$("sky");s.className="sky";const c=Number(code);if([51,53,55,56,57,61,63,65,66,67,80,81,82].includes(c))s.classList.add("rain");if([95,96,99].includes(c))s.classList.add("storm");if(weatherData?.current?.is_day===0)s.classList.add("night")}
+function setSky(code){const s=$("sky");s.className="sky";const c=Number(code);if([51,53,55,56,57,61,63,65,66,67,80,81,82].includes(c))s.classList.add("rain");if([71,73,75,77,85,86].includes(c))s.classList.add("snow");if([45,48].includes(c))s.classList.add("fog");if([95,96,99].includes(c))s.classList.add("storm");if(weatherData?.current?.is_day===0)s.classList.add("night")}
 function setHeroStatus(text){$("heroStatus").textContent=text}
 function showWeatherError(message){setHeroStatus("Weather data unavailable");$("condition").textContent="Unable to load weather";$("insightTitle").textContent="Forecast unavailable";$("insightCopy").textContent=message}
 async function fetchForecast(latitude,longitude){const url=API+"/api/forecast?latitude="+encodeURIComponent(latitude)+"&longitude="+encodeURIComponent(longitude)+"&days=7&timezone=auto";const r=await fetch(url,{headers:{Accept:"application/json"}});if(!r.ok)throw new Error("Forecast service HTTP "+r.status);return await r.json()}
