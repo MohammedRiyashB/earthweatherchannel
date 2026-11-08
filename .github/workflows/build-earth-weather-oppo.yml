@@ -47,7 +47,7 @@ jobs:
 
           root = Path("decoded")
           old = "com.coloros.weather2"
-          new = "com.bmrinc.earthweather"
+          new = "com.bmrinc.earthweather.app"
 
           # Update package/authority references in decoded textual resources and Smali.
           text_ext = {".xml", ".smali", ".yml", ".yaml", ".json", ".properties", ".txt", ".html", ".cfg", ".ini"}
@@ -318,7 +318,7 @@ jobs:
 
           # Record the intended product identity in the build workspace.
           (Path("earth-weather-build.properties")).write_text(
-              "applicationId=com.bmrinc.earthweather\nappName=Earth Weather\napiBase=https://earth-weather-api.onrender.com\n"
+              "applicationId=com.bmrinc.earthweather.app\nappName=Earth Weather\napiBase=https://earth-weather-api.onrender.com\n"
           )
           print(f"Updated package references in {changed} files.")
           PY
@@ -336,14 +336,14 @@ jobs:
           "$BT/apksigner" sign --ks earthweather-debug.jks --ks-key-alias earthweather --ks-pass pass:android --key-pass pass:android --out EarthWeather.apk earth-weather-aligned.apk
           "$BT/apksigner" verify --verbose --print-certs EarthWeather.apk
           "$BT/aapt" dump badging EarthWeather.apk | tee apk-badging.txt
-          grep -q "package: name='com.bmrinc.earthweather'" apk-badging.txt
+          grep -q "package: name='com.bmrinc.earthweather.app'" apk-badging.txt
           grep -q "application-label:'Earth Weather'" apk-badging.txt
           test "$(stat -c%s EarthWeather.apk)" -gt 20000000
           sha256sum EarthWeather.apk | tee apk-sha256.txt
       - name: Upload full UI APK
         uses: actions/upload-artifact@v4
         with:
-          name: earth-weather-full-oppo-ui-debug
+          name: earth-weather-standalone-full-oppo-ui-debug
           path: |
             EarthWeather.apk
             apk-badging.txt
