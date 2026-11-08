@@ -625,7 +625,7 @@ export function WeatherChannelPage({ mode, location, cities, storms, onNavigate 
         <span aria-label={location.name + " map location"} title={location.name} className="absolute left-1/2 top-1/2 z-10 h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-[3px] border-white bg-blue-600 shadow-[0_1px_8px_rgba(0,0,0,0.55)]"/>
       </div>}
       {(!radar||!frame||!location)&&!radarLoading&&!radarError&&<div className="absolute inset-0 grid place-items-center text-sm text-gray-500">Radar coverage unavailable.</div>}
-      <span className="absolute left-3 top-3 z-20 rounded-lg bg-gray-900/80 px-3 py-2 text-sm font-bold text-white shadow-lg">{radarFrameTime}</span>
+      <span className="absolute left-3 top-3 z-20 rounded-lg border border-white/20 bg-[rgba(55,55,55,0.72)] px-3 py-2 text-sm font-bold tracking-wide text-white shadow-lg backdrop-blur-sm">{radarFrameTime}</span>
       <span className="absolute bottom-2 right-2 rounded bg-white/90 px-2 py-1 text-[10px] font-medium text-gray-700">© OpenStreetMap</span>
     </div>
   </section>;
