@@ -637,3 +637,64 @@
 @media(prefers-reduced-motion:reduce) {
   .wx-weather-site .wx-icon-weather { animation:none !important; }
 }
+
+
+/* Final specificity pass so the new forecast row grid wins over the earlier generic row rules. */
+.wx-weather-site [aria-label="Daily forecast"] .wx-daily-forecast-row {
+  display: grid !important;
+  grid-template-columns: minmax(64px,.8fr) 32px 42px 38px minmax(56px,1fr) 38px !important;
+  align-items: center !important;
+  gap: 8px !important;
+  min-height: 66px !important;
+  padding: 9px 0 !important;
+}
+.wx-weather-site [aria-label="Daily forecast"] .wx-daily-forecast-row .wx-day-name {
+  width: auto !important;
+  min-width: 0 !important;
+  color: #202124 !important;
+  font-size: 14px !important;
+  line-height: 1.2 !important;
+}
+.wx-weather-site [aria-label="Daily forecast"] .wx-daily-forecast-row .wx-day-symbol { min-width:0; }
+.wx-weather-site [aria-label="Daily forecast"] .wx-daily-forecast-row .wx-daily-icon { font-size:29px !important; }
+.wx-weather-site [aria-label="Daily forecast"] .wx-daily-forecast-row .wx-day-rain { color:#43899f; font-size:13px; text-align:center; }
+.wx-weather-site [aria-label="Daily forecast"] .wx-daily-forecast-row .wx-day-low,
+.wx-weather-site [aria-label="Daily forecast"] .wx-daily-forecast-row .wx-day-high {
+  min-width:0;
+  text-align:right;
+  font-size:14px !important;
+  white-space:nowrap;
+}
+.wx-weather-site [aria-label="Daily forecast"] .wx-daily-forecast-row .wx-day-low { color:#686d73; font-weight:500; }
+.wx-weather-site [aria-label="Daily forecast"] .wx-daily-forecast-row .wx-day-high { color:#27292c; font-weight:800; }
+.wx-weather-site [aria-label="Daily forecast"] .wx-daily-forecast-row .wx-day-range {
+  position:relative;
+  display:block;
+  min-width:0;
+  height:9px;
+  border-radius:999px;
+  background:#e9eaec;
+  overflow:hidden;
+}
+.wx-weather-site [aria-label="Daily forecast"] .wx-daily-forecast-row .wx-day-range i {
+  position:absolute;
+  top:0;
+  display:block;
+  height:100%;
+  border-radius:inherit;
+  background:linear-gradient(90deg,#e99a33,#ed6c28);
+}
+@media(max-width:420px) {
+  .wx-weather-site [aria-label="Daily forecast"] .wx-daily-forecast-row {
+    grid-template-columns:minmax(60px,.82fr) 27px 35px 30px minmax(48px,1fr) 34px !important;
+    gap:5px !important;
+    min-height:60px !important;
+    padding:8px 0 !important;
+  }
+  .wx-weather-site [aria-label="Daily forecast"] .wx-daily-forecast-row .wx-day-name { font-size:12px !important; }
+  .wx-weather-site [aria-label="Daily forecast"] .wx-daily-forecast-row .wx-daily-icon { font-size:24px !important; }
+  .wx-weather-site [aria-label="Daily forecast"] .wx-daily-forecast-row .wx-day-rain,
+  .wx-weather-site [aria-label="Daily forecast"] .wx-daily-forecast-row .wx-day-low,
+  .wx-weather-site [aria-label="Daily forecast"] .wx-daily-forecast-row .wx-day-high { font-size:12px !important; }
+  .wx-weather-site [aria-label="Daily forecast"] .wx-daily-forecast-row .wx-day-range { height:8px; }
+}
