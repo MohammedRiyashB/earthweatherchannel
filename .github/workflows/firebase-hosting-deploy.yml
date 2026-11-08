@@ -3,6 +3,11 @@ name: Deploy EARTH WEATHER to Firebase Hosting
 on:
   push:
     branches: [main]
+    paths:
+      - "frontend/**"
+      - "firebase.json"
+      - ".firebaserc"
+      - ".github/workflows/firebase-hosting-deploy.yml"
   workflow_dispatch:
 
 permissions:
