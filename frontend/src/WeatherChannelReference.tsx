@@ -120,9 +120,10 @@ function WeatherParticleField({ code }: { code: unknown }) {
           if (cloud.x > 1.18) cloud.x = -.2;
           const x = cloud.x * width, y = cloud.y * height, s = cloud.scale;
           ctx.save(); ctx.globalAlpha = cloud.alpha;
-          ctx.fillStyle = ctx.createRadialGradient(x, y, 3, x, y, 76*s);
-          ctx.fillStyle.addColorStop(0, "rgba(238,247,255,.65)");
-          ctx.fillStyle.addColorStop(1, "rgba(220,239,255,0)");
+          const cloudGradient = ctx.createRadialGradient(x, y, 3, x, y, 76*s);
+          cloudGradient.addColorStop(0, "rgba(238,247,255,.65)");
+          cloudGradient.addColorStop(1, "rgba(220,239,255,0)");
+          ctx.fillStyle = cloudGradient;
           ctx.beginPath(); ctx.ellipse(x, y, 78*s, 27*s, 0, 0, Math.PI*2); ctx.fill();
           ctx.beginPath(); ctx.ellipse(x-25*s, y-10*s, 31*s, 22*s, 0, 0, Math.PI*2); ctx.fill();
           ctx.beginPath(); ctx.ellipse(x+20*s, y-15*s, 38*s, 28*s, 0, 0, Math.PI*2); ctx.fill();
