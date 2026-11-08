@@ -211,11 +211,6 @@ export function WeatherChannelLayout({
           </div>
         </div>
 
-        <div className="relative mx-0 w-full overflow-hidden md:mx-4 md:w-[calc(100%-32px)] md:rounded-3xl">
-          <div className="flex w-full items-center justify-center bg-gray-100" style={{ minHeight: 250 }}>
-            <span className="text-xxs py-1 text-center leading-4 text-gray-400">Advertisement</span>
-          </div>
-        </div>
         {children}
       </main>
     </div>
@@ -500,9 +495,6 @@ export function WeatherChannelPage({ mode, location, cities, storms, onNavigate 
   return <div className="wx-weather-content-grid w-full mx-auto gap-6 p-4">
     <div className="min-w-0" style={{gridArea:"contentTop"}}>
       <div className="flex flex-col gap-12">
-        <section aria-label="Advertisement" className="flex min-h-[120px] flex-col @container/card text-card-foreground border-0 bg-card region-contentTop adContainer disableHeliosStyles overflow-hidden pb-0 rounded-3xl">
-          <div className="flex min-h-[250px] flex-1 items-center justify-center bg-gray-100"><span className="text-xxs w-full px-4 py-1 text-center leading-4 text-gray-400">Advertisement</span></div>
-        </section>
       </div>
     </div>
     <div className="min-w-0" style={{gridArea:"main"}}>
@@ -514,9 +506,6 @@ export function WeatherChannelPage({ mode, location, cities, storms, onNavigate 
     </div>
     <div className="min-w-0" style={{gridArea:"sidebar"}}>
       <div className="flex flex-col gap-12">
-        <section aria-label="Advertisement" className="flex min-h-[250px] flex-col @container/card text-card-foreground border-gray-500 bg-card region-contentTop adContainer disableHeliosStyles overflow-hidden rounded-2xl">
-          <div className="flex min-h-[250px] flex-1 items-start justify-center bg-gray-100"><span className="text-xxs w-full px-4 py-1 text-center leading-4 text-gray-400">Advertisement</span></div>
-        </section>
         {aqiCard}
         <section className="flex flex-col @container/card text-card-foreground bg-card border-gray-500 rounded-2xl p-4">
           <h2 className="flex pb-4 text-xl leading-normal tracking-tight font-bold text-gray-900">Health & Activities</h2>
@@ -525,12 +514,8 @@ export function WeatherChannelPage({ mode, location, cities, storms, onNavigate 
             <span><strong className="text-sm text-gray-900">Seasonal Allergies & Pollen</strong><small className="mt-1 block text-xs text-gray-600">Pollen data is not available for this region.</small></span>
           </button>
         </section>
-        <section aria-label="Advertisement" className="flex min-h-[180px] flex-col @container/card text-card-foreground border-gray-500 bg-card region-contentTop adContainer disableHeliosStyles overflow-hidden rounded-2xl">
-          <div className="flex min-h-[180px] flex-1 items-start justify-center bg-gray-100"><span className="text-xxs w-full px-4 py-1 text-center leading-4 text-gray-400">Advertisement</span></div>
-        </section>
         {mode==="Weather Report"&&worldCities}
       </div>
     </div>
-    <div className="min-w-0" style={{gridArea:"contentBottom"}}/>
   </div>;
 }
