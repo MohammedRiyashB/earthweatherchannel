@@ -1,0 +1,89 @@
+name: Rebuild OPPO Weather source archive
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "Uifprweather.zip"
+      - ".github/workflows/rebuild-oppo-source.yml"
+permissions:
+  contents: read
+jobs:
+  decode-and-roundtrip:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Set up Android SDK tools
+        uses: android-actions/setup-android@v3
+        with:
+          cmdline-tools-version: latest
+          packages: "platform-tools build-tools;35.0.0"
+          accept-android-sdk-licenses: true
+      - name: Download Apktool
+        run: |
+          curl -fL --retry 3 --retry-delay 2 \
+            https://github.com/iBotPeaches/Apktool/releases/download/v3.0.3/apktool_3.0.3.jar \
+            -o apktool.jar
+          java -jar apktool.jar --version
+      - name: Reconstruct APK container from supplied archive
+        run: |
+          mkdir -p input
+          unzip -q Uifprweather.zip -d input
+          test -f input/OppoWeather2/AndroidManifest.xml
+          test -f input/OppoWeather2/resources.arsc
+          test -f input/OppoWeather2/classes.dex
+          (cd input/OppoWeather2 && zip -q -r ../oppo-original.apk .)
+          unzip -t input/oppo-original.apk | tail -2
+      - name: Decode full application and rebuild untouched baseline
+        run: |
+          java -Xmx5g -jar apktool.jar d -f input/oppo-original.apk -o decoded
+          java -Xmx5g -jar apktool.jar b decoded -o oppo-roundtrip-unsigned.apk
+          mkdir -p reports
+          cp decoded/AndroidManifest.xml reports/AndroidManifest.decoded.xml
+          python3 - <<'PY'
+          import xml.etree.ElementTree as ET, pathlib, re, json
+          m=ET.parse('decoded/AndroidManifest.xml').getroot()
+          ns={'a':'http://schemas.android.com/apk/res/android'}
+          app=m.find('application')
+          out={
+            'package':m.attrib.get('package'),
+            'versionCode':m.attrib.get('{http://schemas.android.com/apk/res/android}versionCode'),
+            'versionName':m.attrib.get('{http://schemas.android.com/apk/res/android}versionName'),
+            'minSdk':None,
+            'targetSdk':None,
+            'applicationLabel': app.attrib.get('{http://schemas.android.com/apk/res/android}label') if app is not None else None,
+            'applicationClass': app.attrib.get('{http://schemas.android.com/apk/res/android}name') if app is not None else None,
+            'launcherActivities':[],
+            'smaliDirectories': [str(p) for p in pathlib.Path('decoded').glob('smali*') if p.is_dir()],
+            'roundtripBytes':pathlib.Path('oppo-roundtrip-unsigned.apk').stat().st_size
+          }
+          for e in m.findall('uses-sdk'):
+            out['minSdk']=e.attrib.get('{http://schemas.android.com/apk/res/android}minSdkVersion')
+            out['targetSdk']=e.attrib.get('{http://schemas.android.com/apk/res/android}targetSdkVersion')
+          for a in app.findall('activity') if app is not None else []:
+            filters=a.findall('intent-filter')
+            if any(any(x.attrib.get('{http://schemas.android.com/apk/res/android}name')=='android.intent.action.MAIN' for x in f.findall('action')) and any(x.attrib.get('{http://schemas.android.com/apk/res/android}name')=='android.intent.category.LAUNCHER' for x in f.findall('category')) for f in filters):
+              out['launcherActivities'].append(a.attrib.get('{http://schemas.android.com/apk/res/android}name'))
+          pathlib.Path('reports/app-metadata.json').write_text(json.dumps(out,indent=2))
+          print(json.dumps(out,indent=2))
+          PY
+          grep -R -n -E 'gzipJson/sdk|weather/data|weather/lightData|weather/location' decoded/smali* > reports/weather-api-call-sites.txt || true
+          grep -R -n -E 'WeatherSdkClient|WeatherDataClient|WeatherHttpClient|CryptoInterceptor|WeatherRequest' decoded/smali* > reports/weather-network-classes.txt || true
+          grep -R -n -E 'About Weather|Weather User Agreement|Privacy Notice|Personal Service|Third.party' decoded/res decoded/assets > reports/settings-legal-strings.txt || true
+          find decoded -maxdepth 2 -type d -name 'lib*' -print > reports/native-lib-dirs.txt
+      - name: Upload decoded baseline and analysis
+        uses: actions/upload-artifact@v4
+        with:
+          name: oppo-weather-decoded-baseline
+          path: |
+            oppo-roundtrip-unsigned.apk
+            reports/
+            decoded/smali*/com/heytap/weather/
+            decoded/smali*/com/oplus/weather/
+          if-no-files-found: warn
+          retention-days: 14
