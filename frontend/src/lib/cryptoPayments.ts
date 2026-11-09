@@ -3,6 +3,7 @@ const API_BASE = (import.meta.env.VITE_API_BASE_URL || "https://earthweather-api
 export type CryptoService = {
   id: string;
   name: string;
+  base_price_per_day: number;
   price_per_day: number;
   requests_per_day: number;
 };
