@@ -879,9 +879,9 @@ const [section,setSection]=useState("Weather Report");const page:"home"|SitePage
      <section style={{padding:22,border:"1px solid #e1e4e8",borderRadius:18,background:"#fff"}}>
       <h2 style={{marginTop:0}}>1. Choose API services</h2><p style={{color:"#68707b",marginTop:-4}}>Select the weather data your application needs.</p>
       <div style={{display:"grid",gap:4}}>
-       {apiServiceOptions.map(service=><label key={service.name} style={{display:"flex",alignItems:"flex-start",gap:12,padding:"12px 0",borderBottom:"1px solid #eef0f2",cursor:"pointer"}}>
+       {apiServiceOptions.map(service=><label key={service.id} style={{display:"flex",alignItems:"flex-start",gap:12,padding:"12px 0",borderBottom:"1px solid #eef0f2",cursor:"pointer"}}>
         <input type="checkbox" checked={apiServices.includes(service.name)} onChange={()=>toggleApiService(service.name)} style={{width:18,height:18,marginTop:2,accentColor:"#b42323"}}/>
-        <span><strong>{service.name}</strong><span style={{display:"block",fontSize:13,color:"#68707b",marginTop:3}}>{service.detail}</span></span>
+        <span><strong>{service.name}</strong><span style={{display:"block",fontSize:13,color:"#68707b",marginTop:3}}>{service.detail}</span><span style={{display:"block",fontSize:12,color:"#68707b",marginTop:3}}>{paymentProviderConfig?.services.find(item=>item.id===service.id)?.price_per_day.toFixed(4) ?? "—"} USD / day</span></span>
        </label>)}
       </div>
      </section>
@@ -897,9 +897,9 @@ const [section,setSection]=useState("Weather Report");const page:"home"|SitePage
        <h2 style={{marginTop:0}}>3. Plan summary</h2>
        <div style={{display:"flex",justifyContent:"space-between",padding:"8px 0",borderBottom:"1px solid #eef0f2"}}><span style={{color:"#68707b"}}>Selected services</span><strong>{apiServices.length}</strong></div>
        <div style={{display:"flex",justifyContent:"space-between",padding:"8px 0",borderBottom:"1px solid #eef0f2"}}><span style={{color:"#68707b"}}>Duration</span><strong>{apiDays} days</strong></div>
-       <div style={{display:"flex",justifyContent:"space-between",padding:"12px 0 4px",gap:12}}><strong>Estimated price</strong><strong style={{fontSize:22}}>{apiCurrencyLoading?"Detecting currency…":apiPriceLabel}</strong></div>
+       <div style={{display:"flex",justifyContent:"space-between",padding:"12px 0 4px",gap:12}}><strong>Estimated price</strong><strong style={{fontSize:22}}>{!hasCompletePricing?"Service pricing unavailable":apiCurrencyLoading?"Detecting currency…":apiPriceLabel}</strong></div>
        <p style={{fontSize:12,color:"#68707b",lineHeight:1.5}}>Currency detected from your location: {apiCountry} · {apiCurrency}. This is an indicative local-currency estimate only; final pricing is calculated server-side in USD and crypto conversion is confirmed by NOWPayments.</p>
-       <p style={{fontSize:12,color:"#68707b",lineHeight:1.5}}>Pricing basis: {apiDays} days and {apiServices.length} selected service(s). API request quotas and backend usage controls must be activated before selling access.</p>
+       <p style={{fontSize:12,color:"#68707b",lineHeight:1.5}}>Server pricing: {apiDays} day(s), {apiServices.length} service(s){apiDays>=28?" · 15% long-term discount applied":""}. Each purchased service includes its daily request quota.</p>
        <div role="status" aria-live="polite" style={{marginTop:14,padding:14,borderRadius:10,background:paymentProviderConfig?.provider_configured&&providerApiKeyVerified?"#edf8f0":"#f5f6f8",border:"1px solid #e1e4e8",fontSize:13,lineHeight:1.5}}>
         {paymentProviderLoading?<strong>Checking NOWPayments connection…</strong>:paymentProviderConfig?.provider_configured&&providerApiKeyVerified?<><strong style={{color:"#147a37"}}>NOWPayments API connected</strong><div>{providerCurrencyCount} supported crypto currencies returned by the provider.</div></>:paymentProviderConfig?.provider_configured?<><strong>NOWPayments credentials detected</strong><div>{paymentProviderError||"Provider currency verification is pending."}</div></>:<><strong>NOWPayments is not fully configured</strong><div>The backend has not confirmed both the API key and IPN secret.</div></>}
        </div>
@@ -909,15 +909,33 @@ const [section,setSection]=useState("Weather Report");const page:"home"|SitePage
        </div>}
        {paymentProviderConfig?.launch_blockers?.map(item=><p key={item} style={{fontSize:13,color:"#8a4b08",lineHeight:1.5,margin:"10px 0"}}>{item}</p>)}
        {paymentProviderError&&<p role="alert" style={{fontSize:13,color:"#b42318"}}>{paymentProviderError}</p>}
-       <button type="button" disabled style={{width:"100%",marginTop:12,padding:14,border:0,borderRadius:10,background:"#d8dadd",color:"#737982",fontWeight:750,cursor:"not-allowed"}}>{paymentProviderConfig?.provider_configured&&providerApiKeyVerified?"Provider connected · paid API activation pending":"Provider setup pending"}</button>
+        <label style={{display:"block",marginTop:14,fontSize:13,fontWeight:700}}>Pay with cryptocurrency
+         <select value={selectedPayCurrency} onChange={event=>setSelectedPayCurrency(event.target.value)} disabled={!supportedCurrencies.length} style={{display:"block",width:"100%",marginTop:7,padding:13,border:"1px solid #d5d9df",borderRadius:10,background:"#fff",color:"#17191d"}}>
+          {supportedCurrencies.map(currency=><option key={currency} value={currency}>{currency.toUpperCase()}</option>)}
+         </select>
+        </label>
+        {checkoutError&&<p role="alert" style={{fontSize:13,color:"#b42318"}}>{checkoutError}</p>}
+        <button type="button" onClick={()=>void startCryptoCheckout()} disabled={checkoutBusy||paymentProviderLoading||!paymentProviderConfig?.enabled||!providerApiKeyVerified||!hasCompletePricing||!supportedCurrencies.length||!apiServices.length} style={{width:"100%",marginTop:14,padding:14,border:0,borderRadius:10,background:checkoutBusy||!paymentProviderConfig?.enabled||!providerApiKeyVerified||!hasCompletePricing?"#d8dadd":"#17191d",color:checkoutBusy||!paymentProviderConfig?.enabled||!providerApiKeyVerified||!hasCompletePricing?"#737982":"#fff",fontWeight:750,cursor:checkoutBusy?"wait":"pointer"}}>
+         {checkoutBusy?"Creating secure invoice…":paymentProviderConfig?.enabled&&providerApiKeyVerified?"Continue to NOWPayments":"Paid API checkout not ready"}
+        </button>
       </section>
      </div>
     </div>
     <section style={{marginTop:18,padding:22,border:"1px solid #e1e4e8",borderRadius:18,background:"#fff"}}>
-     <h2 style={{marginTop:0}}>API keys & documentation</h2><p style={{color:"#68707b"}}>Your private API credentials will appear here after your plan or free trial is securely activated.</p>
-     <div style={{display:"flex",gap:10,flexWrap:"wrap"}}><a href="/api/docs" style={{display:"inline-block",padding:"11px 15px",borderRadius:9,background:"#17191d",color:"#fff",textDecoration:"none",fontWeight:700}}>View API documentation</a><span style={{padding:"11px 0",fontSize:13,color:"#68707b"}}>No API keys issued yet</span></div>
-     <p style={{fontSize:12,color:"#68707b",marginBottom:0}}>Secret API keys will be shown only to their owner and must never be shared publicly.</p>
-    </section>
+      <h2 style={{marginTop:0}}>API keys & documentation</h2>
+      <p style={{color:"#68707b"}}>Your API keys are shown only inside your signed-in account. Keep them private.</p>
+      <div style={{display:"flex",gap:10,flexWrap:"wrap"}}><a href={`${API}/docs`} target="_blank" rel="noreferrer" style={{display:"inline-block",padding:"11px 15px",borderRadius:9,background:"#17191d",color:"#fff",textDecoration:"none",fontWeight:700}}>View API documentation</a><button type="button" onClick={()=>void refreshCustomerApiKeys(user!)} disabled={apiKeysLoading} style={{padding:"11px 15px",border:"1px solid #d5d9df",borderRadius:9,background:"#fff",fontWeight:700}}>{apiKeysLoading?"Refreshing…":"Refresh API keys"}</button></div>
+      {paymentFeedback&&<p role="status" style={{marginTop:14,padding:12,borderRadius:9,background:"#f2f7ff",color:"#284b78",fontSize:13}}>{paymentFeedback}</p>}
+      {apiKeysLoading&&<p style={{color:"#68707b"}}>Loading your API keys…</p>}
+      {!apiKeysLoading&&customerApiKeys.length===0&&<p style={{marginTop:18,color:"#68707b"}}>No API keys issued yet. After a successful NOWPayments payment, your key will appear here automatically.</p>}
+      {customerApiKeys.map(key=><div key={key.id} style={{marginTop:16,padding:15,border:"1px solid #e1e4e8",borderRadius:12}}>
+       <div style={{display:"flex",justifyContent:"space-between",gap:12,alignItems:"center",flexWrap:"wrap"}}><strong>{key.status==="active"?"Active API key":"Expired API key"}</strong><span style={{fontSize:12,color:key.status==="active"?"#147a37":"#8a4b08"}}>{key.status.toUpperCase()}</span></div>
+       <code style={{display:"block",marginTop:10,padding:12,background:"#f5f6f8",borderRadius:8,overflowWrap:"anywhere",whiteSpace:"pre-wrap"}}>{key.api_key}</code>
+       <button type="button" onClick={()=>{void navigator.clipboard?.writeText(key.api_key).then(()=>setPaymentFeedback("API key copied to clipboard."),()=>setPaymentFeedback("Clipboard access is unavailable in this browser."));}} style={{marginTop:9,padding:"9px 13px",border:0,borderRadius:8,background:"#17191d",color:"#fff",fontWeight:700}}>Copy API key</button>
+       <p style={{fontSize:12,color:"#68707b",lineHeight:1.55,marginBottom:0}}>Services: {key.service_ids.join(", ")}<br/>Expires: {new Date(key.expires_at).toLocaleString()}<br/>Daily quota: {Object.entries(key.quotas_per_day).map(([service,quota])=>`${service}: ${quota.toLocaleString()}`).join(" · ")}</p>
+      </div>)}
+      <p style={{fontSize:12,color:"#68707b",marginBottom:0,marginTop:16}}>Use the <code>x-api-key</code> request header with the API endpoints shown in the documentation. Keys expire automatically and daily quotas reset at 00:00 UTC.</p>
+     </section>
    </>}
    <p style={{marginTop:36}}><a href="/" style={{color:"#555",textDecoration:"underline"}}>← Back to Earth Weather</a></p>
   </div>
