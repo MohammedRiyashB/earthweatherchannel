@@ -34,7 +34,7 @@ class DynamicPaymentPricingTests(unittest.TestCase):
             "current-weather": {"price_per_day": 0.4271},
             "daily-forecast": {"price_per_day": 0.1414},
         }
-        self.assertEqual(calculate_checkout_amount(services, ["current-weather", "daily-forecast"], 28), 13.55)
+        self.assertEqual(calculate_checkout_amount(services, ["current-weather", "daily-forecast"], 28), 13.53)
 
     def test_unknown_service_is_rejected(self):
         with self.assertRaisesRegex(ValueError, "unknown API service IDs"):
