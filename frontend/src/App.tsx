@@ -387,9 +387,10 @@ const [section,setSection]=useState("Weather Report");const page:"home"|SitePage
   const selectedServiceIds=apiServiceOptions.filter(service=>apiServices.includes(service.name)).map(service=>service.id);
   const configuredServices=paymentProviderConfig?.services??[];
   const serviceRates=new Map(configuredServices.map(service=>[service.id,service.price_per_day]));
-  const hasCompletePricing=selectedServiceIds.length>0&&selectedServiceIds.every(id=>serviceRates.has(id));
+  const baseServiceRate=selectedServiceIds.length?configuredServices.find(service=>service.id===selectedServiceIds[0])?.base_price_per_day:undefined;
+  const hasCompletePricing=selectedServiceIds.length>0&&selectedServiceIds.every(id=>serviceRates.has(id))&&baseServiceRate!==undefined;
   const apiUsdPrice=hasCompletePricing
-   ? Number((selectedServiceIds.reduce((sum,id)=>sum+(serviceRates.get(id)||0),0)*apiDays*(apiDays>=28?0.85:1)).toFixed(2))
+   ? Number(((baseServiceRate!+selectedServiceIds.slice(1).reduce((sum,id)=>sum+(serviceRates.get(id)||0),0))*apiDays*(apiDays>=28?0.85:1)).toFixed(2))
    : 0;
   const apiLocalPrice=apiUsdPrice*apiFxRate;
   const apiPriceLabel=useMemo(()=>{
@@ -894,7 +895,7 @@ const [section,setSection]=useState("Weather Report");const page:"home"|SitePage
       <div style={{display:"grid",gap:4}}>
        {apiServiceOptions.map(service=><label key={service.id} style={{display:"flex",alignItems:"flex-start",gap:12,padding:"12px 0",borderBottom:"1px solid #eef0f2",cursor:"pointer"}}>
         <input type="checkbox" checked={apiServices.includes(service.name)} onChange={()=>toggleApiService(service.name)} style={{width:18,height:18,marginTop:2,accentColor:"#b42323"}}/>
-        <span><strong>{service.name}</strong><span style={{display:"block",fontSize:13,color:"#68707b",marginTop:3}}>{service.detail}</span><span style={{display:"block",fontSize:12,color:"#68707b",marginTop:3}}>{paymentProviderConfig?.services.find(item=>item.id===service.id)?.price_per_day.toFixed(4) ?? "—"} USD / day</span></span>
+        <span><strong>{service.name}</strong><span style={{display:"block",fontSize:13,color:"#68707b",marginTop:3}}>{service.detail}</span><span style={{display:"block",fontSize:12,color:"#68707b",marginTop:3}}>Pricing included · $2.99 first service / 7 days · +$0.99 each additional</span></span>
        </label>)}
       </div>
      </section>
