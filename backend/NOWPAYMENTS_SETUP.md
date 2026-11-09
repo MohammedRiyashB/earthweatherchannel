@@ -11,7 +11,8 @@ Set these on the existing `earthweather-api` service:
 - `FIREBASE_SERVICE_ACCOUNT_JSON`: Firebase Admin service-account JSON, stored as a single-line JSON value.
 - `PUBLIC_BACKEND_URL`: `https://earthweather-api.onrender.com`.
 - `FRONTEND_PUBLIC_URL`: `https://earthweatherchannel.web.app`.
-- `EARTH_WEATHER_API_SERVICES`: JSON object of the actual purchasable service IDs and approved USD daily prices.
+- `EARTH_WEATHER_API_KEY_ENCRYPTION_KEY`: a stable Fernet key used to encrypt customer API keys at rest. Generate once, store only in Render, and do not rotate it unless all stored keys are re-encrypted.
+- `EARTH_WEATHER_API_SERVICES`: JSON object of the actual purchasable service IDs, approved USD daily prices, and optional per-service daily quotas. Each service defaults to 1,000 requests/day if `requests_per_day` is omitted.
 
 Example schema only; the IDs and values below are placeholders, not approved production pricing:
 
@@ -32,14 +33,29 @@ The old static variable `EARTH_WEATHER_CRYPTO_PLANS` is no longer read by the dy
 - When both NOWPayments credentials are present, the API dashboard also calls `GET /api/payments/currencies` to verify that the API key is accepted by NOWPayments.
 - A working NOWPayments connection is distinct from a live commercial API checkout.
 
-## Current production limitation
+## Paid API activation
 
-The payment webhook currently records successful subscriptions and service entitlements in Firestore. It does **not yet issue customer API keys or enforce per-key quotas on paid API routes**. Therefore, the API dashboard must keep customer checkout disabled until those paid-access controls are completed and tested. This is intentional protection against taking customer payment without delivering usable API credentials.
+On a verified `finished` IPN, the backend creates one owner-bound API key per order, encrypts the secret in Firestore, records the active subscription and selected services, and sets an expiry. Repeated completed IPNs reuse the same key for that order. The authenticated `GET /api/payments/keys` endpoint decrypts and returns only the signed-in customer's own keys.
+
+Paid API endpoints use `x-api-key`, check the key's status, expiry and selected service, then atomically increment a per-key/per-service UTC daily counter in Firestore. The default daily quota is 1,000 requests per purchased service; override it per service with `requests_per_day`. Rate-limit headers are returned. Existing public website endpoints are unchanged; commercial access uses the dedicated `/api/v1/*` endpoints listed below.
 
 ## Dynamic invoice flow already present in the backend
 
 - `POST /api/payments/checkout`: Firebase-authenticated, service IDs + duration + crypto currency; backend calculates USD amount from `EARTH_WEATHER_API_SERVICES` and creates a NOWPayments invoice.
 - `POST /api/payments/nowpayments/ipn`: validates the NOWPayments HMAC-SHA512 signature and order amount/currency; records subscription and entitlements when payment is finished.
 - `GET /api/payments/status/{order_id}`: authenticated owner-only payment status.
+- `GET /api/payments/keys`: authenticated customer API keys.
 
-Before enabling paid checkout, add and test: server-side API-key generation and protected retrieval, per-key quota/expiry checks on commercial endpoints, duplicate-IPN-safe key activation, and a real provider webhook test. Never commit or paste secrets into chat.
+### API-key endpoints
+
+All require an `x-api-key: ew_live_...` header and consume the daily quota for that service:
+
+- `GET /api/v1/current-weather?latitude=...&longitude=...`
+- `GET /api/v1/hourly-forecast?latitude=...&longitude=...&days=7`
+- `GET /api/v1/daily-forecast?latitude=...&longitude=...&days=7`
+- `GET /api/v1/weather-alerts?latitude=...&longitude=...`
+- `GET /api/v1/rainfall?latitude=...&longitude=...&days=7`
+- `GET /api/v1/wind-data?latitude=...&longitude=...`
+- `GET /api/v1/weather-maps`
+
+Before commercial launch, verify the configured service IDs and USD/day rates, configure the stable Fernet key in Render, run the automated tests, and complete a real low-value NOWPayments payment plus signed webhook test. Never commit or paste secrets into chat.
