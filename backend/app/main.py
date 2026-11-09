@@ -19,6 +19,7 @@ from fastapi import FastAPI, HTTPException, Query, Response
 from fastapi.middleware.cors import CORSMiddleware
 from app.forecast import ForecastUnavailable, fetch_forecast
 from app.runtime_cache import prune_expired_lru
+from app.payments import router as payments_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -44,6 +45,7 @@ app = FastAPI(
     description="MET Norway-first weather intelligence API with forecast, satellite and storm data.",
     lifespan=lifespan,
 )
+app.include_router(payments_router)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[origin.strip() for origin in os.getenv("CORS_ORIGINS", "https://earthweatherchannel.web.app,https://earthweatherchannel.firebaseapp.com,http://localhost:5173").split(",") if origin.strip()],
