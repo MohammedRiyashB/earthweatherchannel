@@ -6,9 +6,7 @@
   "scripts": {
     "dev": "vite --host 0.0.0.0",
     "build": "tsc -b && vite build",
-    "preview": "vite preview --host 0.0.0.0",
-    "prebuild": "python3 ../scripts/prepare-weathercom-assets.py",
-    "predev": "python3 ../scripts/prepare-weathercom-assets.py"
+    "preview": "vite preview --host 0.0.0.0"
   },
   "dependencies": {
     "react": "^19.1.0",
