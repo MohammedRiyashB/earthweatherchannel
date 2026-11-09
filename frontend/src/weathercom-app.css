@@ -1,4 +1,7 @@
 /* Original captured Weather.com CSS and assets are loaded from the extracted public files. */
+@import url("/_next/static/immutable/chunks/0j_ujswapoou6.css");
+@import url("/_next/static/immutable/chunks/1pgkiin1bsra2.css");
+@import url("/_next/static/immutable/chunks/2m3bu3_zwznmt.css");
 
 .weathercom-site{min-height:100vh;background:#fff!important;color:#171717!important;font-family:Inter,Inter Fallback,Arial,sans-serif!important}
 .weathercom-site .news-site,.weathercom-site .news-main{background:#fff!important;color:#171717!important}
