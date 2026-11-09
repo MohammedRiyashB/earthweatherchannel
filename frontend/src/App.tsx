@@ -1,13 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { auth, firebaseReady, googleProvider } from "./firebase";
 import { onAuthStateChanged, signInWithPopup, signOut, type User } from "firebase/auth";
-import { createCryptoCheckout, getCryptoCheckoutConfig, getCryptoCurrencies, getCryptoPaymentStatus, getCustomerApiKeys, revokeCustomerApiKey, type CryptoCheckoutConfig, type CustomerApiKey } from "./lib/cryptoPayments";
+import { createEmbeddedCryptoPayment, getCryptoCheckoutConfig, getCryptoCurrencies, getCryptoPaymentStatus, getCustomerApiKeys, revokeCustomerApiKey, type CryptoCheckoutConfig, type CustomerApiKey } from "./lib/cryptoPayments";
 import { FOOTER_GROUPS, resolveSitePage, SITE_PATHS, SitePageView, type SitePageId } from "./sitePages";
 import "./intelligence.css";
 import { WeatherChannelLayout, WeatherChannelPage, type WeatherChannelMode } from "./WeatherChannelReference";
 import "./weather-reference.css";
 
 const API=import.meta.env.VITE_API_BASE_URL||"https://earthweather-api.onrender.com";
+const currencySymbol=(code:string)=>({btc:"₿",eth:"Ξ",usdttrc20:"₮",usdterc20:"₮",usdt:"₮",bnb:"◆",sol:"◎",ltc:"Ł",xrp:"✕",doge:"Ð",trx:"◆",ada:"₳"}[code.toLowerCase()]||code.slice(0,1).toUpperCase());
+const currencyTitle=(code:string)=>({btc:"Bitcoin",eth:"Ethereum",usdttrc20:"Tether USD · TRC20",usdterc20:"Tether USD · ERC20",usdt:"Tether USD",bnb:"BNB",sol:"Solana",ltc:"Litecoin",xrp:"XRP",doge:"Dogecoin",trx:"TRON",ada:"Cardano"}[code.toLowerCase()]||code.toUpperCase());
+
 type Current={time?:string|number;is_day?:number;temperature_2m?:number;relative_humidity_2m?:number;apparent_temperature?:number;precipitation?:number;cloud_cover?:number;pressure_msl?:number;wind_speed_10m?:number;wind_direction_10m?:number;weather_code?:number;source?:string;source_url?:string};
 type Place={name:string;region:string;lat:number;lon:number;country?:string;country_code?:string;state?:string;district?:string;accuracy?:number;source?: "gps"|"search";current?:Current;loading?:boolean;error?:boolean};
 type Storm={id:string;title:string;description?:string;link?:string;coordinates?:{lat:number;lon:number;date?:string}[]};
@@ -370,6 +373,11 @@ const [section,setSection]=useState("Weather Report");const page:"home"|SitePage
   const [providerCurrencyCount,setProviderCurrencyCount]=useState(0);
   const [supportedCurrencies,setSupportedCurrencies]=useState<string[]>([]);
   const [selectedPayCurrency,setSelectedPayCurrency]=useState("usdttrc20");
+  const [currencyPickerOpen,setCurrencyPickerOpen]=useState(false);
+  const [currencySearch,setCurrencySearch]=useState("");
+  const [embeddedPayment,setEmbeddedPayment]=useState<any>(null);
+  const [paymentModalOpen,setPaymentModalOpen]=useState(false);
+  const [paymentStatus,setPaymentStatus]=useState("waiting");
   const [checkoutBusy,setCheckoutBusy]=useState(false);
   const [checkoutError,setCheckoutError]=useState("");
   const [paymentFeedback,setPaymentFeedback]=useState("");
@@ -431,13 +439,38 @@ const [section,setSection]=useState("Weather Report");const page:"home"|SitePage
    setCheckoutBusy(true);setCheckoutError("");
    try{
     const token=await user.getIdToken();
-    const invoice=await createCryptoCheckout({service_ids:selectedServiceIds,duration_days:apiDays,pay_currency:selectedPayCurrency},token);
-    window.location.assign(invoice.checkout_url);
+    const payment=await createEmbeddedCryptoPayment({service_ids:selectedServiceIds,duration_days:apiDays,pay_currency:selectedPayCurrency},token);
+    setEmbeddedPayment(payment);
+    setPaymentStatus(payment.payment_status||"waiting");
+    setPaymentModalOpen(true);
+    setCheckoutBusy(false);
    }catch(error){
     setCheckoutError(error instanceof Error?error.message:"Could not create the NOWPayments invoice.");
     setCheckoutBusy(false);
    }
   };
+  useEffect(()=>{
+   if(!paymentModalOpen||!embeddedPayment?.order_id||!user)return;
+   let active=true;
+   let timer:number|undefined;
+   const check=async()=>{
+    try{
+     const token=await user.getIdToken();
+     const result=await getCryptoPaymentStatus(embeddedPayment.order_id,token);
+     if(!active)return;
+     setPaymentStatus(result.status);
+     if(result.status==="finished"){
+      setPaymentFeedback("Payment confirmed. Your API key has been activated below.");
+      await refreshCustomerApiKeys(user);
+      return;
+     }
+     if(["failed","refunded","expired"].includes(result.status))return;
+    }catch(error){if(active)setCheckoutError(error instanceof Error?error.message:"Payment status check failed.");}
+    if(active)timer=window.setTimeout(check,5000);
+   };
+   void check();
+   return()=>{active=false;if(timer)window.clearTimeout(timer);};
+  },[paymentModalOpen,embeddedPayment?.order_id,user]);
   useEffect(()=>{
    let active=true;
    const loadMarket=async()=>{
@@ -914,27 +947,42 @@ const [section,setSection]=useState("Weather Report");const page:"home"|SitePage
        <div style={{display:"flex",justifyContent:"space-between",padding:"12px 0 4px",gap:12}}><strong>Estimated price</strong><strong style={{fontSize:22}}>{!hasCompletePricing?"Service pricing unavailable":apiCurrencyLoading?"Detecting currency…":apiPriceLabel}</strong></div>
        <p style={{fontSize:12,color:"#68707b",lineHeight:1.5}}>Currency detected from your location: {apiCountry} · {apiCurrency}. This is an indicative local-currency estimate only; final pricing is calculated server-side in USD and crypto conversion is confirmed by NOWPayments.</p>
        <p style={{fontSize:12,color:"#68707b",lineHeight:1.5}}>Server pricing: {apiDays} day(s), {apiServices.length} service(s){apiDays>=28?" · 15% long-term discount applied":""}. Each purchased service includes its daily request quota.</p>
-       <div role="status" aria-live="polite" style={{marginTop:14,padding:14,borderRadius:10,background:paymentProviderConfig?.provider_configured&&providerApiKeyVerified?"#edf8f0":"#f5f6f8",border:"1px solid #e1e4e8",fontSize:13,lineHeight:1.5}}>
-        {paymentProviderLoading?<strong>Checking NOWPayments connection…</strong>:paymentProviderConfig?.provider_configured&&providerApiKeyVerified?<><strong style={{color:"#147a37"}}>NOWPayments API connected</strong><div>{providerCurrencyCount} supported crypto currencies returned by the provider.</div></>:paymentProviderConfig?.provider_configured?<><strong>NOWPayments credentials detected</strong><div>{paymentProviderError||"Provider currency verification is pending."}</div></>:<><strong>NOWPayments is not fully configured</strong><div>The backend has not confirmed both the API key and IPN secret.</div></>}
-       </div>
        {(paymentProviderConfig?.missing_configuration?.length ?? 0)>0&&<div style={{marginTop:10,padding:12,borderRadius:9,background:"#fff8e8",color:"#795300",fontSize:13}}>
         <strong>Missing or incomplete Render settings</strong>
         <ul style={{margin:"7px 0 0",paddingLeft:20}}>{(paymentProviderConfig?.missing_configuration ?? []).map(item=><li key={item}>{item}</li>)}</ul>
        </div>}
        {paymentProviderConfig?.launch_blockers?.map(item=><p key={item} style={{fontSize:13,color:"#8a4b08",lineHeight:1.5,margin:"10px 0"}}>{item}</p>)}
        {paymentProviderError&&<p role="alert" style={{fontSize:13,color:"#b42318"}}>{paymentProviderError}</p>}
-        <label style={{display:"block",marginTop:14,fontSize:13,fontWeight:700}}>Pay with cryptocurrency
-         <select value={selectedPayCurrency} onChange={event=>setSelectedPayCurrency(event.target.value)} disabled={!supportedCurrencies.length} style={{display:"block",width:"100%",marginTop:7,padding:13,border:"1px solid #d5d9df",borderRadius:10,background:"#fff",color:"#17191d"}}>
-          {supportedCurrencies.map(currency=><option key={currency} value={currency}>{currency.toUpperCase()}</option>)}
-         </select>
-        </label>
+        <div style={{marginTop:14}}>
+         <div style={{fontSize:13,fontWeight:700,marginBottom:7}}>Pay with cryptocurrency</div>
+         <button type="button" onClick={()=>{setCurrencyPickerOpen(true);setCurrencySearch("");}} disabled={!supportedCurrencies.length} style={{display:"flex",alignItems:"center",justifyContent:"space-between",width:"100%",padding:13,border:"1px solid #d5d9df",borderRadius:12,background:"#fff",color:"#17191d",textAlign:"left"}}>
+          <span style={{display:"flex",alignItems:"center",gap:11}}><span style={{width:34,height:34,borderRadius:50,display:"grid",placeItems:"center",background:"#f0f2f5",fontWeight:800}}>{currencySymbol(selectedPayCurrency)}</span><span><strong>{currencyTitle(selectedPayCurrency)}</strong><small style={{display:"block",color:"#68707b"}}>{selectedPayCurrency.toUpperCase()}</small></span></span><span>⌄</span>
+         </button>
+        </div>
         {checkoutError&&<p role="alert" style={{fontSize:13,color:"#b42318"}}>{checkoutError}</p>}
         <button type="button" onClick={()=>void startCryptoCheckout()} disabled={checkoutBusy||paymentProviderLoading||!paymentProviderConfig?.enabled||!providerApiKeyVerified||!hasCompletePricing||!supportedCurrencies.length||!apiServices.length} style={{width:"100%",marginTop:14,padding:14,border:0,borderRadius:10,background:checkoutBusy||!paymentProviderConfig?.enabled||!providerApiKeyVerified||!hasCompletePricing?"#d8dadd":"#17191d",color:checkoutBusy||!paymentProviderConfig?.enabled||!providerApiKeyVerified||!hasCompletePricing?"#737982":"#fff",fontWeight:750,cursor:checkoutBusy?"wait":"pointer"}}>
-         {checkoutBusy?"Creating secure invoice…":paymentProviderConfig?.enabled&&providerApiKeyVerified?"Continue to NOWPayments":"Paid API checkout not ready"}
+         {checkoutBusy?"Creating secure invoice…":paymentProviderConfig?.enabled&&providerApiKeyVerified?"Pay securely":"Paid API checkout not ready"}
         </button>
       </section>
      </div>
     </div>
+    {currencyPickerOpen&&<div role="dialog" aria-modal="true" aria-label="Choose cryptocurrency" onClick={()=>setCurrencyPickerOpen(false)} style={{position:"fixed",inset:0,zIndex:10000,background:"rgba(10,14,22,.58)",display:"grid",placeItems:"center",padding:16}}>
+     <div onClick={event=>event.stopPropagation()} style={{width:"min(100%,440px)",maxHeight:"78vh",overflow:"hidden",background:"#fff",borderRadius:20,boxShadow:"0 24px 80px #0004",color:"#17191d"}}>
+      <div style={{padding:18,borderBottom:"1px solid #edf0f2",display:"flex",justifyContent:"space-between",alignItems:"center"}}><strong style={{fontSize:18}}>Choose cryptocurrency</strong><button onClick={()=>setCurrencyPickerOpen(false)} aria-label="Close" style={{border:0,background:"transparent",fontSize:25}}>×</button></div>
+      <div style={{padding:"12px 16px"}}><input autoFocus value={currencySearch} onChange={event=>setCurrencySearch(event.target.value)} placeholder="Search coin or network" style={{width:"100%",padding:13,border:"1px solid #d9dde3",borderRadius:12,boxSizing:"border-box"}}/></div>
+      <div style={{overflowY:"auto",maxHeight:"58vh",padding:"0 12px 12px"}}>{supportedCurrencies.filter(code=>code.includes(currencySearch.trim().toLowerCase())).map(code=><button key={code} onClick={()=>{setSelectedPayCurrency(code);setCurrencyPickerOpen(false);}} style={{width:"100%",display:"flex",alignItems:"center",gap:12,padding:11,border:0,borderRadius:11,background:selectedPayCurrency===code?"#f0f4ff":"#fff",textAlign:"left",color:"#17191d"}}><span style={{width:36,height:36,borderRadius:50,display:"grid",placeItems:"center",background:"#f1f3f6",fontWeight:800}}>{currencySymbol(code)}</span><span style={{flex:1}}><strong>{currencyTitle(code)}</strong><small style={{display:"block",color:"#68707b"}}>{code.toUpperCase()}</small></span>{selectedPayCurrency===code?"✓":"›"}</button>)}</div>
+     </div>
+    </div>}
+    {paymentModalOpen&&embeddedPayment&&<div role="dialog" aria-modal="true" aria-label="Crypto payment" onClick={()=>setPaymentModalOpen(false)} style={{position:"fixed",inset:0,zIndex:10001,background:"rgba(10,14,22,.62)",display:"grid",placeItems:"center",padding:14}}>
+     <div onClick={event=>event.stopPropagation()} style={{width:"min(100%,480px)",maxHeight:"90vh",overflowY:"auto",background:"#fff",borderRadius:20,padding:20,color:"#17191d",boxShadow:"0 24px 80px #0005"}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><strong style={{fontSize:19}}>Complete payment</strong><button onClick={()=>setPaymentModalOpen(false)} aria-label="Close" style={{border:0,background:"transparent",fontSize:25}}>×</button></div>
+      <p style={{color:"#68707b",fontSize:13}}>EARTH WEATHER API · {apiServices.length} services · {apiDays} days</p>
+      <div style={{textAlign:"center",padding:14,background:"#f7f8fa",borderRadius:14}}><img alt="Crypto payment QR code" width="190" height="190" src={`https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(embeddedPayment.pay_address)}`}/><strong style={{display:"block",fontSize:20,marginTop:8}}>{embeddedPayment.pay_amount} {embeddedPayment.pay_currency.toUpperCase()}</strong><small style={{color:"#68707b"}}>Network: {embeddedPayment.network||embeddedPayment.pay_currency.toUpperCase()} · Send the exact amount</small></div>
+      <div style={{marginTop:14,fontSize:13,color:"#68707b"}}>Payment address</div><div style={{display:"flex",gap:8,alignItems:"center",marginTop:5}}><code style={{flex:1,overflowWrap:"anywhere",padding:11,background:"#f4f5f7",borderRadius:9}}>{embeddedPayment.pay_address}</code><button onClick={()=>void navigator.clipboard?.writeText(embeddedPayment.pay_address)} style={{padding:10,border:0,borderRadius:9,background:"#17191d",color:"#fff"}}>Copy</button></div>
+      <div style={{marginTop:14,padding:13,borderRadius:10,background:"#f3f6fb"}}><strong>Payment status: {paymentStatus.toUpperCase()}</strong><p style={{margin:"5px 0 0",fontSize:12,color:"#68707b"}}>This panel updates after NOWPayments confirms the transaction. Your API access activates only after status is finished.</p></div>
+      <button onClick={()=>setPaymentModalOpen(false)} style={{width:"100%",marginTop:14,padding:13,border:0,borderRadius:11,background:"#17191d",color:"#fff",fontWeight:700}}>Done</button>
+     </div>
+    </div>}
     <section style={{marginTop:18,padding:22,border:"1px solid #e1e4e8",borderRadius:18,background:"#fff"}}>
       <h2 style={{marginTop:0}}>API keys & documentation</h2>
       <p style={{color:"#68707b"}}>Your API keys are shown only inside your signed-in account. Keep them private.</p>
