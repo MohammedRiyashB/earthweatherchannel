@@ -66,6 +66,19 @@ def _fernet() -> Fernet:
         raise HTTPException(status_code=503, detail="API key encryption configuration is invalid") from exc
 
 
+def calculate_checkout_amount(services: dict[str, dict[str, Any]], service_ids: list[str], duration_days: int) -> float:
+    """Server-side USD pricing: service daily rates, with a 15% discount from 28 days."""
+    if not 1 <= duration_days <= 30:
+        raise ValueError("duration_days must be between 1 and 30")
+    if not service_ids:
+        raise ValueError("at least one API service must be selected")
+    unknown = [service_id for service_id in service_ids if service_id not in services]
+    if unknown:
+        raise ValueError(f"unknown API service IDs: {', '.join(unknown)}")
+    subtotal = sum(float(services[item]["price_per_day"]) for item in service_ids) * duration_days
+    return round(subtotal * (0.85 if duration_days >= 28 else 1.0), 2)
+
+
 def _paid_api_access_ready() -> bool:
     """True only when provider, service catalogue, Firebase and API-key encryption are configured."""
     if not _services() or not os.getenv("EARTH_WEATHER_API_KEY_ENCRYPTION_KEY", "").strip():
@@ -242,7 +255,7 @@ async def payment_config() -> dict[str, Any]:
 
     services = _services()
     missing: list[str] = []
-    for variable in ("NOWPAYMENTS_API_KEY", "NOWPAYMENTS_IPN_SECRET", "FIREBASE_SERVICE_ACCOUNT_JSON"):
+    for variable in ("NOWPAYMENTS_API_KEY", "NOWPAYMENTS_IPN_SECRET", "FIREBASE_SERVICE_ACCOUNT_JSON", "EARTH_WEATHER_API_KEY_ENCRYPTION_KEY"):
         if not configured(variable):
             missing.append(variable)
 
@@ -278,7 +291,7 @@ async def payment_config() -> dict[str, Any]:
         "currency": "usd",
         "duration_min_days": 1,
         "duration_max_days": 30,
-        "services": [{"id": key, "name": value["name"], "price_per_day": value["price_per_day"]}
+        "services": [{"id": key, "name": value["name"], "price_per_day": value["price_per_day"], "requests_per_day": value["requests_per_day"]}
                      for key, value in services.items()],
     }
 
@@ -302,9 +315,11 @@ async def create_checkout(payload: CheckoutRequest, authorization: str | None = 
     unknown = [service_id for service_id in payload.service_ids if service_id not in catalogue]
     if unknown:
         raise HTTPException(status_code=422, detail={"message": "Unknown API service", "service_ids": unknown})
+    try:
+        total = calculate_checkout_amount(catalogue, payload.service_ids, payload.duration_days)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     selected = [{"id": service_id, **catalogue[service_id]} for service_id in payload.service_ids]
-    subtotal = sum(item["price_per_day"] for item in selected) * payload.duration_days
-    total = round(subtotal * (0.85 if payload.duration_days >= 28 else 1.0), 2)
     if total <= 0:
         raise HTTPException(status_code=422, detail="Calculated checkout amount must be positive")
     pay_currency = payload.pay_currency.lower()
