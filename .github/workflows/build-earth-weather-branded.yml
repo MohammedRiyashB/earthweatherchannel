@@ -7,13 +7,13 @@ on:
       - "Uifprweather.zip"
       - "scripts/rebrand_earth_weather.py"
       - "scripts/scan_earth_weather_apk.py"
-      - "backend/app/oppo_compat.py"
-      - "backend/app/main.py"
       - ".github/workflows/build-earth-weather-branded.yml"
 permissions:
   contents: read
 jobs:
   build-earth-weather:
+    # Do not run this APK build unless the required original UI source archive is committed.
+    if: hashFiles('Uifprweather.zip') != ''
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
