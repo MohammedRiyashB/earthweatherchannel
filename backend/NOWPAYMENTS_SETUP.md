@@ -45,6 +45,7 @@ Paid API endpoints use `x-api-key`, check the key's status, expiry and selected 
 - `POST /api/payments/nowpayments/ipn`: validates the NOWPayments HMAC-SHA512 signature and order amount/currency; records subscription and entitlements when payment is finished.
 - `GET /api/payments/status/{order_id}`: authenticated owner-only payment status.
 - `GET /api/payments/keys`: authenticated customer API keys.
+- `DELETE /api/payments/keys/{order_id}`: owner-only key revocation; the key is rejected immediately on subsequent API calls.
 
 ### API-key endpoints
 
