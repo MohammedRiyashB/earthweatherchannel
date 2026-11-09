@@ -1,8 +1,4 @@
-"""NOWPayments crypto checkout and verified webhook handling.
-
-Provider secrets and Firebase Admin credentials are server-only environment variables.
-Never expose NOWPayments keys in the browser.
-"""
+"""Server-side dynamic NOWPayments checkout and verified webhook handling."""
 from __future__ import annotations
 
 import hashlib
@@ -17,7 +13,7 @@ from typing import Any
 
 import httpx
 from fastapi import APIRouter, Header, HTTPException, Request
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 router = APIRouter(prefix="/api/payments", tags=["payments"])
 logger = logging.getLogger("earthweather.payments")
@@ -28,22 +24,28 @@ _firestore = None
 _firebase_auth = None
 
 
-def _plans() -> dict[str, dict[str, Any]]:
+def _services() -> dict[str, dict[str, Any]]:
+    """Server-owned catalogue: {id: {name, price_per_day}}; amounts are USD."""
     try:
-        data = json.loads(os.getenv("EARTH_WEATHER_CRYPTO_PLANS", "{}"))
+        data = json.loads(os.getenv("EARTH_WEATHER_API_SERVICES", "{}"))
     except json.JSONDecodeError as exc:
-        raise HTTPException(status_code=503, detail="Crypto plan configuration is invalid") from exc
+        raise HTTPException(status_code=503, detail="API service pricing configuration is invalid") from exc
     if not isinstance(data, dict):
-        raise HTTPException(status_code=503, detail="Crypto plan configuration is invalid")
-    return {
-        str(key): value for key, value in data.items()
-        if isinstance(value, dict)
-        and isinstance(value.get("price_amount"), (int, float))
-        and float(value["price_amount"]) > 0
-        and isinstance(value.get("price_currency", "usd"), str)
-        and isinstance(value.get("duration_days"), int)
-        and value["duration_days"] > 0
-    }
+        raise HTTPException(status_code=503, detail="API service pricing configuration is invalid")
+    result: dict[str, dict[str, Any]] = {}
+    for key, value in data.items():
+        if not isinstance(key, str) or not re.fullmatch(r"[a-z0-9_-]{2,64}", key):
+            continue
+        if not isinstance(value, dict):
+            continue
+        try:
+            rate = round(float(value.get("price_per_day")), 4)
+        except (TypeError, ValueError):
+            continue
+        if rate <= 0 or rate > 10000:
+            continue
+        result[key] = {"name": str(value.get("name") or key)[:100], "price_per_day": rate}
+    return result
 
 
 def _provider_key() -> str:
@@ -98,21 +100,31 @@ async def _provider_get(path: str) -> dict[str, Any]:
 
 
 class CheckoutRequest(BaseModel):
-    plan_id: str = Field(min_length=1, max_length=64)
+    service_ids: list[str] = Field(min_length=1, max_length=20)
+    duration_days: int = Field(ge=1, le=30)
     pay_currency: str = Field(min_length=2, max_length=24, pattern=r"^[a-zA-Z0-9]+$")
+
+    @field_validator("service_ids")
+    @classmethod
+    def unique_service_ids(cls, value: list[str]) -> list[str]:
+        cleaned = list(dict.fromkeys(item.strip().lower() for item in value if isinstance(item, str)))
+        if not cleaned or len(cleaned) != len(value):
+            raise ValueError("Choose one or more unique API services")
+        return cleaned
 
 
 @router.get("/config")
 async def payment_config() -> dict[str, Any]:
-    plans = _plans()
+    services = _services()
     return {
         "provider": "NOWPayments",
-        "enabled": bool(os.getenv("NOWPAYMENTS_API_KEY") and os.getenv("FIREBASE_SERVICE_ACCOUNT_JSON") and plans),
-        "plans": [
-            {"id": key, "name": str(value.get("name", key)), "price_amount": value["price_amount"],
-             "price_currency": value.get("price_currency", "usd"), "duration_days": value["duration_days"]}
-            for key, value in plans.items()
-        ],
+        "enabled": bool(os.getenv("NOWPAYMENTS_API_KEY") and os.getenv("NOWPAYMENTS_IPN_SECRET")
+                        and os.getenv("FIREBASE_SERVICE_ACCOUNT_JSON") and services),
+        "currency": "usd",
+        "duration_min_days": 1,
+        "duration_max_days": 30,
+        "services": [{"id": key, "name": value["name"], "price_per_day": value["price_per_day"]}
+                     for key, value in services.items()],
     }
 
 
@@ -126,9 +138,14 @@ async def payment_currencies() -> dict[str, Any]:
 @router.post("/checkout")
 async def create_checkout(payload: CheckoutRequest, authorization: str | None = Header(default=None)) -> dict[str, Any]:
     user = _verified_user(authorization)
-    plan = _plans().get(payload.plan_id)
-    if not plan:
-        raise HTTPException(status_code=422, detail="Unknown subscription plan")
+    catalogue = _services()
+    unknown = [service_id for service_id in payload.service_ids if service_id not in catalogue]
+    if unknown:
+        raise HTTPException(status_code=422, detail={"message": "Unknown API service", "service_ids": unknown})
+    selected = [{"id": service_id, **catalogue[service_id]} for service_id in payload.service_ids]
+    total = round(sum(item["price_per_day"] for item in selected) * payload.duration_days, 2)
+    if total <= 0:
+        raise HTTPException(status_code=422, detail="Calculated checkout amount must be positive")
     pay_currency = payload.pay_currency.lower()
     if not _CURRENCY_RE.fullmatch(pay_currency):
         raise HTTPException(status_code=422, detail="Unsupported payment currency")
@@ -137,12 +154,13 @@ async def create_checkout(payload: CheckoutRequest, authorization: str | None = 
         raise HTTPException(status_code=503, detail="Public HTTPS backend URL is not configured")
     order_id = f"ew_{uuid.uuid4().hex}"
     frontend_origin = os.getenv("FRONTEND_PUBLIC_URL", "https://earthweatherchannel.web.app").rstrip("/")
+    service_names = ", ".join(item["name"] for item in selected)
     request_body = {
-        "price_amount": float(plan["price_amount"]),
-        "price_currency": str(plan.get("price_currency", "usd")).lower(),
+        "price_amount": total,
+        "price_currency": "usd",
         "pay_currency": pay_currency,
         "order_id": order_id,
-        "order_description": f"EARTH WEATHER API - {plan.get('name', payload.plan_id)}",
+        "order_description": f"EARTH WEATHER API: {service_names} ({payload.duration_days} days)"[:255],
         "ipn_callback_url": f"{public_url}/api/payments/nowpayments/ipn",
         "success_url": f"{frontend_origin}/api/payment/success?order_id={order_id}",
         "cancel_url": f"{frontend_origin}/api/payment/cancel?order_id={order_id}",
@@ -162,14 +180,14 @@ async def create_checkout(payload: CheckoutRequest, authorization: str | None = 
         raise HTTPException(status_code=502, detail="Crypto provider returned an incomplete invoice")
     _db().collection("earthWeatherCryptoPayments").document(order_id).set({
         "order_id": order_id, "invoice_id": str(invoice_id), "customer_uid": user["uid"],
-        "customer_email": user.get("email"), "plan_id": payload.plan_id,
-        "plan_name": str(plan.get("name", payload.plan_id)),
-        "price_amount": float(plan["price_amount"]),
-        "price_currency": str(plan.get("price_currency", "usd")).lower(),
-        "pay_currency": pay_currency, "status": "waiting",
-        "created_at": datetime.now(timezone.utc), "provider": "nowpayments",
+        "customer_email": user.get("email"), "service_ids": payload.service_ids,
+        "services": selected, "duration_days": payload.duration_days,
+        "price_amount": total, "price_currency": "usd", "pay_currency": pay_currency,
+        "status": "waiting", "created_at": datetime.now(timezone.utc), "provider": "nowpayments",
     })
-    return {"order_id": order_id, "invoice_id": str(invoice_id), "checkout_url": invoice_url, "status": "waiting"}
+    return {"order_id": order_id, "invoice_id": str(invoice_id), "checkout_url": invoice_url,
+            "amount": total, "price_currency": "usd", "duration_days": payload.duration_days,
+            "service_ids": payload.service_ids, "status": "waiting"}
 
 
 def _sort_recursively(value: Any) -> Any:
@@ -216,24 +234,33 @@ async def nowpayments_ipn(request: Request, x_nowpayments_sig: str | None = Head
         raise HTTPException(status_code=400, detail="Invalid payment amount")
     if abs(notified_amount - float(payment["price_amount"])) > 0.000001:
         raise HTTPException(status_code=400, detail="Payment amount mismatch")
+    now = datetime.now(timezone.utc)
     update: dict[str, Any] = {
         "status": payment_status, "provider_payment_id": str(payload.get("payment_id", "")),
-        "pay_amount": payload.get("actually_paid"), "pay_currency": payload.get("pay_currency", payment.get("pay_currency")),
-        "updated_at": datetime.now(timezone.utc),
+        "pay_amount": payload.get("actually_paid"),
+        "paid_currency": payload.get("pay_currency", payment.get("pay_currency")),
+        "updated_at": now,
     }
     if payment_status == "finished" and payment.get("status") != "finished":
-        plan = _plans().get(payment.get("plan_id"))
-        if not plan:
-            raise HTTPException(status_code=503, detail="Subscription plan is no longer configured")
-        now = datetime.now(timezone.utc)
-        expiry = now + timedelta(days=int(plan["duration_days"]))
+        service_ids = payment.get("service_ids") or []
+        if not service_ids or not payment.get("duration_days"):
+            raise HTTPException(status_code=503, detail="Payment entitlement data is incomplete")
+        expiry = now + timedelta(days=int(payment["duration_days"]))
         subscription_id = f"crypto_{order_id}"
         update.update({"status": "finished", "subscription_id": subscription_id, "paid_at": now})
         db.collection("earthWeatherSubscriptions").document(subscription_id).set({
             "subscription_id": subscription_id, "customer_uid": payment["customer_uid"],
-            "plan_id": payment["plan_id"], "status": "active", "started_at": now,
-            "expires_at": expiry, "source_order_id": order_id, "payment_provider": "nowpayments",
+            "service_ids": service_ids, "services": payment.get("services", []),
+            "duration_days": int(payment["duration_days"]), "status": "active",
+            "started_at": now, "expires_at": expiry, "source_order_id": order_id,
+            "payment_provider": "nowpayments",
         })
+        for service_id in service_ids:
+            db.collection("earthWeatherServiceEntitlements").document(f"{payment['customer_uid']}_{service_id}").set({
+                "customer_uid": payment["customer_uid"], "service_id": service_id,
+                "status": "active", "expires_at": expiry, "source_order_id": order_id,
+                "updated_at": now,
+            }, merge=True)
     ref.update(update)
     return {"received": "true"}
 
@@ -249,4 +276,6 @@ async def payment_status(order_id: str, authorization: str | None = Header(defau
         raise HTTPException(status_code=404, detail="Payment not found")
     updated = payment.get("updated_at")
     return {"order_id": order_id, "status": payment.get("status", "waiting"),
-            "plan_id": payment.get("plan_id"), "updated_at": updated.isoformat() if updated else None}
+            "service_ids": payment.get("service_ids", []), "duration_days": payment.get("duration_days"),
+            "amount": payment.get("price_amount"), "price_currency": payment.get("price_currency"),
+            "updated_at": updated.isoformat() if updated else None}
