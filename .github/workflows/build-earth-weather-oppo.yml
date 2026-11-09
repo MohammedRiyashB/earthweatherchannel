@@ -5,13 +5,13 @@ on:
     branches: ["main"]
     paths:
       - "Uifprweather.zip"
-      - "backend/app/oppo_compat.py"
-      - "backend/app/main.py"
       - ".github/workflows/build-earth-weather-oppo.yml"
 permissions:
   contents: read
 jobs:
   build-full-oppo-ui:
+    # Do not run this APK build unless the required original UI source archive is committed.
+    if: hashFiles('Uifprweather.zip') != ''
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
