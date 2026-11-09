@@ -67,7 +67,8 @@ async function request<T>(path: string, token?: string, init: RequestInit = {}):
 }
 export const getCryptoCheckoutConfig = () => request<CryptoCheckoutConfig>("/api/payments/config");
 export const getCryptoCurrencies = () => request<{ currencies: Array<string | { currency?: string; code?: string }>; provider: string }>("/api/payments/currencies");
-export const createCryptoCheckout = (input: DynamicCheckoutInput, firebaseIdToken: string) =>
+export const createEmbeddedCryptoPayment = (input: DynamicCheckoutInput, firebaseIdToken: string) =>
+  request<{order_id:string;payment_id:string;pay_address:string;pay_amount:string;pay_currency:string;network?:string;payment_status:string}>("/api/payments/payment", firebaseIdToken, {method:"POST",body:JSON.stringify(input)});\nexport const createCryptoCheckout = (input: DynamicCheckoutInput, firebaseIdToken: string) =>
   request<DynamicCheckoutResult>("/api/payments/checkout", firebaseIdToken, {
     method: "POST", body: JSON.stringify(input),
   });
