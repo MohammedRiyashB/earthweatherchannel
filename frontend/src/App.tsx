@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { auth, firebaseReady, googleProvider } from "./firebase";
 import { onAuthStateChanged, signInWithPopup, signOut, type User } from "firebase/auth";
-import { createCryptoCheckout, createEmbeddedCryptoPayment, getCryptoCheckoutConfig, getCryptoCurrencies, getCryptoPaymentStatus, getCustomerApiKeys, revokeCustomerApiKey, type CryptoCheckoutConfig, type CustomerApiKey } from "./lib/cryptoPayments";
+import { createEmbeddedCryptoPayment, getCryptoCheckoutConfig, getCryptoCurrencies, getCryptoPaymentStatus, getCustomerApiKeys, revokeCustomerApiKey, type CryptoCheckoutConfig, type CustomerApiKey } from "./lib/cryptoPayments";
 import { FOOTER_GROUPS, resolveSitePage, SITE_PATHS, SitePageView, type SitePageId } from "./sitePages";
 import "./intelligence.css";
 import { WeatherChannelLayout, WeatherChannelPage, type WeatherChannelMode } from "./WeatherChannelReference";
@@ -443,11 +443,34 @@ const [section,setSection]=useState("Weather Report");const page:"home"|SitePage
     setEmbeddedPayment(payment);
     setPaymentStatus(payment.payment_status||"waiting");
     setPaymentModalOpen(true);
+    setCheckoutBusy(false);
    }catch(error){
     setCheckoutError(error instanceof Error?error.message:"Could not create the NOWPayments invoice.");
     setCheckoutBusy(false);
    }
   };
+  useEffect(()=>{
+   if(!paymentModalOpen||!embeddedPayment?.order_id||!user)return;
+   let active=true;
+   let timer:number|undefined;
+   const check=async()=>{
+    try{
+     const token=await user.getIdToken();
+     const result=await getCryptoPaymentStatus(embeddedPayment.order_id,token);
+     if(!active)return;
+     setPaymentStatus(result.status);
+     if(result.status==="finished"){
+      setPaymentFeedback("Payment confirmed. Your API key has been activated below.");
+      await refreshCustomerApiKeys(user);
+      return;
+     }
+     if(["failed","refunded","expired"].includes(result.status))return;
+    }catch(error){if(active)setCheckoutError(error instanceof Error?error.message:"Payment status check failed.");}
+    if(active)timer=window.setTimeout(check,5000);
+   };
+   void check();
+   return()=>{active=false;if(timer)window.clearTimeout(timer);};
+  },[paymentModalOpen,embeddedPayment?.order_id,user]);
   useEffect(()=>{
    let active=true;
    const loadMarket=async()=>{
@@ -954,7 +977,7 @@ const [section,setSection]=useState("Weather Report");const page:"home"|SitePage
      <div onClick={event=>event.stopPropagation()} style={{width:"min(100%,480px)",maxHeight:"90vh",overflowY:"auto",background:"#fff",borderRadius:20,padding:20,color:"#17191d",boxShadow:"0 24px 80px #0005"}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><strong style={{fontSize:19}}>Complete payment</strong><button onClick={()=>setPaymentModalOpen(false)} aria-label="Close" style={{border:0,background:"transparent",fontSize:25}}>×</button></div>
       <p style={{color:"#68707b",fontSize:13}}>EARTH WEATHER API · {apiServices.length} services · {apiDays} days</p>
-      <div style={{textAlign:"center",padding:14,background:"#f7f8fa",borderRadius:14}}><img alt="Crypto payment QR code" width="190" height="190" src={`https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(embeddedPayment.pay_address)}`}/><strong style={{display:"block",fontSize:20,marginTop:8}}>{embeddedPayment.pay_amount} {embeddedPayment.pay_currency.toUpperCase()}</strong><small style={{color:"#68707b"}}>Send the exact amount on the selected network</small></div>
+      <div style={{textAlign:"center",padding:14,background:"#f7f8fa",borderRadius:14}}><img alt="Crypto payment QR code" width="190" height="190" src={`https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(embeddedPayment.pay_address)}`}/><strong style={{display:"block",fontSize:20,marginTop:8}}>{embeddedPayment.pay_amount} {embeddedPayment.pay_currency.toUpperCase()}</strong><small style={{color:"#68707b"}}>Network: {embeddedPayment.network||embeddedPayment.pay_currency.toUpperCase()} · Send the exact amount</small></div>
       <div style={{marginTop:14,fontSize:13,color:"#68707b"}}>Payment address</div><div style={{display:"flex",gap:8,alignItems:"center",marginTop:5}}><code style={{flex:1,overflowWrap:"anywhere",padding:11,background:"#f4f5f7",borderRadius:9}}>{embeddedPayment.pay_address}</code><button onClick={()=>void navigator.clipboard?.writeText(embeddedPayment.pay_address)} style={{padding:10,border:0,borderRadius:9,background:"#17191d",color:"#fff"}}>Copy</button></div>
       <div style={{marginTop:14,padding:13,borderRadius:10,background:"#f3f6fb"}}><strong>Payment status: {paymentStatus.toUpperCase()}</strong><p style={{margin:"5px 0 0",fontSize:12,color:"#68707b"}}>This panel updates after NOWPayments confirms the transaction. Your API access activates only after status is finished.</p></div>
       <button onClick={()=>setPaymentModalOpen(false)} style={{width:"100%",marginTop:14,padding:13,border:0,borderRadius:11,background:"#17191d",color:"#fff",fontWeight:700}}>Done</button>
