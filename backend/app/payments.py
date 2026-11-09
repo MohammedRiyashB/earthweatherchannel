@@ -417,7 +417,7 @@ async def nowpayments_ipn(request: Request, x_nowpayments_sig: str | None = Head
         "paid_currency": payload.get("pay_currency", payment.get("pay_currency")),
         "updated_at": now,
     }
-    if payment_status == "finished":
+    if payment_status == "finished" and payment.get("status") != "finished":
         service_ids = payment.get("service_ids") or []
         if not service_ids or not payment.get("duration_days"):
             raise HTTPException(status_code=503, detail="Payment entitlement data is incomplete")
