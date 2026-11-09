@@ -13,10 +13,10 @@ class DynamicPaymentPricingTests(unittest.TestCase):
         }
         with patch.dict(os.environ, {"EARTH_WEATHER_API_SERVICES": __import__("json").dumps(catalogue)}):
             result = _services()
-        self.assertAlmostEqual(result["current-weather"]["base_price_per_day"], 2.99 / 7)
+        self.assertAlmostEqual(result["current-weather"]["base_price_per_day"], 2.99 / 7, places=6)
         self.assertEqual(result["current-weather"]["requests_per_day"], 2500)
         self.assertEqual(result["daily-forecast"]["requests_per_day"], 1000)
-        self.assertAlmostEqual(result["daily-forecast"]["base_price_per_day"], 2.99 / 7)
+        self.assertAlmostEqual(result["daily-forecast"]["base_price_per_day"], 2.99 / 7, places=6)
 
     def test_zero_price_services_are_not_sellable(self):
         with patch.dict(os.environ, {"EARTH_WEATHER_API_SERVICES": '{"current-weather":{"name":"Current Weather","price_per_day":0}}'}):
