@@ -115,11 +115,38 @@ class CheckoutRequest(BaseModel):
 
 @router.get("/config")
 async def payment_config() -> dict[str, Any]:
+    """Expose safe readiness diagnostics; never return provider secrets."""
+    def configured(name: str) -> bool:
+        return bool(os.getenv(name, "").strip())
+
     services = _services()
+    missing: list[str] = []
+    for variable in ("NOWPAYMENTS_API_KEY", "NOWPAYMENTS_IPN_SECRET", "FIREBASE_SERVICE_ACCOUNT_JSON"):
+        if not configured(variable):
+            missing.append(variable)
+
+    public_url = os.getenv("PUBLIC_BACKEND_URL", "").strip()
+    if not public_url.startswith("https://"):
+        missing.append("PUBLIC_BACKEND_URL (must be a public HTTPS URL)")
+    if not services:
+        missing.append("EARTH_WEATHER_API_SERVICES (valid service IDs and USD/day prices)")
+
+    provider_configured = configured("NOWPAYMENTS_API_KEY") and configured("NOWPAYMENTS_IPN_SECRET")
+    checkout_configured = not missing
+    # Do not accept customer money until paid API-key issuance and per-key quota
+    # enforcement are connected to the commercial API routes.
+    paid_api_access_ready = False
+    launch_blockers = [] if paid_api_access_ready else [
+        "Paid API-key issuance and per-key request-quota enforcement are not yet implemented."
+    ]
     return {
         "provider": "NOWPayments",
-        "enabled": bool(os.getenv("NOWPAYMENTS_API_KEY") and os.getenv("NOWPAYMENTS_IPN_SECRET")
-                        and os.getenv("FIREBASE_SERVICE_ACCOUNT_JSON") and services),
+        "provider_configured": provider_configured,
+        "enabled": checkout_configured and paid_api_access_ready,
+        "checkout_configured": checkout_configured,
+        "paid_api_access_ready": paid_api_access_ready,
+        "missing_configuration": missing,
+        "launch_blockers": launch_blockers,
         "currency": "usd",
         "duration_min_days": 1,
         "duration_max_days": 30,
