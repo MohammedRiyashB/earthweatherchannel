@@ -7,7 +7,8 @@ export type SitePageId =
   | "terms-and-conditions" | "privacy-policy" | "cookie-policy" | "disclaimer"
   | "data-usage-policy" | "copyright-policy"
   | "contact-support" | "report-issue" | "submit-feedback" | "report-weather-data"
-  | "accessibility" | "account-security";
+  | "accessibility" | "account-security"
+  | "api-details" | "api-terms-of-service" | "api-security-privacy";
 
 type ExternalLink = { label: string; href: string; description?: string };
 type Section = {
@@ -51,9 +52,12 @@ export const SITE_PATHS: Record<SitePageId, string> = {
   "report-weather-data": "/report-weather-data",
   accessibility: "/accessibility",
   "account-security": "/account-security",
+  "api-details": "/api-details",
+  "api-terms-of-service": "/api-terms-of-service",
+  "api-security-privacy": "/api-security-privacy",
 };
 
-export const FOOTER_GROUPS: { title: string; links: { label: string; page: SitePageId }[] }[] = [
+export const FOOTER_GROUPS: { title: string; links: { label: string; page?: SitePageId; href?: string }[] }[] = [
   { title: "Company", links: [
     { label: "About Us", page: "aboutus" },
     { label: "Mission & Vision", page: "mission-vision" },
@@ -70,6 +74,12 @@ export const FOOTER_GROUPS: { title: string; links: { label: string; page: SiteP
     { label: "Weather Glossary", page: "weather-glossary" },
     { label: "Help Center", page: "help-center" },
     { label: "Frequently Asked Questions", page: "faq" },
+  ]},
+  { title: "Developer and APIs", links: [
+    { label: "Apply for an API Key", href: "/api/dashboard" },
+    { label: "API Details", page: "api-details" },
+    { label: "API Terms of Service", page: "api-terms-of-service" },
+    { label: "API Security & Privacy", page: "api-security-privacy" },
   ]},
   { title: "Legal", links: [
     { label: "Terms & Conditions", page: "terms-and-conditions" },
@@ -816,7 +826,170 @@ const PAGES: Record<SitePageId, PageData> = {
         { label: "Project repository", href: "https://github.com/MohammedRiyashB/earthweatherchannel" }
       ]}
     ]
-  }
+  },
+
+  "api-details": {
+    eyebrow: "DEVELOPER AND APIS · DOCUMENTATION",
+    title: "Weather data for products, apps and decisions.",
+    lead: "The EARTH WEATHER API programme is designed to help developers integrate current weather, forecast, air-quality, alert, radar and satellite information into their own digital products through a consistent service interface.",
+    sections: [
+      { heading: "What is a weather API?", paragraphs: [
+        "A weather API allows an application to request structured weather information from a server. Instead of independently collecting and maintaining multiple weather feeds, a developer can request the data needed for a location and use the returned fields in a website, mobile app, dashboard or internal tool.",
+        "EARTH WEATHER combines selected weather-model feeds and public Earth-observation resources. Available fields, geographic coverage, update frequency and response time depend on the relevant upstream provider and product."
+      ]},
+      { heading: "What can you build?", bullets: [
+        "Weather applications — show current conditions, temperature, humidity, wind and forecasts for saved places.",
+        "Travel and outdoor tools — help people review forecast conditions before trips, events and outdoor activities.",
+        "Business dashboards — add weather context to logistics, agriculture, retail, construction and operations views.",
+        "Notifications — trigger application notices from supported forecast or alert data, while linking users to official warnings.",
+        "Research and prototypes — explore modelled weather and public environmental datasets with clear source attribution."
+      ]},
+      { heading: "Available data categories", bullets: [
+        "Current weather — temperature, apparent temperature, relative humidity, wind speed and direction, cloud cover and precipitation fields where returned.",
+        "Hourly and daily forecasts — forecast time series and daily values from the configured forecast service.",
+        "Air quality — modelled pollutant and air-quality values; local regulatory station readings are not implied.",
+        "Storms and alerts — selected alert feeds and curated natural-event metadata. Coverage is not guaranteed to be complete.",
+        "Radar and satellite imagery — recent radar frames and imagery catalogue or tiles where the source provides geographic and time coverage.",
+        "Weather news — selected weather and Earth-science reporting with source links."
+      ]},
+      { heading: "Data sources and interpretation", paragraphs: [
+        "The current backend uses MET Norway as its primary global weather-model source and Open-Meteo as a fallback for several weather fields. Air-quality information is modelled through Open-Meteo CAMS. Satellite imagery is sourced from NASA GIBS; curated event metadata includes NASA EONET; radar availability depends on RainViewer coverage.",
+        "A numerical weather-model value is not automatically a direct observation from a nearby ground station. Satellite imagery, model output, curated event metadata and official warnings are different data types. Applications should retain the source, timestamp, units and any quality or coverage notes returned with the response.",
+        "Third-party services may impose attribution, caching, rate, geographic-coverage and redistribution conditions. Developers are responsible for complying with the licences applicable to the datasets they display or redistribute."
+      ]},
+      { heading: "How to integrate responsibly", bullets: [
+        "Choose only the data categories and locations your application actually needs.",
+        "Read the response schema, units, provider/source fields and timestamps before displaying values.",
+        "Handle timeouts, unavailable providers and missing fields explicitly. Do not invent missing readings or silently label old cached values as live.",
+        "Cache responses in line with the relevant upstream provider's terms and the product documentation.",
+        "Keep API secrets on a trusted server. Never embed a private key in browser JavaScript, a public repository or a downloadable mobile application.",
+        "Use request limits, backoff and monitoring to avoid sending excessive upstream traffic."
+      ]},
+      { heading: "Current backend preview", paragraphs: [
+        "The website backend currently exposes a weather endpoint at https://earthweather-api.onrender.com/api/weather?latitude=13.0827&longitude=80.2707. It accepts latitude and longitude and returns a JSON weather response when its upstream data is available.",
+        "This endpoint is part of the website's existing backend and is not yet the released, versioned commercial developer API. Do not assume that API-key authentication, published customer quotas, paid access, uptime commitments or a service-level agreement are active."
+      ]},
+      { heading: "Developer API launch status", paragraphs: [
+        "The developer dashboard is being prepared with service selection, a 1–30 day access period and indicative local-currency pricing. The commercial API-key issuance service, authenticated customer endpoints, per-key quotas, payment verification and plan activation must be completed and tested before paid access is offered.",
+        "No API plan should be considered active until the dashboard confirms activation and the production backend issues credentials. Displayed estimates are not a final payment quote; checkout must confirm the supported currency, applicable taxes and final amount."
+      ], links: [
+        { label: "Apply for an API Key", href: "/api/dashboard" },
+        { label: "API Terms of Service", href: "/api-terms-of-service" },
+        { label: "API Security & Privacy", href: "/api-security-privacy" }
+      ]},
+      { heading: "Weather and emergency safety", paragraphs: [
+        "EARTH WEATHER is an informational and developer-data service. It is not an emergency-response authority, certified instrument or guarantee of conditions at a precise location. Do not use it as the sole basis for emergency response, aviation, maritime, medical or critical-infrastructure decisions. Verify urgent warnings with the official authority responsible for your location."
+      ], links: [
+        { label: "India Meteorological Department", href: "https://mausam.imd.gov.in/index_en.php" },
+        { label: "NDMA SACHET alerts", href: "https://sachet.ndma.gov.in/" }
+      ]}
+    ],
+    reviewed: "9 November 2026"
+  },
+  "api-terms-of-service": {
+    eyebrow: "DEVELOPER AND APIS · SERVICE TERMS",
+    title: "API Terms of Service",
+    lead: "These proposed terms describe the rules for accessing EARTH WEATHER developer API products, including accounts, credentials, acceptable use, third-party data, plan duration and billing. The operator must complete a legal review and supply final business and contact details before paid access launches.",
+    sections: [
+      { heading: "1. Acceptance and scope", paragraphs: [
+        "By registering for, accessing or using an EARTH WEATHER API product, you agree to these API terms and any plan-specific limits or notices presented at checkout. If you use the API for an organisation, you confirm that you are authorised to accept these terms for it.",
+        "These API terms apply to developer API products. They supplement, and do not replace, the general website terms, privacy policy or applicable third-party data-provider terms."
+      ]},
+      { heading: "2. Accounts and credentials", bullets: [
+        "Provide accurate account information and protect the Google account used to sign in.",
+        "API keys are assigned to the account or project for which they are issued. Do not sell, publish, share or embed secret keys in public client-side code.",
+        "You are responsible for activity performed with your credentials until you report suspected compromise and the credentials are disabled or rotated.",
+        "EARTH WEATHER may suspend, revoke or rotate credentials where misuse, compromise or unusual traffic is reasonably suspected."
+      ]},
+      { heading: "3. Plans, access periods and billing", paragraphs: [
+        "Before payment is authorised, the dashboard and checkout must clearly show the selected API products, access period, applicable request quota, currency, taxes and total amount due. The final checkout amount and the payment provider's supported currency take precedence over any indicative dashboard estimate.",
+        "A selected duration does not grant access by itself. Access begins only after the payment provider confirms payment and the EARTH WEATHER backend verifies the transaction and activates the plan. The current plan design does not include a free trial.",
+        "Automatic renewal must not be assumed unless it is clearly disclosed and affirmatively accepted. Renewal, cancellation, refunds, tax treatment and consumer rights must follow the final checkout terms and applicable law."
+      ]},
+      { heading: "4. Acceptable use", bullets: [
+        "Use the API only for lawful purposes and in compliance with these terms and applicable laws.",
+        "Do not overload, disrupt, probe or attempt to bypass authentication, quotas, rate limits or other service controls.",
+        "Do not use the API to distribute malware, conduct unauthorised surveillance or interfere with another person's systems or data.",
+        "Do not misrepresent model output, inferred information or third-party imagery as verified local observations or official warnings.",
+        "Do not resell or redistribute raw API responses as a competing data feed unless the selected plan and upstream licences expressly permit it."
+      ]},
+      { heading: "5. Third-party data, attribution and licences", paragraphs: [
+        "Some API responses include or depend on third-party data. Those providers may impose additional attribution, caching, redistribution, geographic-coverage and licence conditions. You must review and comply with the conditions that apply to the datasets you use.",
+        "Keep required provider attribution, source identifiers, timestamps and notices visible where the upstream licence or API documentation requires them. Access to EARTH WEATHER does not transfer ownership of third-party data."
+      ]},
+      { heading: "6. Availability and changes", paragraphs: [
+        "Weather providers, satellite catalogues, radar feeds and news sources can change availability, latency, fields or coverage. The API may be updated, rate-limited or temporarily unavailable to protect upstream services and users. A service-level commitment applies only if separately agreed in writing.",
+        "EARTH WEATHER may suspend access for security, legal, provider-policy or operational reasons. Where reasonably possible, material changes to paid products or limits will be communicated through the dashboard or published notices."
+      ]},
+      { heading: "7. Weather and safety disclaimer", paragraphs: [
+        "Weather and environmental data may be delayed, incomplete, modelled, estimated or geographically limited. The service is provided for information and application development; it must not be the sole basis for emergency response, medical, aviation, maritime, critical-infrastructure or other life-safety decisions.",
+        "Verify urgent warnings and operational decisions with the official authority responsible for the relevant location."
+      ]},
+      { heading: "8. Suspension, termination and liability", paragraphs: [
+        "You may stop using the API at any time. EARTH WEATHER may suspend or terminate access for material breach, abuse, non-payment, security concerns or where continued operation is not reasonably possible.",
+        "To the extent permitted by applicable law, the service is provided without a promise that every data field will be continuously available, error-free or suitable for a particular purpose. Nothing in these terms excludes a right or liability that cannot legally be excluded."
+      ]},
+      { heading: "9. Governing law and operator contact", paragraphs: [
+        "The final governing-law clause, jurisdiction, legal business identity, registered address and formal support contact must be supplied by the service operator before the paid API programme launches. These particulars are intentionally not invented here.",
+        "This page is a product-terms draft for review, not a substitute for advice from a qualified lawyer. The operator should have it reviewed for the countries where the API will be sold, including applicable consumer, privacy, tax and refund requirements."
+      ], links: [
+        { label: "General Website Terms", href: "/terms-and-conditions" },
+        { label: "Privacy Policy", href: "/privacy-policy" },
+        { label: "API Security & Privacy", href: "/api-security-privacy" }
+      ]}
+    ],
+    reviewed: "Draft published 9 November 2026 · Legal review required before paid launch"
+  },
+  "api-security-privacy": {
+    eyebrow: "DEVELOPER AND APIS · TRUST AND SECURITY",
+    title: "API Security & Privacy",
+    lead: "Security is part of the API design, not an optional add-on. This page explains account protection, secret-key handling, data practices and safeguards that must be in place before production API credentials are issued.",
+    sections: [
+      { heading: "1. Account protection", paragraphs: [
+        "The current website uses Google sign-in through Firebase Authentication. EARTH WEATHER does not ask users to create a separate website password. Protect the Google account used to sign in with a unique password, passkey or two-step verification where available."
+      ], bullets: [
+        "Never share one-time verification codes or approve an unfamiliar sign-in prompt.",
+        "Sign out on shared devices and review the devices signed in to your Google account.",
+        "Keep your browser, operating system and development dependencies updated."
+      ], links: [
+        { label: "Google Account Security", href: "https://myaccount.google.com/security" },
+        { label: "Firebase privacy and security", href: "https://firebase.google.com/support/privacy" }
+      ]},
+      { heading: "2. Protect your API keys", bullets: [
+        "Treat every secret API key like a password. Do not put it in frontend JavaScript, public GitHub repositories, screenshots, support tickets or analytics events.",
+        "For web and mobile applications, send authenticated requests through a server you control. Store secrets in server-side environment variables or a managed secrets service.",
+        "Use separate keys for development and production. Restrict each key to its intended project, services and quotas when those controls are available.",
+        "Rotate or revoke a key immediately if it may have been exposed. Never reuse a compromised key.",
+        "An API ID may identify a credential or project, but the API key is the secret that must remain private."
+      ]},
+      { heading: "3. Planned credential controls", paragraphs: [
+        "The intended paid service will issue credentials only after the backend verifies the account and, where relevant, successful payment. Secret values should be generated server-side, stored in a protected form, displayed to the owner only when issued, and be revocable or replaceable.",
+        "Important current status: paid API-key issuance, production key rotation, customer quotas and authenticated commercial API requests are not yet active. The dashboard is being prepared; do not treat a preview page as proof that a production key exists."
+      ]},
+      { heading: "4. Information processed", paragraphs: [
+        "Google sign-in can provide account identity information such as account name, email address and profile image where available. The website also processes selected locations and weather requests to return local weather information. Browser geolocation and notification access are permission-based and can be denied or revoked through browser or device settings.",
+        "To fulfil weather or environmental requests, the backend may contact upstream weather, air-quality, satellite, radar or event providers. Those providers may process request metadata under their own terms and privacy notices. Do not send sensitive personal information in API query parameters.",
+        "Operational logs should be limited to what is needed for security, troubleshooting, quota enforcement and service reliability, and retained only for a documented period. API secrets and unnecessary personal data must not be written to logs."
+      ]},
+      { heading: "5. Required production safeguards", bullets: [
+        "HTTPS for all authenticated API traffic.",
+        "Server-side credential verification and protected secret storage. Never trust a price, plan, duration or payment-success flag supplied by the browser.",
+        "Per-key rate limits, request quotas, expiry checks, abuse detection and revocation.",
+        "Payment webhook signature verification and idempotent activation before an account receives paid access.",
+        "Access controls that prevent one user from reading another user's keys, invoices or usage records.",
+        "Security review, monitoring and automated tests before public commercial launch."
+      ]},
+      { heading: "6. Reporting a security concern", paragraphs: [
+        "Do not publish credentials, personal data, exploit details or a working attack in a public issue. Until a dedicated private security contact is published, use the project repository to request a private reporting channel without posting sensitive technical details."
+      ], links: [
+        { label: "EARTH WEATHER GitHub repository", href: "https://github.com/MohammedRiyashB/earthweatherchannel" }
+      ]},
+      { heading: "7. Weather-data limitations", paragraphs: [
+        "Security and privacy controls do not make a weather dataset authoritative. Forecasts and environmental values can be modelled, delayed or incomplete. Do not use the API as the sole basis for emergency, aviation, maritime, medical or critical-infrastructure decisions. Verify urgent matters with the relevant official authority."
+      ]}
+    ],
+    reviewed: "9 November 2026"
+  },
 };
 
 export function SitePageView({ slug }: { slug: SitePageId }) {

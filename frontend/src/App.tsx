@@ -854,8 +854,7 @@ const [section,setSection]=useState("Weather Report");const page:"home"|SitePage
    <nav className="footer-navigation" aria-label="Footer navigation">
     {FOOTER_GROUPS.map(group=><section className="footer-group" key={group.title}>
      <h3>{group.title}</h3>
-     {group.links.map(link=><a href={SITE_PATHS[link.page]} key={link.page}>{link.label}</a>)}
-     {group.title === "Resources" && <a href="/api/dashboard" key="apply-api-key">Apply for an API Key</a>}
+     {group.links.map(link=><a href={link.href || (link.page ? SITE_PATHS[link.page] : "/")} key={link.page || link.href}>{link.label}</a>)}
     </section>)}
    </nav>
    <div className="footer-copyright">© {new Date().getFullYear()} Earth Weather Channel. All rights reserved. <strong>BMR INC.</strong></div>

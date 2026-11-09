@@ -78,4 +78,7 @@
   <url>
     <loc>https://earthweatherchannel.web.app/account-security</loc>
   </url>
+  <url><loc>https://earthweatherchannel.web.app/api-details</loc></url>
+  <url><loc>https://earthweatherchannel.web.app/api-terms-of-service</loc></url>
+  <url><loc>https://earthweatherchannel.web.app/api-security-privacy</loc></url>
 </urlset>
