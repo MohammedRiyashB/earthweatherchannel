@@ -356,6 +356,19 @@ export default function App(){
  const locationSearchVersion=useRef(0);
 const [section,setSection]=useState("Weather Report");const page:"home"|SitePageId=resolveSitePage(window.location.pathname)??"home";const isApiDashboard=window.location.pathname.replace(/\/+$/, "").toLowerCase()==="/api/dashboard";const [isSearchLocation,setIsSearchLocation]=useState<boolean>(()=>readCache<Place|null>("local",null)?.source==="search");
  const [user,setUser]=useState<User|null>(null);const [notice,setNotice]=useState("");
+ const [apiDays,setApiDays]=useState(7);
+ const [apiServices,setApiServices]=useState<string[]>(["Current Weather","7-Day Forecast"]);
+ const apiServiceOptions=[
+  {name:"Current Weather",detail:"Live conditions and temperature"},
+  {name:"Hourly Forecast",detail:"Hour-by-hour weather outlook"},
+  {name:"7-Day Forecast",detail:"Daily forecast and conditions"},
+  {name:"Weather Alerts",detail:"Severe weather notifications"},
+  {name:"Rainfall Data",detail:"Precipitation and rain probability"},
+  {name:"Wind & Temperature",detail:"Wind speed, direction and feels-like data"},
+  {name:"Weather Maps",detail:"Map and radar data access"}
+ ];
+ const toggleApiService=(name:string)=>setApiServices(current=>current.includes(name)?current.filter(item=>item!==name):[...current,name]);
+
  const [notificationsEnabled,setNotificationsEnabled]=useState(()=>{
   try{return typeof window!=="undefined"&&"Notification" in window&&Notification.permission==="granted"&&localStorage.getItem("earth-weather-notifications")==="on";}catch{return false;}
  });
@@ -703,23 +716,56 @@ const [section,setSection]=useState("Weather Report");const page:"home"|SitePage
  const stateTab=visitorLocation?.state||"State";
  const localTab=visitorLocation?.name?(visitorLocation?.district?`${visitorLocation.name} · ${visitorLocation.district}`:visitorLocation.name):(visitorLocation?.district||"Local");
  const newsTabs=[{key:"World",label:"World"},{key:"Country",label:countryTab},{key:"State",label:stateTab},{key:"Local",label:localTab}];
- return isApiDashboard ? <main style={{minHeight:"100vh",padding:"clamp(24px,6vw,72px)",background:"#f7f8fa",color:"#17191d",fontFamily:"inherit"}}>
-  <div style={{maxWidth:960,margin:"0 auto"}}>
-   <a href="/" style={{color:"inherit",textDecoration:"none",fontWeight:800,letterSpacing:".02em"}}>EARTH WEATHER</a>
-   <p style={{marginTop:56,fontSize:12,fontWeight:800,letterSpacing:".16em",color:"#b42323"}}>DEVELOPER PLATFORM</p>
-   <h1 style={{fontSize:"clamp(34px,6vw,58px)",lineHeight:1.05,margin:"12px 0"}}>EARTH WEATHER API</h1>
-   <p style={{fontSize:18,color:"#626873",maxWidth:620,lineHeight:1.6}}>Build with weather data from EARTH WEATHER. Sign in to access your developer workspace.</p>
-   {!user ? <section style={{marginTop:32,padding:28,border:"1px solid #e1e4e8",borderRadius:18,background:"#fff",maxWidth:520}}>
-    <h2 style={{marginTop:0}}>Sign in to continue</h2><p style={{color:"#626873"}}>Use your Google account to access API products, credentials and documentation.</p>
+ return isApiDashboard ? <main style={{minHeight:"100vh",padding:"clamp(20px,5vw,64px)",background:"#f5f6f8",color:"#17191d",fontFamily:"inherit"}}>
+  <div style={{maxWidth:1040,margin:"0 auto"}}>
+   <a href="/" style={{color:"inherit",textDecoration:"none",fontWeight:850,letterSpacing:".02em"}}>EARTH WEATHER</a>
+   <p style={{marginTop:42,fontSize:12,fontWeight:800,letterSpacing:".16em",color:"#b42323"}}>DEVELOPER PLATFORM</p>
+   <h1 style={{fontSize:"clamp(34px,6vw,54px)",lineHeight:1.05,margin:"10px 0"}}>EARTH WEATHER API</h1>
+   <p style={{fontSize:17,color:"#626873",maxWidth:680,lineHeight:1.6}}>One integration for weather data. Select the services you need, choose your access period and manage your API from one place.</p>
+   {!user ? <section style={{marginTop:28,padding:26,border:"1px solid #e1e4e8",borderRadius:18,background:"#fff",maxWidth:540}}>
+    <h2 style={{marginTop:0}}>Sign in to get started</h2><p style={{color:"#626873"}}>Use your Google account to access your API workspace.</p>
     <button type="button" onClick={()=>void signIn()} disabled={!firebaseReady} style={{padding:"13px 20px",border:0,borderRadius:10,background:"#17191d",color:"#fff",fontWeight:700,cursor:"pointer"}}>Continue with Google</button>
     {!firebaseReady&&<p style={{color:"#b42323",fontSize:13}}>Google sign-in is not configured for this deployment.</p>}{notice&&<p role="status" style={{color:"#b42323"}}>{notice}</p>}
-   </section> : <section style={{marginTop:32,display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))",gap:16}}>
-    <article style={{padding:24,border:"1px solid #e1e4e8",borderRadius:18,background:"#fff"}}><h2>API keys</h2><p style={{color:"#626873"}}>Your API credentials will appear here after an API plan is activated.</p><strong>No API keys yet</strong></article>
-    <article style={{padding:24,border:"1px solid #e1e4e8",borderRadius:18,background:"#fff"}}><h2>API documentation</h2><p style={{color:"#626873"}}>Integration guides and endpoint reference.</p><span>Documentation is being prepared.</span></article>
-    <article style={{padding:24,border:"1px solid #e1e4e8",borderRadius:18,background:"#fff"}}><h2>Plans & access</h2><p style={{color:"#626873"}}>Trial duration, service selection and billing.</p><span>Plan activation is coming soon.</span></article>
-    <article style={{padding:24,border:"1px solid #e1e4e8",borderRadius:18,background:"#fff"}}><h2>Signed in</h2><p style={{color:"#626873"}}>{user.displayName||user.email}</p><button type="button" onClick={()=>void signOut(auth!)} style={{padding:"10px 14px",border:"1px solid #d5d9df",borderRadius:9,background:"#fff",cursor:"pointer"}}>Sign out</button></article>
-   </section>}
-   <p style={{marginTop:48}}><a href="/" style={{color:"#555",textDecoration:"underline"}}>← Back to Earth Weather</a></p>
+   </section> : <>
+    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap",margin:"26px 0 20px",padding:"14px 16px",background:"#fff",border:"1px solid #e1e4e8",borderRadius:14}}>
+     <div><strong>{user.displayName||user.email}</strong><div style={{fontSize:13,color:"#68707b",marginTop:3}}>Signed in with Google</div></div>
+     <button type="button" onClick={()=>void signOut(auth!)} style={{padding:"9px 14px",border:"1px solid #d5d9df",borderRadius:9,background:"#fff",cursor:"pointer"}}>Sign out</button>
+    </div>
+    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(min(100%,300px),1fr))",gap:18,alignItems:"start"}}>
+     <section style={{padding:22,border:"1px solid #e1e4e8",borderRadius:18,background:"#fff"}}>
+      <h2 style={{marginTop:0}}>1. Choose API services</h2><p style={{color:"#68707b",marginTop:-4}}>Select the weather data your application needs.</p>
+      <div style={{display:"grid",gap:4}}>
+       {apiServiceOptions.map(service=><label key={service.name} style={{display:"flex",alignItems:"flex-start",gap:12,padding:"12px 0",borderBottom:"1px solid #eef0f2",cursor:"pointer"}}>
+        <input type="checkbox" checked={apiServices.includes(service.name)} onChange={()=>toggleApiService(service.name)} style={{width:18,height:18,marginTop:2,accentColor:"#b42323"}}/>
+        <span><strong>{service.name}</strong><span style={{display:"block",fontSize:13,color:"#68707b",marginTop:3}}>{service.detail}</span></span>
+       </label>)}
+      </div>
+     </section>
+     <div style={{display:"grid",gap:18}}>
+      <section style={{padding:22,border:"1px solid #e1e4e8",borderRadius:18,background:"#fff"}}>
+       <h2 style={{marginTop:0}}>2. Select access duration</h2>
+       <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",gap:10}}><span style={{color:"#68707b"}}>API access period</span><strong style={{fontSize:26}}>{apiDays} days</strong></div>
+       <input aria-label="API access duration in days" type="range" min="1" max="30" step="1" value={apiDays} onChange={event=>setApiDays(Number(event.target.value))} style={{width:"100%",margin:"20px 0 8px",accentColor:"#b42323"}}/>
+       <div style={{display:"flex",justifyContent:"space-between",fontSize:12,color:"#68707b"}}><span>1 day</span><span>30 days maximum</span></div>
+       <div style={{marginTop:18,padding:16,borderRadius:12,background:"#f8f8f9"}}><strong style={{color:"#18794e"}}>3-day free trial</strong><p style={{margin:"5px 0 0",fontSize:13,color:"#68707b"}}>One trial per account. Trial activation will be available after secure API provisioning is connected.</p></div>
+      </section>
+      <section style={{padding:22,border:"1px solid #e1e4e8",borderRadius:18,background:"#fff"}}>
+       <h2 style={{marginTop:0}}>3. Plan summary</h2>
+       <div style={{display:"flex",justifyContent:"space-between",padding:"8px 0",borderBottom:"1px solid #eef0f2"}}><span style={{color:"#68707b"}}>Selected services</span><strong>{apiServices.length}</strong></div>
+       <div style={{display:"flex",justifyContent:"space-between",padding:"8px 0",borderBottom:"1px solid #eef0f2"}}><span style={{color:"#68707b"}}>Duration</span><strong>{apiDays} days</strong></div>
+       <div style={{display:"flex",justifyContent:"space-between",padding:"12px 0 4px",gap:12}}><strong>Price</strong><strong>To be announced</strong></div>
+       <p style={{fontSize:13,color:"#68707b",lineHeight:1.5}}>Pricing and checkout will be enabled after service rates and your payment provider are configured. No payment will be taken on this preview.</p>
+       <button type="button" disabled style={{width:"100%",padding:14,border:0,borderRadius:10,background:"#d8dadd",color:"#737982",fontWeight:750,cursor:"not-allowed"}}>Payment setup pending</button>
+      </section>
+     </div>
+    </div>
+    <section style={{marginTop:18,padding:22,border:"1px solid #e1e4e8",borderRadius:18,background:"#fff"}}>
+     <h2 style={{marginTop:0}}>API keys & documentation</h2><p style={{color:"#68707b"}}>Your private API credentials will appear here after your plan or free trial is securely activated.</p>
+     <div style={{display:"flex",gap:10,flexWrap:"wrap"}}><a href="/api/docs" style={{display:"inline-block",padding:"11px 15px",borderRadius:9,background:"#17191d",color:"#fff",textDecoration:"none",fontWeight:700}}>View API documentation</a><span style={{padding:"11px 0",fontSize:13,color:"#68707b"}}>No API keys issued yet</span></div>
+     <p style={{fontSize:12,color:"#68707b",marginBottom:0}}>Secret API keys will be shown only to their owner and must never be shared publicly.</p>
+    </section>
+   </>}
+   <p style={{marginTop:36}}><a href="/" style={{color:"#555",textDecoration:"underline"}}>← Back to Earth Weather</a></p>
   </div>
  </main> : <div className="weathercom-site earth-weather-site">
   {locationPickerOpen&&<div className="location-picker-overlay" role="dialog" aria-modal="false" aria-label="Search weather locations" onMouseDown={event=>{if(event.target===event.currentTarget){setLocationPickerOpen(false);setQuery("");setLocationSearchResults([]);setLocationSearchError("");}}}>
