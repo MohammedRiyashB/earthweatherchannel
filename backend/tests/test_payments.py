@@ -2,7 +2,18 @@ import os
 import unittest
 from unittest.mock import patch
 
-from app.payments import _services, calculate_checkout_amount
+from app.payments import _firestore_database_id, _services, calculate_checkout_amount
+
+
+class FirestoreDatabaseSelectionTests(unittest.TestCase):
+    def test_uses_the_named_earthweather_database(self):
+        with patch.dict(os.environ, {"CLOUD_FIRESTORE_DATABASE": "earthweather"}):
+            self.assertEqual(_firestore_database_id(), "earthweather")
+
+    def test_unset_database_id_uses_firebase_default(self):
+        with patch.dict(os.environ):
+            os.environ.pop("CLOUD_FIRESTORE_DATABASE", None)
+            self.assertEqual(_firestore_database_id(), "(default)")
 
 
 class DynamicPaymentPricingTests(unittest.TestCase):
