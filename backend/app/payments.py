@@ -278,7 +278,7 @@ async def payment_config() -> dict[str, Any]:
     checkout_configured = not missing
     paid_api_access_ready = _paid_api_access_ready()
     launch_blockers = [] if paid_api_access_ready else [
-        "Paid API-key issuance and per-key request-quota enforcement are not yet implemented."
+        "Complete the missing configuration above. Paid API key issuance and quota enforcement are implemented but checkout stays closed until every required secret and the service catalogue validate."
     ]
     return {
         "provider": "NOWPayments",
