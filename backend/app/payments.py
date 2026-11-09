@@ -471,6 +471,21 @@ async def customer_api_keys(authorization: str | None = Header(default=None)) ->
     return {"keys": keys}
 
 
+@router.delete("/keys/{order_id}")
+async def revoke_customer_api_key(order_id: str, authorization: str | None = Header(default=None)) -> dict[str, str]:
+    user = _verified_user(authorization)
+    ref = _db().collection("earthWeatherApiKeys").document(order_id)
+    snapshot = ref.get()
+    if not snapshot.exists:
+        raise HTTPException(status_code=404, detail="API key not found")
+    record = snapshot.to_dict() or {}
+    if record.get("customer_uid") != user["uid"]:
+        raise HTTPException(status_code=404, detail="API key not found")
+    if record.get("status") != "revoked":
+        ref.update({"status": "revoked", "revoked_at": datetime.now(timezone.utc)})
+    return {"order_id": order_id, "status": "revoked"}
+
+
 @router.get("/status/{order_id}")
 async def payment_status(order_id: str, authorization: str | None = Header(default=None)) -> dict[str, Any]:
     user = _verified_user(authorization)
