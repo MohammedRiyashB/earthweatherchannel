@@ -56,9 +56,117 @@ def _services() -> dict[str, dict[str, Any]]:
     return result
 
 
+def _fernet() -> Fernet:
+    key = os.getenv("EARTH_WEATHER_API_KEY_ENCRYPTION_KEY", "").strip()
+    if not key:
+        raise HTTPException(status_code=503, detail="API key encryption is not configured")
+    try:
+        return Fernet(key.encode("ascii"))
+    except (ValueError, UnicodeEncodeError) as exc:
+        raise HTTPException(status_code=503, detail="API key encryption configuration is invalid") from exc
+
+
 def _paid_api_access_ready() -> bool:
-    """False until paid API-key issuance and per-key quota enforcement are implemented."""
-    return False
+    """True only when provider, service catalogue, Firebase and API-key encryption are configured."""
+    if not _services() or not os.getenv("EARTH_WEATHER_API_KEY_ENCRYPTION_KEY", "").strip():
+        return False
+    if not all(os.getenv(name, "").strip() for name in (
+        "NOWPAYMENTS_API_KEY", "NOWPAYMENTS_IPN_SECRET",
+        "FIREBASE_SERVICE_ACCOUNT_JSON", "PUBLIC_BACKEND_URL",
+    )):
+        return False
+    try:
+        _fernet()
+    except HTTPException:
+        return False
+    return True
+
+
+def _issue_or_get_api_key(db: Any, order_id: str, payment: dict[str, Any], now: datetime, expires_at: datetime) -> str:
+    """Create one encrypted, owner-bound API key per paid order; repeated IPNs reuse it."""
+    from google.api_core.exceptions import AlreadyExists
+
+    key_ref = db.collection("earthWeatherApiKeys").document(order_id)
+    existing = key_ref.get()
+    if existing.exists:
+        record = existing.to_dict() or {}
+        try:
+            return _fernet().decrypt(record["api_key_encrypted"].encode()).decode()
+        except (KeyError, InvalidToken, UnicodeDecodeError) as exc:
+            logger.exception("Could not decrypt the existing API key for order %s", order_id)
+            raise HTTPException(status_code=503, detail="Stored API key could not be recovered") from exc
+
+    raw_key = "ew_live_" + secrets.token_urlsafe(32)
+    services = payment.get("services") or []
+    quotas = {item["id"]: int(item.get("requests_per_day", 1000)) for item in services if item.get("id")}
+    record = {
+        "order_id": order_id, "customer_uid": payment["customer_uid"],
+        "key_hash": hashlib.sha256(raw_key.encode()).hexdigest(),
+        "api_key_encrypted": _fernet().encrypt(raw_key.encode()).decode(),
+        "key_prefix": raw_key[:15], "service_ids": payment.get("service_ids", []),
+        "quotas_per_day": quotas, "status": "active", "created_at": now,
+        "expires_at": expires_at, "duration_days": int(payment["duration_days"]),
+        "source_order_id": order_id,
+    }
+    try:
+        key_ref.create(record)
+    except AlreadyExists:
+        saved = key_ref.get().to_dict() or {}
+        try:
+            raw_key = _fernet().decrypt(saved["api_key_encrypted"].encode()).decode()
+        except (KeyError, InvalidToken, UnicodeDecodeError) as exc:
+            raise HTTPException(status_code=503, detail="Stored API key could not be recovered") from exc
+    return raw_key
+
+
+def consume_api_key_quota(raw_key: str | None, service_id: str) -> dict[str, Any]:
+    """Validate a key and atomically charge one request against its UTC daily service quota."""
+    if not raw_key or not raw_key.startswith("ew_live_"):
+        raise HTTPException(status_code=401, detail="A valid x-api-key header is required")
+    db = _db()
+    digest = hashlib.sha256(raw_key.encode()).hexdigest()
+    matches = list(db.collection("earthWeatherApiKeys").where("key_hash", "==", digest).limit(1).stream())
+    if not matches:
+        raise HTTPException(status_code=401, detail="API key is invalid")
+    key_doc = matches[0]
+    record = key_doc.to_dict() or {}
+    if record.get("status") != "active":
+        raise HTTPException(status_code=403, detail="API key is inactive")
+    if service_id not in (record.get("service_ids") or []):
+        raise HTTPException(status_code=403, detail="This API key does not include the requested service")
+    expires_at = record.get("expires_at")
+    if not isinstance(expires_at, datetime):
+        raise HTTPException(status_code=403, detail="API key expiry is invalid")
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    now = datetime.now(timezone.utc)
+    if expires_at <= now:
+        key_doc.reference.update({"status": "expired", "expired_at": now})
+        raise HTTPException(status_code=403, detail="API key has expired")
+    quota = int((record.get("quotas_per_day") or {}).get(service_id, 1000))
+    day = now.strftime("%Y%m%d")
+    usage_ref = db.collection("earthWeatherApiUsage").document(f"{key_doc.id}_{service_id}_{day}")
+    from firebase_admin import firestore
+    transaction = db.transaction()
+
+    @firestore.transactional
+    def _increment(tx: Any) -> int:
+        snapshot = usage_ref.get(transaction=tx)
+        used = int((snapshot.to_dict() or {}).get("count", 0)) if snapshot.exists else 0
+        if used >= quota:
+            raise HTTPException(status_code=429, detail="Daily API request quota exceeded")
+        tx.set(usage_ref, {
+            "key_order_id": key_doc.id, "customer_uid": record["customer_uid"],
+            "service_id": service_id, "utc_day": day, "count": used + 1,
+            "quota": quota, "updated_at": now,
+        }, merge=True)
+        return used + 1
+
+    used = _increment(transaction)
+    return {
+        "used": used, "quota": quota, "remaining": max(0, quota - used),
+        "reset_at": (now.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)).isoformat(),
+    }
 
 
 def _provider_key() -> str:
