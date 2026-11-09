@@ -828,9 +828,9 @@ const [section,setSection]=useState("Weather Report");const page:"home"|SitePage
        <div role="status" aria-live="polite" style={{marginTop:14,padding:14,borderRadius:10,background:paymentProviderConfig?.provider_configured&&providerApiKeyVerified?"#edf8f0":"#f5f6f8",border:"1px solid #e1e4e8",fontSize:13,lineHeight:1.5}}>
         {paymentProviderLoading?<strong>Checking NOWPayments connection…</strong>:paymentProviderConfig?.provider_configured&&providerApiKeyVerified?<><strong style={{color:"#147a37"}}>NOWPayments API connected</strong><div>{providerCurrencyCount} supported crypto currencies returned by the provider.</div></>:paymentProviderConfig?.provider_configured?<><strong>NOWPayments credentials detected</strong><div>{paymentProviderError||"Provider currency verification is pending."}</div></>:<><strong>NOWPayments is not fully configured</strong><div>The backend has not confirmed both the API key and IPN secret.</div></>}
        </div>
-       {paymentProviderConfig?.missing_configuration?.length>0&&<div style={{marginTop:10,padding:12,borderRadius:9,background:"#fff8e8",color:"#795300",fontSize:13}}>
+       {(paymentProviderConfig?.missing_configuration?.length ?? 0)>0&&<div style={{marginTop:10,padding:12,borderRadius:9,background:"#fff8e8",color:"#795300",fontSize:13}}>
         <strong>Missing or incomplete Render settings</strong>
-        <ul style={{margin:"7px 0 0",paddingLeft:20}}>{paymentProviderConfig.missing_configuration.map(item=><li key={item}>{item}</li>)}</ul>
+        <ul style={{margin:"7px 0 0",paddingLeft:20}}>{(paymentProviderConfig?.missing_configuration ?? []).map(item=><li key={item}>{item}</li>)}</ul>
        </div>}
        {paymentProviderConfig?.launch_blockers?.map(item=><p key={item} style={{fontSize:13,color:"#8a4b08",lineHeight:1.5,margin:"10px 0"}}>{item}</p>)}
        {paymentProviderError&&<p role="alert" style={{fontSize:13,color:"#b42318"}}>{paymentProviderError}</p>}
