@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { auth, firebaseReady, googleProvider } from "./firebase";
 import { onAuthStateChanged, signInWithPopup, signOut, type User } from "firebase/auth";
+import { getCryptoCheckoutConfig, getCryptoCurrencies, type CryptoCheckoutConfig } from "./lib/cryptoPayments";
 import { FOOTER_GROUPS, resolveSitePage, SITE_PATHS, SitePageView, type SitePageId } from "./sitePages";
 import "./intelligence.css";
 import { WeatherChannelLayout, WeatherChannelPage, type WeatherChannelMode } from "./WeatherChannelReference";
@@ -362,6 +363,11 @@ const [section,setSection]=useState("Weather Report");const page:"home"|SitePage
  const [apiCountry,setApiCountry]=useState("US");
  const [apiFxRate,setApiFxRate]=useState(1);
  const [apiCurrencyLoading,setApiCurrencyLoading]=useState(true);
+ const [paymentProviderConfig,setPaymentProviderConfig]=useState<CryptoCheckoutConfig|null>(null);
+ const [paymentProviderLoading,setPaymentProviderLoading]=useState(false);
+ const [paymentProviderError,setPaymentProviderError]=useState("");
+ const [providerApiKeyVerified,setProviderApiKeyVerified]=useState(false);
+ const [providerCurrencyCount,setProviderCurrencyCount]=useState(0);
  useEffect(()=>{
   let active=true;
   const loadMarket=async()=>{
@@ -381,6 +387,36 @@ const [section,setSection]=useState("Weather Report");const page:"home"|SitePage
   void loadMarket();
   return()=>{active=false;};
  },[]);
+ useEffect(()=>{
+  if(!isApiDashboard)return;
+  let active=true;
+  setPaymentProviderLoading(true);
+  setPaymentProviderError("");
+  void (async()=>{
+   try{
+    const config=await getCryptoCheckoutConfig();
+    if(!active)return;
+    setPaymentProviderConfig(config);
+    if(config.provider_configured){
+     try{
+      const currencyResult=await getCryptoCurrencies();
+      const currencies=Array.isArray(currencyResult.currencies)
+       ? currencyResult.currencies.map(item=>typeof item==="string"?item:(item.currency||item.code||"")).filter(Boolean)
+       : [];
+      if(active){setProviderApiKeyVerified(currencies.length>0);setProviderCurrencyCount(currencies.length);}
+      if(!currencies.length&&active)setPaymentProviderError("NOWPayments did not return a supported-currency list. Check the API key and merchant account.");
+     }catch(error){
+      if(active){setProviderApiKeyVerified(false);setPaymentProviderError(error instanceof Error?error.message:"NOWPayments API key verification failed.");}
+     }
+    }
+   }catch(error){
+    if(active)setPaymentProviderError(error instanceof Error?error.message:"Could not reach the EARTH WEATHER payment configuration endpoint.");
+   }finally{
+    if(active)setPaymentProviderLoading(false);
+   }
+  })();
+  return()=>{active=false;};
+ },[isApiDashboard]);
  const apiUsdPrice=Math.max(0.99,(2.99+Math.max(0,apiServices.length-1)*0.99)*(apiDays/7)*(apiDays>=28?0.85:1));
  const apiMarketFactor=apiCountry==="IN"?0.35:1;
  const apiLocalPrice=apiUsdPrice*apiFxRate*apiMarketFactor;
@@ -787,9 +823,18 @@ const [section,setSection]=useState("Weather Report");const page:"home"|SitePage
        <div style={{display:"flex",justifyContent:"space-between",padding:"8px 0",borderBottom:"1px solid #eef0f2"}}><span style={{color:"#68707b"}}>Selected services</span><strong>{apiServices.length}</strong></div>
        <div style={{display:"flex",justifyContent:"space-between",padding:"8px 0",borderBottom:"1px solid #eef0f2"}}><span style={{color:"#68707b"}}>Duration</span><strong>{apiDays} days</strong></div>
        <div style={{display:"flex",justifyContent:"space-between",padding:"12px 0 4px",gap:12}}><strong>Estimated price</strong><strong style={{fontSize:22}}>{apiCurrencyLoading?"Detecting currency…":apiPriceLabel}</strong></div>
-       <p style={{fontSize:12,color:"#68707b",lineHeight:1.5}}>Currency detected from your location: {apiCountry} · {apiCurrency}. India-local pricing adjustment is applied where applicable. Prices are estimates until the payment provider is connected; final charge and supported currency will be confirmed at checkout.</p>
+       <p style={{fontSize:12,color:"#68707b",lineHeight:1.5}}>Currency detected from your location: {apiCountry} · {apiCurrency}. This is an indicative local-currency estimate only; final pricing is calculated server-side in USD and crypto conversion is confirmed by NOWPayments.</p>
        <p style={{fontSize:12,color:"#68707b",lineHeight:1.5}}>Pricing basis: {apiDays} days and {apiServices.length} selected service(s). API request quotas and backend usage controls must be activated before selling access.</p>
-       <button type="button" disabled style={{width:"100%",padding:14,border:0,borderRadius:10,background:"#d8dadd",color:"#737982",fontWeight:750,cursor:"not-allowed"}}>Payment provider setup pending</button>
+       <div role="status" aria-live="polite" style={{marginTop:14,padding:14,borderRadius:10,background:paymentProviderConfig?.provider_configured&&providerApiKeyVerified?"#edf8f0":"#f5f6f8",border:"1px solid #e1e4e8",fontSize:13,lineHeight:1.5}}>
+        {paymentProviderLoading?<strong>Checking NOWPayments connection…</strong>:paymentProviderConfig?.provider_configured&&providerApiKeyVerified?<><strong style={{color:"#147a37"}}>NOWPayments API connected</strong><div>{providerCurrencyCount} supported crypto currencies returned by the provider.</div></>:paymentProviderConfig?.provider_configured?<><strong>NOWPayments credentials detected</strong><div>{paymentProviderError||"Provider currency verification is pending."}</div></>:<><strong>NOWPayments is not fully configured</strong><div>The backend has not confirmed both the API key and IPN secret.</div></>}
+       </div>
+       {(paymentProviderConfig?.missing_configuration?.length ?? 0)>0&&<div style={{marginTop:10,padding:12,borderRadius:9,background:"#fff8e8",color:"#795300",fontSize:13}}>
+        <strong>Missing or incomplete Render settings</strong>
+        <ul style={{margin:"7px 0 0",paddingLeft:20}}>{(paymentProviderConfig?.missing_configuration ?? []).map(item=><li key={item}>{item}</li>)}</ul>
+       </div>}
+       {paymentProviderConfig?.launch_blockers?.map(item=><p key={item} style={{fontSize:13,color:"#8a4b08",lineHeight:1.5,margin:"10px 0"}}>{item}</p>)}
+       {paymentProviderError&&<p role="alert" style={{fontSize:13,color:"#b42318"}}>{paymentProviderError}</p>}
+       <button type="button" disabled style={{width:"100%",marginTop:12,padding:14,border:0,borderRadius:10,background:"#d8dadd",color:"#737982",fontWeight:750,cursor:"not-allowed"}}>{paymentProviderConfig?.provider_configured&&providerApiKeyVerified?"Provider connected · paid API activation pending":"Provider setup pending"}</button>
       </section>
      </div>
     </div>

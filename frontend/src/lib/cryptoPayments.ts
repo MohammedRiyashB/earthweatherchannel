@@ -1,4 +1,4 @@
-const API_BASE = (import.meta.env.VITE_API_BASE_URL || "https://earth-weather-api.onrender.com").replace(/\/$/, "");
+const API_BASE = (import.meta.env.VITE_API_BASE_URL || "https://earthweather-api.onrender.com").replace(/\/$/, "");
 
 export type CryptoService = {
   id: string;
@@ -8,6 +8,11 @@ export type CryptoService = {
 export type CryptoCheckoutConfig = {
   provider: "NOWPayments";
   enabled: boolean;
+  provider_configured: boolean;
+  checkout_configured: boolean;
+  paid_api_access_ready: boolean;
+  missing_configuration: string[];
+  launch_blockers: string[];
   currency: "usd";
   duration_min_days: number;
   duration_max_days: number;
@@ -39,7 +44,7 @@ async function request<T>(path: string, token?: string, init: RequestInit = {}):
   return body as T;
 }
 export const getCryptoCheckoutConfig = () => request<CryptoCheckoutConfig>("/api/payments/config");
-export const getCryptoCurrencies = () => request<{ currencies: string[]; provider: string }>("/api/payments/currencies");
+export const getCryptoCurrencies = () => request<{ currencies: Array<string | { currency?: string; code?: string }>; provider: string }>("/api/payments/currencies");
 export const createCryptoCheckout = (input: DynamicCheckoutInput, firebaseIdToken: string) =>
   request<DynamicCheckoutResult>("/api/payments/checkout", firebaseIdToken, {
     method: "POST", body: JSON.stringify(input),

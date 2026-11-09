@@ -1,51 +1,45 @@
-# NOWPayments dynamic API checkout
+# NOWPayments dynamic checkout — EARTH WEATHER
 
-NOWPayments invoices are created dynamically for each customer checkout. The browser sends selected service IDs, a duration (1–30 days), and the requested crypto currency. The backend loads authoritative per-service daily prices from Render, calculates the USD total, and creates the invoice. The client cannot submit or override the amount.
+The backend contains a dynamic invoice endpoint: the server calculates the invoice total from its own service catalogue, not from an amount sent by the browser. However, the API sales flow must not be opened to customers until API credentials are issued and request quotas are enforced on the paid API routes.
 
-## Render environment variables
+## Required Render environment variables
 
-Keep the existing server-side variables:
+Set these on the existing `earthweather-api` service:
 
-- `NOWPAYMENTS_API_KEY`: NOWPayments API key.
-- `NOWPAYMENTS_IPN_SECRET`: IPN signing secret.
-- `FIREBASE_SERVICE_ACCOUNT_JSON`: Firebase Admin service-account JSON.
-- `PUBLIC_BACKEND_URL`: exact HTTPS Render backend URL.
-- `FRONTEND_PUBLIC_URL`: public website origin.
+- `NOWPAYMENTS_API_KEY`: merchant API key.
+- `NOWPAYMENTS_IPN_SECRET`: IPN signature secret.
+- `FIREBASE_SERVICE_ACCOUNT_JSON`: Firebase Admin service-account JSON, stored as a single-line JSON value.
+- `PUBLIC_BACKEND_URL`: `https://earthweather-api.onrender.com`.
+- `FRONTEND_PUBLIC_URL`: `https://earthweatherchannel.web.app`.
+- `EARTH_WEATHER_API_SERVICES`: JSON object of the actual purchasable service IDs and approved USD daily prices.
 
-Replace the old fixed-plan variable `EARTH_WEATHER_CRYPTO_PLANS` with:
-
-- `EARTH_WEATHER_API_SERVICES`: JSON object mapping each purchasable API service ID to a display name and USD price per day.
-
-Example schema (illustrative prices only; replace with the actual approved catalogue and IDs used by the API):
+Example schema only; the IDs and values below are placeholders, not approved production pricing:
 
 ```json
 {
-  "forecast": {"name": "Weather Forecast API", "price_per_day": 0.50},
-  "satellite": {"name": "Satellite Data API", "price_per_day": 0.75},
-  "air_quality": {"name": "Air Quality API", "price_per_day": 0.35}
+  "current-weather": {"name": "Current Weather API", "price_per_day": 0.50},
+  "hourly-forecast": {"name": "Hourly Forecast API", "price_per_day": 0.30}
 }
 ```
 
-The example IDs and prices are not assumed to match the live product catalogue. Checkout remains unavailable until this variable is configured with the real service IDs and prices. Do not paste secrets into frontend variables or commit them.
+Do not use those sample prices as a live price list. The IDs must correspond to real commercial API products and the prices must be approved by the service operator.
 
-## Dynamic endpoints
+The old static variable `EARTH_WEATHER_CRYPTO_PLANS` is no longer read by the dynamic checkout code.
 
-- `GET /api/payments/config`: returns enabled state, service catalogue, USD per-day rates and duration limits.
-- `GET /api/payments/currencies`: retrieves NOWPayments-supported currency codes.
-- `POST /api/payments/checkout`: authenticated body:
-  ```json
-  {"service_ids":["forecast","satellite"],"duration_days":7,"pay_currency":"usdttrc20"}
-  ```
-  The server calculates `sum(service.price_per_day) × duration_days`, creates a unique NOWPayments invoice, and stores the order in Firestore.
-- `POST /api/payments/nowpayments/ipn`: verifies the IPN signature and expected fiat price/currency. A `finished` payment creates subscription and per-service entitlement records.
-- `GET /api/payments/status/{order_id}`: authenticated owner-only status.
+## Readiness diagnostics
 
-## Rollout checklist
+- `GET /api/payments/config` returns the provider-credential state, missing Render variable names, service catalogue and launch blockers. It never returns secret values.
+- When both NOWPayments credentials are present, the API dashboard also calls `GET /api/payments/currencies` to verify that the API key is accepted by NOWPayments.
+- A working NOWPayments connection is distinct from a live commercial API checkout.
 
-1. Remove `EARTH_WEATHER_CRYPTO_PLANS` from Render; it is no longer used.
-2. Add `EARTH_WEATHER_API_SERVICES` using the actual API service IDs and prices. Keep all prices server-side.
-3. Deploy the backend and frontend changes.
-4. Confirm Firebase Firestore rules and API authorization enforce the new `earthWeatherServiceEntitlements` records before exposing paid API access. The payment webhook records entitlements; existing API routes must check them to enforce access.
-5. Test invoice creation with a controlled provider/test setup and verify signed webhook handling before accepting live payments.
+## Current production limitation
 
-A successful invoice/webhook does not itself prove that every API route is enforcing entitlements. Connect the entitlement check to the API authentication middleware before public paid access is enabled.
+The payment webhook currently records successful subscriptions and service entitlements in Firestore. It does **not yet issue customer API keys or enforce per-key quotas on paid API routes**. Therefore, the API dashboard must keep customer checkout disabled until those paid-access controls are completed and tested. This is intentional protection against taking customer payment without delivering usable API credentials.
+
+## Dynamic invoice flow already present in the backend
+
+- `POST /api/payments/checkout`: Firebase-authenticated, service IDs + duration + crypto currency; backend calculates USD amount from `EARTH_WEATHER_API_SERVICES` and creates a NOWPayments invoice.
+- `POST /api/payments/nowpayments/ipn`: validates the NOWPayments HMAC-SHA512 signature and order amount/currency; records subscription and entitlements when payment is finished.
+- `GET /api/payments/status/{order_id}`: authenticated owner-only payment status.
+
+Before enabling paid checkout, add and test: server-side API-key generation and protected retrieval, per-key quota/expiry checks on commercial endpoints, duplicate-IPN-safe key activation, and a real provider webhook test. Never commit or paste secrets into chat.

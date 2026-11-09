@@ -48,6 +48,11 @@ def _services() -> dict[str, dict[str, Any]]:
     return result
 
 
+def _paid_api_access_ready() -> bool:
+    """False until paid API-key issuance and per-key quota enforcement are implemented."""
+    return False
+
+
 def _provider_key() -> str:
     value = os.getenv("NOWPAYMENTS_API_KEY", "").strip()
     if not value:
@@ -115,11 +120,45 @@ class CheckoutRequest(BaseModel):
 
 @router.get("/config")
 async def payment_config() -> dict[str, Any]:
+    """Expose safe readiness diagnostics; never return provider secrets."""
+    def configured(name: str) -> bool:
+        return bool(os.getenv(name, "").strip())
+
     services = _services()
+    missing: list[str] = []
+    for variable in ("NOWPAYMENTS_API_KEY", "NOWPAYMENTS_IPN_SECRET", "FIREBASE_SERVICE_ACCOUNT_JSON"):
+        if not configured(variable):
+            missing.append(variable)
+
+    public_url = os.getenv("PUBLIC_BACKEND_URL", "").strip()
+    if not public_url.startswith("https://"):
+        missing.append("PUBLIC_BACKEND_URL (must be a public HTTPS URL)")
+    if not services:
+        missing.append("EARTH_WEATHER_API_SERVICES (valid service IDs and USD/day prices)")
+
+    provider_configured = configured("NOWPAYMENTS_API_KEY") and configured("NOWPAYMENTS_IPN_SECRET")
+    account_json = os.getenv("FIREBASE_SERVICE_ACCOUNT_JSON", "").strip()
+    if account_json:
+        try:
+            account = json.loads(account_json)
+            if not isinstance(account, dict) or not all(account.get(key) for key in ("project_id", "client_email", "private_key")):
+                missing.append("FIREBASE_SERVICE_ACCOUNT_JSON (valid Firebase Admin service-account JSON)")
+        except json.JSONDecodeError:
+            missing.append("FIREBASE_SERVICE_ACCOUNT_JSON (valid Firebase Admin service-account JSON)")
+
+    checkout_configured = not missing
+    paid_api_access_ready = _paid_api_access_ready()
+    launch_blockers = [] if paid_api_access_ready else [
+        "Paid API-key issuance and per-key request-quota enforcement are not yet implemented."
+    ]
     return {
         "provider": "NOWPayments",
-        "enabled": bool(os.getenv("NOWPAYMENTS_API_KEY") and os.getenv("NOWPAYMENTS_IPN_SECRET")
-                        and os.getenv("FIREBASE_SERVICE_ACCOUNT_JSON") and services),
+        "provider_configured": provider_configured,
+        "enabled": checkout_configured and paid_api_access_ready,
+        "checkout_configured": checkout_configured,
+        "paid_api_access_ready": paid_api_access_ready,
+        "missing_configuration": missing,
+        "launch_blockers": launch_blockers,
         "currency": "usd",
         "duration_min_days": 1,
         "duration_max_days": 30,
@@ -138,6 +177,11 @@ async def payment_currencies() -> dict[str, Any]:
 @router.post("/checkout")
 async def create_checkout(payload: CheckoutRequest, authorization: str | None = Header(default=None)) -> dict[str, Any]:
     user = _verified_user(authorization)
+    if not _paid_api_access_ready():
+        raise HTTPException(
+            status_code=503,
+            detail="Paid API checkout is not enabled yet: customer API-key issuance and per-key quota enforcement must be completed first.",
+        )
     catalogue = _services()
     unknown = [service_id for service_id in payload.service_ids if service_id not in catalogue]
     if unknown:
