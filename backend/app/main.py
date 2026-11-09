@@ -1591,11 +1591,12 @@ async def api_v1_daily_forecast(
 
 @app.get("/api/v1/weather-alerts")
 async def api_v1_weather_alerts(
+    response: Response,
     latitude: float = Query(..., ge=-90, le=90),
     longitude: float = Query(..., ge=-180, le=180),
     x_api_key: str | None = Header(default=None, alias="x-api-key"),
 ) -> dict[str, Any]:
-    consume_api_key_quota(x_api_key, "weather-alerts")
+    _charge_api_request(response, x_api_key, "weather-alerts")
     return await alerts(latitude, longitude)
 
 
