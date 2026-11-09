@@ -40,7 +40,7 @@ export type CustomerApiKey = {
   key_prefix: string;
   service_ids: string[];
   quotas_per_day: Record<string, number>;
-  status: "active" | "expired";
+  status: "active" | "expired" | "revoked";
   created_at?: string;
   expires_at: string;
   duration_days: number;
@@ -74,3 +74,6 @@ export const getCryptoPaymentStatus = (orderId: string, firebaseIdToken: string)
   request<PaymentStatus>(`/api/payments/status/${encodeURIComponent(orderId)}`, firebaseIdToken);
 export const getCustomerApiKeys = (firebaseIdToken: string) =>
   request<{ keys: CustomerApiKey[] }>("/api/payments/keys", firebaseIdToken);
+
+export const revokeCustomerApiKey = (orderId: string, firebaseIdToken: string) =>
+  request<{ order_id: string; status: string }>(`/api/payments/keys/${encodeURIComponent(orderId)}`, firebaseIdToken, { method: "DELETE" });
