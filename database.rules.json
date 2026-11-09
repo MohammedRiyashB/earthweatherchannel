@@ -1,10 +1,9 @@
 {
   "rules": {
-    "users": {
-      "$uid": {
-        ".read": "auth != null && auth.uid === $uid",
-        ".write": "auth != null && auth.uid === $uid"
-      }
-    }
+    // No current EARTH WEATHER frontend or backend feature reads or writes
+    // Realtime Database. Keep it closed until a concrete RTDB data path is
+    // introduced with owner checks and schema validation.
+    ".read": false,
+    ".write": false
   }
 }
