@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { auth, firebaseReady, googleProvider } from "./firebase";
 import { onAuthStateChanged, signInWithPopup, signOut, type User } from "firebase/auth";
-import { createCryptoCheckout, getCryptoCheckoutConfig, getCryptoCurrencies, getCryptoPaymentStatus, getCustomerApiKeys, type CryptoCheckoutConfig, type CustomerApiKey } from "./lib/cryptoPayments";
+import { createCryptoCheckout, getCryptoCheckoutConfig, getCryptoCurrencies, getCryptoPaymentStatus, getCustomerApiKeys, revokeCustomerApiKey, type CryptoCheckoutConfig, type CustomerApiKey } from "./lib/cryptoPayments";
 import { FOOTER_GROUPS, resolveSitePage, SITE_PATHS, SitePageView, type SitePageId } from "./sitePages";
 import "./intelligence.css";
 import { WeatherChannelLayout, WeatherChannelPage, type WeatherChannelMode } from "./WeatherChannelReference";
@@ -408,6 +408,19 @@ const [section,setSection]=useState("Weather Report");const page:"home"|SitePage
    }catch(error){
     setPaymentFeedback(error instanceof Error?error.message:"Could not load your API keys.");
    }finally{setApiKeysLoading(false);}
+  };
+  const revokeApiKey=async(key:CustomerApiKey)=>{
+   if(!user)return;
+   const confirmed=window.confirm("Revoke this API key? Applications using it will stop working immediately.");
+   if(!confirmed)return;
+   try{
+    const token=await user.getIdToken();
+    await revokeCustomerApiKey(key.id,token);
+    setPaymentFeedback("API key revoked. Requests using it will now be rejected.");
+    await refreshCustomerApiKeys(user);
+   }catch(error){
+    setPaymentFeedback(error instanceof Error?error.message:"Could not revoke this API key.");
+   }
   };
   const startCryptoCheckout=async()=>{
    if(!user){setCheckoutError("Sign in with Google before checkout.");return;}
@@ -932,6 +945,7 @@ const [section,setSection]=useState("Weather Report");const page:"home"|SitePage
        <div style={{display:"flex",justifyContent:"space-between",gap:12,alignItems:"center",flexWrap:"wrap"}}><strong>{key.status==="active"?"Active API key":"Expired API key"}</strong><span style={{fontSize:12,color:key.status==="active"?"#147a37":"#8a4b08"}}>{key.status.toUpperCase()}</span></div>
        <code style={{display:"block",marginTop:10,padding:12,background:"#f5f6f8",borderRadius:8,overflowWrap:"anywhere",whiteSpace:"pre-wrap"}}>{key.api_key}</code>
        <button type="button" onClick={()=>{void navigator.clipboard?.writeText(key.api_key).then(()=>setPaymentFeedback("API key copied to clipboard."),()=>setPaymentFeedback("Clipboard access is unavailable in this browser."));}} style={{marginTop:9,padding:"9px 13px",border:0,borderRadius:8,background:"#17191d",color:"#fff",fontWeight:700}}>Copy API key</button>
+       {key.status==="active"&&<button type="button" onClick={()=>void revokeApiKey(key)} style={{marginTop:9,marginLeft:8,padding:"9px 13px",border:"1px solid #b42323",borderRadius:8,background:"#fff",color:"#b42323",fontWeight:700}}>Revoke key</button>}
        <p style={{fontSize:12,color:"#68707b",lineHeight:1.55,marginBottom:0}}>Services: {key.service_ids.join(", ")}<br/>Expires: {new Date(key.expires_at).toLocaleString()}<br/>Daily quota: {Object.entries(key.quotas_per_day).map(([service,quota])=>`${service}: ${quota.toLocaleString()}`).join(" · ")}</p>
       </div>)}
       <p style={{fontSize:12,color:"#68707b",marginBottom:0,marginTop:16}}>Use the <code>x-api-key</code> request header with the API endpoints shown in the documentation. Keys expire automatically and daily quotas reset at 00:00 UTC.</p>
