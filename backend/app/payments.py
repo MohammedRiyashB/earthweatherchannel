@@ -80,14 +80,28 @@ def calculate_checkout_amount(services: dict[str, dict[str, Any]], service_ids: 
     return round(subtotal * (0.85 if duration_days >= 28 else 1.0), 2)
 
 
-def _paid_api_access_ready() -> bool:
-    """True only when provider, service catalogue, Firebase and API-key encryption are configured."""
+def _firestore_database_ready() -> bool:
+    """Verify the project's default Firestore database exists and is reachable."""
+    try:
+        _db().collection("_earthWeatherSystem").document("readiness").get()
+        return True
+    except Exception as exc:
+        logger.warning("Cloud Firestore readiness check failed: %s", exc.__class__.__name__)
+        return False
+
+
+def _paid_api_access_ready(firestore_ready: bool | None = None) -> bool:
+    """True only when provider, service catalogue, Firebase, Firestore and key encryption are configured."""
     if not _services() or not os.getenv("EARTH_WEATHER_API_KEY_ENCRYPTION_KEY", "").strip():
         return False
     if not all(os.getenv(name, "").strip() for name in (
         "NOWPAYMENTS_API_KEY", "NOWPAYMENTS_IPN_SECRET",
         "FIREBASE_SERVICE_ACCOUNT_JSON", "PUBLIC_BACKEND_URL",
     )):
+        return False
+    if firestore_ready is None:
+        firestore_ready = _firestore_database_ready()
+    if not firestore_ready:
         return False
     try:
         _fernet()
@@ -276,8 +290,12 @@ async def payment_config() -> dict[str, Any]:
         except json.JSONDecodeError:
             missing.append("FIREBASE_SERVICE_ACCOUNT_JSON (valid Firebase Admin service-account JSON)")
 
+    firestore_ready = _firestore_database_ready() if configured("FIREBASE_SERVICE_ACCOUNT_JSON") else False
+    if not firestore_ready:
+        missing.append("CLOUD_FIRESTORE_DATABASE (create the project's default Cloud Firestore database)")
+
     checkout_configured = not missing
-    paid_api_access_ready = _paid_api_access_ready()
+    paid_api_access_ready = _paid_api_access_ready(firestore_ready=firestore_ready)
     launch_blockers = [] if paid_api_access_ready else [
         "Complete the missing configuration above. Paid API key issuance and quota enforcement are implemented but checkout stays closed until every required secret and the service catalogue validate."
     ]
