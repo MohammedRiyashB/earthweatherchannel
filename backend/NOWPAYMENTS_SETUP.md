@@ -20,13 +20,24 @@ The backend now calls `firebase_admin.firestore.client(app, database_id="earthwe
 
 ## Deploy
 
-The Firebase Hosting deployment workflow also deploys both database rules products:
+The Firebase Hosting deployment workflow deploys the named Firestore rules automatically:
 
 ```bash
-firebase deploy --only firestore,database --project earthweatherchannel --non-interactive
+firebase deploy --only firestore --project earthweatherchannel --non-interactive
 ```
 
-The Firebase project must already contain the named `earthweather` Firestore database and the Realtime Database instance. Security rules do not create databases. Existing data is not deleted by deploying rules.
+Realtime Database rules are kept locked in `database.rules.json`. The first automated attempt to deploy them could not retrieve the existing `earthweatherchannel-default-rtdb` instance details using the GitHub deployment identity. Until that service account is granted the Firebase Realtime Database Admin role (or equivalent instance read/write permissions), publish the following in Firebase Console → Realtime Database → Rules:
+
+```json
+{
+  "rules": {
+    ".read": false,
+    ".write": false
+  }
+}
+```
+
+Then click **Publish**. To enable automatic RTDB deployment later, grant the deployment service account the minimum required Realtime Database rule-management permissions and change the workflow to run `firebase deploy --only database`. The Firebase project must already contain the named `earthweather` Firestore database and the Realtime Database instance. Security rules do not create databases. Existing data is not deleted by deploying rules.
 
 ---
 

@@ -85,4 +85,4 @@ jobs:
       - name: Deploy Firestore and Realtime Database security rules
         run: |
           npm install --global firebase-tools
-          firebase deploy --only firestore,database --project earthweatherchannel --non-interactive
+          firebase deploy --only firestore --project earthweatherchannel --non-interactive
