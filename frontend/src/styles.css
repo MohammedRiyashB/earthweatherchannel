@@ -1042,6 +1042,24 @@
  line-height:1.85;
 }
 .site-page-list li{padding-left:4px;margin:5px 0}
+.site-page-code{
+  display:block;
+  max-width:100%;
+  margin:14px 0 18px;
+  padding:16px;
+  overflow-x:auto;
+  border:1px solid #dfe7ec;
+  border-radius:10px;
+  background:#101820;
+  color:#eaf3f7;
+  font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;
+  font-size:12px;
+  line-height:1.7;
+  white-space:pre;
+  tab-size:2;
+}
+.site-page-code code{font:inherit;color:inherit}
+@media(max-width:620px){.site-page-code{font-size:11px;padding:13px}}
 .site-page-note{
  margin:14px 0;
  padding:14px 16px;

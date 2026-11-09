@@ -17,6 +17,7 @@ type Section = {
   bullets?: string[];
   links?: ExternalLink[];
   note?: string;
+  code?: string;
 };
 type PageData = {
   title: string;
@@ -865,6 +866,30 @@ const PAGES: Record<SitePageId, PageData> = {
         "Keep API secrets on a trusted server. Never embed a private key in browser JavaScript, a public repository or a downloadable mobile application.",
         "Use request limits, backoff and monitoring to avoid sending excessive upstream traffic."
       ]},
+      { heading: "Quick start: make your first request", paragraphs: [
+        "The current preview endpoint accepts a GET request with two required query parameters: latitude (−90 to 90) and longitude (−180 to 180). For example, this request asks for current conditions near Chennai. Change the coordinates to request another location.",
+        "The response contains a current object and a source object. Read the returned units, timestamp and source metadata instead of assuming values are direct local-station observations. The following is a browser-side example for testing the existing public preview endpoint; a third-party browser origin may be restricted by the current CORS allow-list."
+      ], code: `const endpoint = new URL("https://earthweather-api.onrender.com/api/weather");
+endpoint.search = new URLSearchParams({
+  latitude: "13.0827",
+  longitude: "80.2707"
+}).toString();
+
+const response = await fetch(endpoint);
+if (!response.ok) {
+  throw new Error("Weather request failed: HTTP " + response.status);
+}
+
+const result = await response.json();
+console.log("Temperature:", result.current?.temperature_2m);
+console.log("Humidity:", result.current?.relative_humidity_2m);
+console.log("Data source:", result.source?.name);
+console.log("Retrieved at:", result.source?.retrieved_at);` },
+      { heading: "Useful related endpoints", bullets: [
+        "GET /api/forecast?latitude=13.0827&longitude=80.2707&days=7 — current, hourly and daily forecast data; days can be 1–10 and timezone defaults to auto.",
+        "GET /api/air-quality?latitude=13.0827&longitude=80.2707&days=5 — modelled air-quality fields; days can be 1–7.",
+        "All coordinates must be valid decimal latitude and longitude values. These are existing preview backend routes, not yet the separately authenticated commercial API product."
+      ]},
       { heading: "Current backend preview", paragraphs: [
         "The website backend currently exposes a weather endpoint at https://earthweather-api.onrender.com/api/weather?latitude=13.0827&longitude=80.2707. It accepts latitude and longitude and returns a JSON weather response when its upstream data is available.",
         "This endpoint is part of the website's existing backend and is not yet the released, versioned commercial developer API. Do not assume that API-key authentication, published customer quotas, paid access, uptime commitments or a service-level agreement are active."
@@ -1049,6 +1074,7 @@ export function SitePageView({ slug }: { slug: SitePageId }) {
           <section className="site-page-section" key={section.heading}>
             <h2>{section.heading}</h2>
             {section.paragraphs?.map((paragraph, pIndex) => <p key={pIndex}>{paragraph}</p>)}
+            {section.code ? <pre className="site-page-code"><code>{section.code}</code></pre> : null}
             {section.bullets?.length ? (
               <ul className="site-page-list">
                 {section.bullets.map((bullet, bIndex) => <li key={bIndex}>{bullet}</li>)}
