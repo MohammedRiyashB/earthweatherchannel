@@ -15,11 +15,11 @@ from collections import OrderedDict
 from contextlib import asynccontextmanager
 
 import httpx
-from fastapi import FastAPI, HTTPException, Query, Response
+from fastapi import FastAPI, Header, HTTPException, Query, Response
 from fastapi.middleware.cors import CORSMiddleware
 from app.forecast import ForecastUnavailable, fetch_forecast
 from app.runtime_cache import prune_expired_lru
-from app.payments import router as payments_router
+from app.payments import router as payments_router, consume_api_key_quota
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -1525,6 +1525,128 @@ async def satellite_provider_health() -> dict[str, Any]:
         "providers": results,
         "important": "Reachability only: this endpoint does not mean imagery has been ingested, authenticated, processed, or scientifically validated. Provider access, licensing, geographic coverage, product latency and credentials still apply.",
     }
+
+
+
+# Commercial, API-key-protected endpoints. Existing website endpoints remain public.
+def _charge_api_request(response: Response, api_key: str | None, service_id: str) -> None:
+    usage = consume_api_key_quota(api_key, service_id)
+    response.headers["X-RateLimit-Limit"] = str(usage["quota"])
+    response.headers["X-RateLimit-Remaining"] = str(usage["remaining"])
+    response.headers["X-RateLimit-Reset"] = usage["reset_at"]
+
+
+@app.get("/api/v1/current-weather")
+async def api_v1_current_weather(
+    response: Response,
+    latitude: float = Query(..., ge=-90, le=90),
+    longitude: float = Query(..., ge=-180, le=180),
+    x_api_key: str | None = Header(default=None, alias="x-api-key"),
+) -> dict[str, Any]:
+    _charge_api_request(response, x_api_key, "current-weather")
+    return await weather(response, latitude, longitude)
+
+
+@app.get("/api/v1/hourly-forecast")
+async def api_v1_hourly_forecast(
+    response: Response,
+    latitude: float = Query(..., ge=-90, le=90),
+    longitude: float = Query(..., ge=-180, le=180),
+    days: int = Query(7, ge=1, le=10),
+    timezone_name: str = Query("auto", alias="timezone", min_length=1, max_length=64),
+    x_api_key: str | None = Header(default=None, alias="x-api-key"),
+) -> dict[str, Any]:
+    _charge_api_request(response, x_api_key, "hourly-forecast")
+    result = await forecast(response, latitude, longitude, days, timezone_name)
+    return {
+        "location": result.get("location"),
+        "timezone": result.get("timezone"),
+        "current": result.get("current"),
+        "hourly": result.get("hourly"),
+        "source": result.get("source"),
+        "retrieved_at": result.get("retrieved_at", utc_now()),
+    }
+
+
+@app.get("/api/v1/daily-forecast")
+async def api_v1_daily_forecast(
+    response: Response,
+    latitude: float = Query(..., ge=-90, le=90),
+    longitude: float = Query(..., ge=-180, le=180),
+    days: int = Query(7, ge=1, le=10),
+    timezone_name: str = Query("auto", alias="timezone", min_length=1, max_length=64),
+    x_api_key: str | None = Header(default=None, alias="x-api-key"),
+) -> dict[str, Any]:
+    _charge_api_request(response, x_api_key, "daily-forecast")
+    result = await forecast(response, latitude, longitude, days, timezone_name)
+    return {
+        "location": result.get("location"),
+        "timezone": result.get("timezone"),
+        "current": result.get("current"),
+        "daily": result.get("daily"),
+        "source": result.get("source"),
+        "retrieved_at": result.get("retrieved_at", utc_now()),
+    }
+
+
+@app.get("/api/v1/weather-alerts")
+async def api_v1_weather_alerts(
+    latitude: float = Query(..., ge=-90, le=90),
+    longitude: float = Query(..., ge=-180, le=180),
+    x_api_key: str | None = Header(default=None, alias="x-api-key"),
+) -> dict[str, Any]:
+    consume_api_key_quota(x_api_key, "weather-alerts")
+    return await alerts(latitude, longitude)
+
+
+@app.get("/api/v1/rainfall")
+async def api_v1_rainfall(
+    response: Response,
+    latitude: float = Query(..., ge=-90, le=90),
+    longitude: float = Query(..., ge=-180, le=180),
+    days: int = Query(7, ge=1, le=10),
+    timezone_name: str = Query("auto", alias="timezone", min_length=1, max_length=64),
+    x_api_key: str | None = Header(default=None, alias="x-api-key"),
+) -> dict[str, Any]:
+    _charge_api_request(response, x_api_key, "rainfall")
+    result = await forecast(response, latitude, longitude, days, timezone_name)
+    hourly = result.get("hourly") or {}
+    daily = result.get("daily") or {}
+    return {
+        "location": result.get("location"),
+        "timezone": result.get("timezone"),
+        "hourly": {key: hourly.get(key) for key in ("time", "precipitation", "rain", "showers", "snowfall", "precipitation_probability") if key in hourly},
+        "daily": {key: daily.get(key) for key in ("time", "precipitation_sum", "precipitation_probability_max") if key in daily},
+        "source": result.get("source"),
+        "retrieved_at": result.get("retrieved_at", utc_now()),
+    }
+
+
+@app.get("/api/v1/wind-data")
+async def api_v1_wind_data(
+    response: Response,
+    latitude: float = Query(..., ge=-90, le=90),
+    longitude: float = Query(..., ge=-180, le=180),
+    x_api_key: str | None = Header(default=None, alias="x-api-key"),
+) -> dict[str, Any]:
+    _charge_api_request(response, x_api_key, "wind-data")
+    result = await weather(response, latitude, longitude)
+    current = result.get("current") or {}
+    fields = ("time", "temperature_2m", "apparent_temperature", "wind_speed_10m", "wind_direction_10m", "wind_gusts_10m", "weather_code")
+    return {
+        "location": {"latitude": latitude, "longitude": longitude},
+        "current": {key: current.get(key) for key in fields if key in current},
+        "source": result.get("source"),
+    }
+
+
+@app.get("/api/v1/weather-maps")
+async def api_v1_weather_maps(
+    response: Response,
+    x_api_key: str | None = Header(default=None, alias="x-api-key"),
+) -> dict[str, Any]:
+    _charge_api_request(response, x_api_key, "weather-maps")
+    return await radar()
 
 
 # Legacy Android OPPO UI endpoints, bridged to the EARTH WEATHER API.
