@@ -5,9 +5,12 @@ import hashlib
 import hmac
 import json
 import logging
+import math
 import os
 import re
+import secrets
 import uuid
+from cryptography.fernet import Fernet, InvalidToken
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -42,15 +45,142 @@ def _services() -> dict[str, dict[str, Any]]:
             rate = round(float(value.get("price_per_day")), 4)
         except (TypeError, ValueError):
             continue
-        if rate <= 0 or rate > 10000:
+        if not math.isfinite(rate) or rate <= 0 or rate > 10000:
             continue
-        result[key] = {"name": str(value.get("name") or key)[:100], "price_per_day": rate}
+        try:
+            quota = int(value.get("requests_per_day", 1000))
+        except (TypeError, ValueError):
+            quota = 1000
+        if quota < 1 or quota > 1_000_000:
+            quota = 1000
+        result[key] = {"name": str(value.get("name") or key)[:100], "price_per_day": rate, "requests_per_day": quota}
     return result
 
 
+def _fernet() -> Fernet:
+    key = os.getenv("EARTH_WEATHER_API_KEY_ENCRYPTION_KEY", "").strip()
+    if not key:
+        raise HTTPException(status_code=503, detail="API key encryption is not configured")
+    try:
+        return Fernet(key.encode("ascii"))
+    except (ValueError, UnicodeEncodeError) as exc:
+        raise HTTPException(status_code=503, detail="API key encryption configuration is invalid") from exc
+
+
+def calculate_checkout_amount(services: dict[str, dict[str, Any]], service_ids: list[str], duration_days: int) -> float:
+    """Server-side USD pricing: service daily rates, with a 15% discount from 28 days."""
+    if not 1 <= duration_days <= 30:
+        raise ValueError("duration_days must be between 1 and 30")
+    if not service_ids:
+        raise ValueError("at least one API service must be selected")
+    unknown = [service_id for service_id in service_ids if service_id not in services]
+    if unknown:
+        raise ValueError(f"unknown API service IDs: {', '.join(unknown)}")
+    subtotal = sum(float(services[item]["price_per_day"]) for item in service_ids) * duration_days
+    return round(subtotal * (0.85 if duration_days >= 28 else 1.0), 2)
+
+
 def _paid_api_access_ready() -> bool:
-    """False until paid API-key issuance and per-key quota enforcement are implemented."""
-    return False
+    """True only when provider, service catalogue, Firebase and API-key encryption are configured."""
+    if not _services() or not os.getenv("EARTH_WEATHER_API_KEY_ENCRYPTION_KEY", "").strip():
+        return False
+    if not all(os.getenv(name, "").strip() for name in (
+        "NOWPAYMENTS_API_KEY", "NOWPAYMENTS_IPN_SECRET",
+        "FIREBASE_SERVICE_ACCOUNT_JSON", "PUBLIC_BACKEND_URL",
+    )):
+        return False
+    try:
+        _fernet()
+    except HTTPException:
+        return False
+    return True
+
+
+def _issue_or_get_api_key(db: Any, order_id: str, payment: dict[str, Any], now: datetime, expires_at: datetime) -> str:
+    """Create one encrypted, owner-bound API key per paid order; repeated IPNs reuse it."""
+    from google.api_core.exceptions import AlreadyExists
+
+    key_ref = db.collection("earthWeatherApiKeys").document(order_id)
+    existing = key_ref.get()
+    if existing.exists:
+        record = existing.to_dict() or {}
+        try:
+            return _fernet().decrypt(record["api_key_encrypted"].encode()).decode()
+        except (KeyError, InvalidToken, UnicodeDecodeError) as exc:
+            logger.exception("Could not decrypt the existing API key for order %s", order_id)
+            raise HTTPException(status_code=503, detail="Stored API key could not be recovered") from exc
+
+    raw_key = "ew_live_" + secrets.token_urlsafe(32)
+    services = payment.get("services") or []
+    quotas = {item["id"]: int(item.get("requests_per_day", 1000)) for item in services if item.get("id")}
+    record = {
+        "order_id": order_id, "customer_uid": payment["customer_uid"],
+        "key_hash": hashlib.sha256(raw_key.encode()).hexdigest(),
+        "api_key_encrypted": _fernet().encrypt(raw_key.encode()).decode(),
+        "key_prefix": raw_key[:15], "service_ids": payment.get("service_ids", []),
+        "quotas_per_day": quotas, "status": "active", "created_at": now,
+        "expires_at": expires_at, "duration_days": int(payment["duration_days"]),
+        "source_order_id": order_id,
+    }
+    try:
+        key_ref.create(record)
+    except AlreadyExists:
+        saved = key_ref.get().to_dict() or {}
+        try:
+            raw_key = _fernet().decrypt(saved["api_key_encrypted"].encode()).decode()
+        except (KeyError, InvalidToken, UnicodeDecodeError) as exc:
+            raise HTTPException(status_code=503, detail="Stored API key could not be recovered") from exc
+    return raw_key
+
+
+def consume_api_key_quota(raw_key: str | None, service_id: str) -> dict[str, Any]:
+    """Validate a key and atomically charge one request against its UTC daily service quota."""
+    if not raw_key or not raw_key.startswith("ew_live_"):
+        raise HTTPException(status_code=401, detail="A valid x-api-key header is required")
+    db = _db()
+    digest = hashlib.sha256(raw_key.encode()).hexdigest()
+    matches = list(db.collection("earthWeatherApiKeys").where("key_hash", "==", digest).limit(1).stream())
+    if not matches:
+        raise HTTPException(status_code=401, detail="API key is invalid")
+    key_doc = matches[0]
+    record = key_doc.to_dict() or {}
+    if record.get("status") != "active":
+        raise HTTPException(status_code=403, detail="API key is inactive")
+    if service_id not in (record.get("service_ids") or []):
+        raise HTTPException(status_code=403, detail="This API key does not include the requested service")
+    expires_at = record.get("expires_at")
+    if not isinstance(expires_at, datetime):
+        raise HTTPException(status_code=403, detail="API key expiry is invalid")
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    now = datetime.now(timezone.utc)
+    if expires_at <= now:
+        key_doc.reference.update({"status": "expired", "expired_at": now})
+        raise HTTPException(status_code=403, detail="API key has expired")
+    quota = int((record.get("quotas_per_day") or {}).get(service_id, 1000))
+    day = now.strftime("%Y%m%d")
+    usage_ref = db.collection("earthWeatherApiUsage").document(f"{key_doc.id}_{service_id}_{day}")
+    from firebase_admin import firestore
+    transaction = db.transaction()
+
+    @firestore.transactional
+    def _increment(tx: Any) -> int:
+        snapshot = usage_ref.get(transaction=tx)
+        used = int((snapshot.to_dict() or {}).get("count", 0)) if snapshot.exists else 0
+        if used >= quota:
+            raise HTTPException(status_code=429, detail="Daily API request quota exceeded")
+        tx.set(usage_ref, {
+            "key_order_id": key_doc.id, "customer_uid": record["customer_uid"],
+            "service_id": service_id, "utc_day": day, "count": used + 1,
+            "quota": quota, "updated_at": now,
+        }, merge=True)
+        return used + 1
+
+    used = _increment(transaction)
+    return {
+        "used": used, "quota": quota, "remaining": max(0, quota - used),
+        "reset_at": (now.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)).isoformat(),
+    }
 
 
 def _provider_key() -> str:
@@ -126,7 +256,7 @@ async def payment_config() -> dict[str, Any]:
 
     services = _services()
     missing: list[str] = []
-    for variable in ("NOWPAYMENTS_API_KEY", "NOWPAYMENTS_IPN_SECRET", "FIREBASE_SERVICE_ACCOUNT_JSON"):
+    for variable in ("NOWPAYMENTS_API_KEY", "NOWPAYMENTS_IPN_SECRET", "FIREBASE_SERVICE_ACCOUNT_JSON", "EARTH_WEATHER_API_KEY_ENCRYPTION_KEY"):
         if not configured(variable):
             missing.append(variable)
 
@@ -149,7 +279,7 @@ async def payment_config() -> dict[str, Any]:
     checkout_configured = not missing
     paid_api_access_ready = _paid_api_access_ready()
     launch_blockers = [] if paid_api_access_ready else [
-        "Paid API-key issuance and per-key request-quota enforcement are not yet implemented."
+        "Complete the missing configuration above. Paid API key issuance and quota enforcement are implemented but checkout stays closed until every required secret and the service catalogue validate."
     ]
     return {
         "provider": "NOWPayments",
@@ -162,7 +292,7 @@ async def payment_config() -> dict[str, Any]:
         "currency": "usd",
         "duration_min_days": 1,
         "duration_max_days": 30,
-        "services": [{"id": key, "name": value["name"], "price_per_day": value["price_per_day"]}
+        "services": [{"id": key, "name": value["name"], "price_per_day": value["price_per_day"], "requests_per_day": value["requests_per_day"]}
                      for key, value in services.items()],
     }
 
@@ -186,8 +316,11 @@ async def create_checkout(payload: CheckoutRequest, authorization: str | None = 
     unknown = [service_id for service_id in payload.service_ids if service_id not in catalogue]
     if unknown:
         raise HTTPException(status_code=422, detail={"message": "Unknown API service", "service_ids": unknown})
+    try:
+        total = calculate_checkout_amount(catalogue, payload.service_ids, payload.duration_days)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     selected = [{"id": service_id, **catalogue[service_id]} for service_id in payload.service_ids]
-    total = round(sum(item["price_per_day"] for item in selected) * payload.duration_days, 2)
     if total <= 0:
         raise HTTPException(status_code=422, detail="Calculated checkout amount must be positive")
     pay_currency = payload.pay_currency.lower()
@@ -206,8 +339,8 @@ async def create_checkout(payload: CheckoutRequest, authorization: str | None = 
         "order_id": order_id,
         "order_description": f"EARTH WEATHER API: {service_names} ({payload.duration_days} days)"[:255],
         "ipn_callback_url": f"{public_url}/api/payments/nowpayments/ipn",
-        "success_url": f"{frontend_origin}/api/payment/success?order_id={order_id}",
-        "cancel_url": f"{frontend_origin}/api/payment/cancel?order_id={order_id}",
+        "success_url": f"{frontend_origin}/api/dashboard?payment=success&order_id={order_id}",
+        "cancel_url": f"{frontend_origin}/api/dashboard?payment=cancelled&order_id={order_id}",
     }
     async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
         response = await client.post(
@@ -291,22 +424,66 @@ async def nowpayments_ipn(request: Request, x_nowpayments_sig: str | None = Head
             raise HTTPException(status_code=503, detail="Payment entitlement data is incomplete")
         expiry = now + timedelta(days=int(payment["duration_days"]))
         subscription_id = f"crypto_{order_id}"
+        _issue_or_get_api_key(db, order_id, payment, now, expiry)
         update.update({"status": "finished", "subscription_id": subscription_id, "paid_at": now})
         db.collection("earthWeatherSubscriptions").document(subscription_id).set({
             "subscription_id": subscription_id, "customer_uid": payment["customer_uid"],
             "service_ids": service_ids, "services": payment.get("services", []),
             "duration_days": int(payment["duration_days"]), "status": "active",
             "started_at": now, "expires_at": expiry, "source_order_id": order_id,
-            "payment_provider": "nowpayments",
-        })
+            "payment_provider": "nowpayments", "api_key_order_id": order_id,
+        }, merge=True)
         for service_id in service_ids:
             db.collection("earthWeatherServiceEntitlements").document(f"{payment['customer_uid']}_{service_id}").set({
                 "customer_uid": payment["customer_uid"], "service_id": service_id,
                 "status": "active", "expires_at": expiry, "source_order_id": order_id,
-                "updated_at": now,
+                "api_key_order_id": order_id, "updated_at": now,
             }, merge=True)
     ref.update(update)
     return {"received": "true"}
+
+
+@router.get("/keys")
+async def customer_api_keys(authorization: str | None = Header(default=None)) -> dict[str, Any]:
+    user = _verified_user(authorization)
+    items = _db().collection("earthWeatherApiKeys").where("customer_uid", "==", user["uid"]).stream()
+    keys: list[dict[str, Any]] = []
+    for item in items:
+        record = item.to_dict() or {}
+        expires_at = record.get("expires_at")
+        if not isinstance(expires_at, datetime):
+            continue
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=timezone.utc)
+        status = "revoked" if record.get("status") == "revoked" else ("active" if record.get("status") == "active" and expires_at > datetime.now(timezone.utc) else "expired")
+        try:
+            raw_key = _fernet().decrypt(record["api_key_encrypted"].encode()).decode()
+        except (KeyError, InvalidToken, UnicodeDecodeError):
+            logger.exception("API key decryption failed for %s", item.id)
+            continue
+        keys.append({
+            "id": item.id, "api_key": raw_key, "key_prefix": record.get("key_prefix"),
+            "service_ids": record.get("service_ids", []), "quotas_per_day": record.get("quotas_per_day", {}),
+            "status": status, "created_at": record.get("created_at").isoformat() if record.get("created_at") else None,
+            "expires_at": expires_at.isoformat(), "duration_days": record.get("duration_days"),
+        })
+    keys.sort(key=lambda item: item.get("created_at") or "", reverse=True)
+    return {"keys": keys}
+
+
+@router.delete("/keys/{order_id}")
+async def revoke_customer_api_key(order_id: str, authorization: str | None = Header(default=None)) -> dict[str, str]:
+    user = _verified_user(authorization)
+    ref = _db().collection("earthWeatherApiKeys").document(order_id)
+    snapshot = ref.get()
+    if not snapshot.exists:
+        raise HTTPException(status_code=404, detail="API key not found")
+    record = snapshot.to_dict() or {}
+    if record.get("customer_uid") != user["uid"]:
+        raise HTTPException(status_code=404, detail="API key not found")
+    if record.get("status") != "revoked":
+        ref.update({"status": "revoked", "revoked_at": datetime.now(timezone.utc)})
+    return {"order_id": order_id, "status": "revoked"}
 
 
 @router.get("/status/{order_id}")

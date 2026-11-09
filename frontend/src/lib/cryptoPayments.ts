@@ -4,6 +4,7 @@ export type CryptoService = {
   id: string;
   name: string;
   price_per_day: number;
+  requests_per_day: number;
 };
 export type CryptoCheckoutConfig = {
   provider: "NOWPayments";
@@ -33,6 +34,26 @@ export type DynamicCheckoutResult = {
   service_ids: string[];
   status: string;
 };
+export type CustomerApiKey = {
+  id: string;
+  api_key: string;
+  key_prefix: string;
+  service_ids: string[];
+  quotas_per_day: Record<string, number>;
+  status: "active" | "expired" | "revoked";
+  created_at?: string;
+  expires_at: string;
+  duration_days: number;
+};
+export type PaymentStatus = {
+  order_id: string;
+  status: string;
+  service_ids: string[];
+  duration_days: number;
+  amount: number;
+  price_currency: string;
+  updated_at?: string;
+};
 
 async function request<T>(path: string, token?: string, init: RequestInit = {}): Promise<T> {
   const response = await fetch(`${API_BASE}${path}`, {
@@ -40,7 +61,7 @@ async function request<T>(path: string, token?: string, init: RequestInit = {}):
     headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(init.headers || {}) },
   });
   const body = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(body.detail?.message || body.detail || "Crypto checkout request failed");
+  if (!response.ok) throw new Error(typeof body.detail === "string" ? body.detail : body.detail?.message || "Crypto checkout request failed");
   return body as T;
 }
 export const getCryptoCheckoutConfig = () => request<CryptoCheckoutConfig>("/api/payments/config");
@@ -50,6 +71,9 @@ export const createCryptoCheckout = (input: DynamicCheckoutInput, firebaseIdToke
     method: "POST", body: JSON.stringify(input),
   });
 export const getCryptoPaymentStatus = (orderId: string, firebaseIdToken: string) =>
-  request<{ order_id: string; status: string; service_ids: string[]; duration_days: number; amount: number; price_currency: string; updated_at?: string }>(
-    `/api/payments/status/${encodeURIComponent(orderId)}`, firebaseIdToken,
-  );
+  request<PaymentStatus>(`/api/payments/status/${encodeURIComponent(orderId)}`, firebaseIdToken);
+export const getCustomerApiKeys = (firebaseIdToken: string) =>
+  request<{ keys: CustomerApiKey[] }>("/api/payments/keys", firebaseIdToken);
+
+export const revokeCustomerApiKey = (orderId: string, firebaseIdToken: string) =>
+  request<{ order_id: string; status: string }>(`/api/payments/keys/${encodeURIComponent(orderId)}`, firebaseIdToken, { method: "DELETE" });
