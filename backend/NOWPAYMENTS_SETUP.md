@@ -1,3 +1,35 @@
+# Firebase database configuration and security
+
+The Firebase project has a **named Cloud Firestore database** with database ID `earthweather`. The FastAPI backend must connect to that exact database, not silently fall back to `(default)`.
+
+Set this Render environment variable on `earthweather-api`:
+
+```text
+CLOUD_FIRESTORE_DATABASE=earthweather
+```
+
+The backend now calls `firebase_admin.firestore.client(app, database_id="earthweather")`. Its readiness probe checks the same database. The Firebase CLI configuration deploys `firestore.rules` to the named `earthweather` database, and deploys `database.rules.json` to the project's Realtime Database.
+
+## Security model
+
+- The browser uses Firebase Authentication for sign-in and calls the FastAPI backend with Firebase ID tokens.
+- The browser currently does not access Firestore or Realtime Database directly.
+- Payment orders, subscriptions, API keys, entitlements and quota counters are written by FastAPI using the Firebase Admin SDK.
+- Firestore client rules and Realtime Database client rules therefore default-deny all browser reads/writes. The Admin SDK uses privileged service-account credentials and bypasses client Security Rules; keep the service-account JSON only in Render and never in frontend code or the repository.
+- Do not add broad `request.auth != null` access. If a future feature needs direct client database access, add a specific owner-scoped rule for its documented data path and test it with the Firebase Emulator Suite first.
+
+## Deploy
+
+The Firebase Hosting deployment workflow also deploys both database rules products:
+
+```bash
+firebase deploy --only firestore,database --project earthweatherchannel --non-interactive
+```
+
+The Firebase project must already contain the named `earthweather` Firestore database and the Realtime Database instance. Security rules do not create databases. Existing data is not deleted by deploying rules.
+
+---
+
 # NOWPayments dynamic checkout — EARTH WEATHER
 
 The backend contains a dynamic invoice endpoint: the server calculates the invoice total from its own service catalogue, not from an amount sent by the browser. However, the API sales flow must not be opened to customers until API credentials are issued and request quotas are enforced on the paid API routes.
