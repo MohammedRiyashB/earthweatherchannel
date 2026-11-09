@@ -1,3 +1,9 @@
+/* Restore the exact immutable Weather.com reference CSS bundles captured for EARTH WEATHER.
+   These files supply the original layout, responsive styles and weather sprite references. */
+@import url("https://weather.com/_next/static/immutable/chunks/0j_ujswapoou6.css");
+@import url("https://weather.com/_next/static/immutable/chunks/1pgkiin1bsra2.css");
+@import url("https://weather.com/_next/static/immutable/chunks/2m3bu3_zwznmt.css");
+
 /* Original captured Weather.com CSS and assets are loaded from the extracted public files. */
 @import url("https://weather.com/_next/static/immutable/chunks/0j_ujswapoou6.css");
 @import url("https://weather.com/_next/static/immutable/chunks/1pgkiin1bsra2.css");
