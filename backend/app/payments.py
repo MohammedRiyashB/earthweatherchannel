@@ -48,12 +48,18 @@ def _services() -> dict[str, dict[str, Any]]:
         if not math.isfinite(rate) or rate <= 0 or rate > 10000:
             continue
         try:
+            base_rate = round(float(value.get("base_price_per_day", rate)), 6)
+        except (TypeError, ValueError):
+            base_rate = rate
+        if not math.isfinite(base_rate) or base_rate <= 0 or base_rate > 10000:
+            continue
+        try:
             quota = int(value.get("requests_per_day", 1000))
         except (TypeError, ValueError):
             quota = 1000
         if quota < 1 or quota > 1_000_000:
             quota = 1000
-        result[key] = {"name": str(value.get("name") or key)[:100], "price_per_day": rate, "requests_per_day": quota}
+        result[key] = {"name": str(value.get("name") or key)[:100], "base_price_per_day": base_rate, "price_per_day": rate, "requests_per_day": quota}
     return result
 
 
@@ -76,7 +82,10 @@ def calculate_checkout_amount(services: dict[str, dict[str, Any]], service_ids: 
     unknown = [service_id for service_id in service_ids if service_id not in services]
     if unknown:
         raise ValueError(f"unknown API service IDs: {', '.join(unknown)}")
-    subtotal = sum(float(services[item]["price_per_day"]) for item in service_ids) * duration_days
+    first = services[service_ids[0]]
+    subtotal_per_day = float(first.get("base_price_per_day", first["price_per_day"]))
+    subtotal_per_day += sum(float(services[item]["price_per_day"]) for item in service_ids[1:])
+    subtotal = subtotal_per_day * duration_days
     return round(subtotal * (0.85 if duration_days >= 28 else 1.0), 2)
 
 
@@ -310,7 +319,7 @@ async def payment_config() -> dict[str, Any]:
         "currency": "usd",
         "duration_min_days": 1,
         "duration_max_days": 30,
-        "services": [{"id": key, "name": value["name"], "price_per_day": value["price_per_day"], "requests_per_day": value["requests_per_day"]}
+        "services": [{"id": key, "name": value["name"], "base_price_per_day": value["base_price_per_day"], "price_per_day": value["price_per_day"], "requests_per_day": value["requests_per_day"]}
                      for key, value in services.items()],
     }
 

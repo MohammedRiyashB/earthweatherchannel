@@ -14,16 +14,16 @@ Set these on the existing `earthweather-api` service:
 - `EARTH_WEATHER_API_KEY_ENCRYPTION_KEY`: a stable Fernet key used to encrypt customer API keys at rest. Generate once, store only in Render, and do not rotate it unless all stored keys are re-encrypted.
 - `EARTH_WEATHER_API_SERVICES`: JSON object of the actual purchasable service IDs, approved USD daily prices, and optional per-service daily quotas. Each service defaults to 1,000 requests/day if `requests_per_day` is omitted.
 
-Example schema only; the IDs and values below are placeholders, not approved production pricing:
+The current EARTH WEATHER pricing rule is $2.99 for the first selected API service per 7 days, plus $0.99 for each additional selected service per 7 days; 28–30 day purchases receive a 15% discount. Configure the same base and add-on rates per service below.
 
 ```json
 {
-  "current-weather": {"name": "Current Weather API", "price_per_day": 0.50},
-  "hourly-forecast": {"name": "Hourly Forecast API", "price_per_day": 0.30}
+  "current-weather": {"name": "Current Weather API", "base_price_per_day": 0.427143, "price_per_day": 0.141429, "requests_per_day": 1000},
+  "hourly-forecast": {"name": "Hourly Forecast API", "base_price_per_day": 0.427143, "price_per_day": 0.141429, "requests_per_day": 1000}
 }
 ```
 
-Do not use those sample prices as a live price list. The IDs must correspond to real commercial API products and the prices must be approved by the service operator.
+For each catalogue entry, `base_price_per_day` is used when that service is selected first; `price_per_day` is used for each additional service. These daily rates correspond to the existing $2.99 + $0.99 per 7-day pricing rule. The IDs must match the frontend catalogue exactly.
 
 The old static variable `EARTH_WEATHER_CRYPTO_PLANS` is no longer read by the dynamic checkout code.
 
