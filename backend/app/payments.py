@@ -27,6 +27,11 @@ _firestore = None
 _firebase_auth = None
 
 
+def _firestore_database_id() -> str:
+    """Return the explicitly configured Firestore database ID."""
+    return os.getenv("CLOUD_FIRESTORE_DATABASE", "").strip() or "(default)"
+
+
 def _services() -> dict[str, dict[str, Any]]:
     """Server-owned catalogue: {id: {name, price_per_day}}; amounts are USD."""
     try:
@@ -105,7 +110,7 @@ def _paid_api_access_ready(firestore_ready: bool | None = None) -> bool:
         return False
     if not all(os.getenv(name, "").strip() for name in (
         "NOWPAYMENTS_API_KEY", "NOWPAYMENTS_IPN_SECRET",
-        "FIREBASE_SERVICE_ACCOUNT_JSON", "PUBLIC_BACKEND_URL",
+        "FIREBASE_SERVICE_ACCOUNT_JSON", "PUBLIC_BACKEND_URL", "CLOUD_FIRESTORE_DATABASE",
     )):
         return False
     if firestore_ready is None:
@@ -228,7 +233,7 @@ def _db():
         else:
             app = firebase_admin.get_app()
         _firebase_auth = auth
-        _firestore = firestore.client(app)
+        _firestore = firestore.client(app, database_id=_firestore_database_id())
         return _firestore
     except Exception as exc:
         logger.exception("Firebase Admin initialization failed")
@@ -279,7 +284,7 @@ async def payment_config() -> dict[str, Any]:
 
     services = _services()
     missing: list[str] = []
-    for variable in ("NOWPAYMENTS_API_KEY", "NOWPAYMENTS_IPN_SECRET", "FIREBASE_SERVICE_ACCOUNT_JSON", "EARTH_WEATHER_API_KEY_ENCRYPTION_KEY"):
+    for variable in ("NOWPAYMENTS_API_KEY", "NOWPAYMENTS_IPN_SECRET", "FIREBASE_SERVICE_ACCOUNT_JSON", "EARTH_WEATHER_API_KEY_ENCRYPTION_KEY", "CLOUD_FIRESTORE_DATABASE"):
         if not configured(variable):
             missing.append(variable)
 
@@ -301,7 +306,7 @@ async def payment_config() -> dict[str, Any]:
 
     firestore_ready = _firestore_database_ready() if configured("FIREBASE_SERVICE_ACCOUNT_JSON") else False
     if not firestore_ready:
-        missing.append("CLOUD_FIRESTORE_DATABASE (create the project's default Cloud Firestore database)")
+        missing.append("CLOUD_FIRESTORE_DATABASE (set to the existing Firestore database ID: earthweather, and verify backend access)")
 
     checkout_configured = not missing
     paid_api_access_ready = _paid_api_access_ready(firestore_ready=firestore_ready)
