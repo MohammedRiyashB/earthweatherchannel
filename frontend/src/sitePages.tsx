@@ -873,11 +873,11 @@ const PAGES: Record<SitePageId, PageData> = {
 endpoint.search = new URLSearchParams({
   latitude: "13.0827",
   longitude: "80.2707"
-});
+}).toString();
 
 const response = await fetch(endpoint);
 if (!response.ok) {
-  throw new Error(`Weather request failed: HTTP ${response.status}`);
+  throw new Error("Weather request failed: HTTP " + response.status);
 }
 
 const result = await response.json();
