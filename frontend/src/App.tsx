@@ -358,6 +358,39 @@ const [section,setSection]=useState("Weather Report");const page:"home"|SitePage
  const [user,setUser]=useState<User|null>(null);const [notice,setNotice]=useState("");
  const [apiDays,setApiDays]=useState(7);
  const [apiServices,setApiServices]=useState<string[]>(["Current Weather","7-Day Forecast"]);
+ const [apiCurrency,setApiCurrency]=useState("USD");
+ const [apiCountry,setApiCountry]=useState("US");
+ const [apiFxRate,setApiFxRate]=useState(1);
+ const [apiCurrencyLoading,setApiCurrencyLoading]=useState(true);
+ useEffect(()=>{
+  let active=true;
+  const loadMarket=async()=>{
+   try{
+    const geo=await fetch("https://ipapi.co/json/");
+    if(geo.ok){
+     const g=await geo.json();
+     const country=String(g.country_code||"US").toUpperCase();
+     const currency=String(g.currency||"USD").toUpperCase();
+     if(active){setApiCountry(country);setApiCurrency(currency);}
+     const fx=await fetch("https://open.er-api.com/v6/latest/USD");
+     if(fx.ok){const rates=await fx.json();const rate=Number(rates?.rates?.[currency]);if(active&&Number.isFinite(rate)&&rate>0)setApiFxRate(rate);}
+    }
+   }catch{/* Keep the safe USD fallback if geo or FX services are unavailable. */}
+   finally{if(active)setApiCurrencyLoading(false);}
+  };
+  void loadMarket();
+  return()=>{active=false;};
+ },[]);
+ const apiUsdPrice=Math.max(0.99,(2.99+Math.max(0,apiServices.length-1)*0.99)*(apiDays/7)*(apiDays>=28?0.85:1));
+ const apiMarketFactor=apiCountry==="IN"?0.35:1;
+ const apiLocalPrice=apiUsdPrice*apiFxRate*apiMarketFactor;
+ const apiPriceLabel=useMemo(()=>{
+  try{
+   const locale=apiCurrency==="INR"?"en-IN":apiCurrency==="SAR"?"ar-SA":apiCurrency==="AUD"?"en-AU":apiCurrency==="EUR"?"en-IE":apiCurrency==="GBP"?"en-GB":apiCurrency==="JPY"?"ja-JP":"en";
+   return new Intl.NumberFormat(locale,{style:"currency",currency:apiCurrency,maximumFractionDigits:["JPY","KRW"].includes(apiCurrency)?0:2}).format(apiLocalPrice);
+  }catch{return apiLocalPrice.toFixed(2)+" "+apiCurrency;}
+ },[apiCurrency,apiLocalPrice]);
+
  const apiServiceOptions=[
   {name:"Current Weather",detail:"Live conditions and temperature"},
   {name:"Hourly Forecast",detail:"Hour-by-hour weather outlook"},
@@ -747,15 +780,16 @@ const [section,setSection]=useState("Weather Report");const page:"home"|SitePage
        <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",gap:10}}><span style={{color:"#68707b"}}>API access period</span><strong style={{fontSize:26}}>{apiDays} days</strong></div>
        <input aria-label="API access duration in days" type="range" min="1" max="30" step="1" value={apiDays} onChange={event=>setApiDays(Number(event.target.value))} style={{width:"100%",margin:"20px 0 8px",accentColor:"#b42323"}}/>
        <div style={{display:"flex",justifyContent:"space-between",fontSize:12,color:"#68707b"}}><span>1 day</span><span>30 days maximum</span></div>
-       <div style={{marginTop:18,padding:16,borderRadius:12,background:"#f8f8f9"}}><strong style={{color:"#18794e"}}>3-day free trial</strong><p style={{margin:"5px 0 0",fontSize:13,color:"#68707b"}}>One trial per account. Trial activation will be available after secure API provisioning is connected.</p></div>
+       <div style={{marginTop:18,padding:14,borderRadius:12,background:"#f8f8f9",fontSize:13,color:"#68707b"}}>Paid access only. No free trial.</div>
       </section>
       <section style={{padding:22,border:"1px solid #e1e4e8",borderRadius:18,background:"#fff"}}>
        <h2 style={{marginTop:0}}>3. Plan summary</h2>
        <div style={{display:"flex",justifyContent:"space-between",padding:"8px 0",borderBottom:"1px solid #eef0f2"}}><span style={{color:"#68707b"}}>Selected services</span><strong>{apiServices.length}</strong></div>
        <div style={{display:"flex",justifyContent:"space-between",padding:"8px 0",borderBottom:"1px solid #eef0f2"}}><span style={{color:"#68707b"}}>Duration</span><strong>{apiDays} days</strong></div>
-       <div style={{display:"flex",justifyContent:"space-between",padding:"12px 0 4px",gap:12}}><strong>Price</strong><strong>To be announced</strong></div>
-       <p style={{fontSize:13,color:"#68707b",lineHeight:1.5}}>Pricing and checkout will be enabled after service rates and your payment provider are configured. No payment will be taken on this preview.</p>
-       <button type="button" disabled style={{width:"100%",padding:14,border:0,borderRadius:10,background:"#d8dadd",color:"#737982",fontWeight:750,cursor:"not-allowed"}}>Payment setup pending</button>
+       <div style={{display:"flex",justifyContent:"space-between",padding:"12px 0 4px",gap:12}}><strong>Estimated price</strong><strong style={{fontSize:22}}>{apiCurrencyLoading?"Detecting currency…":apiPriceLabel}</strong></div>
+       <p style={{fontSize:12,color:"#68707b",lineHeight:1.5}}>Currency detected from your location: {apiCountry} · {apiCurrency}. India-local pricing adjustment is applied where applicable. Prices are estimates until the payment provider is connected; final charge and supported currency will be confirmed at checkout.</p>
+       <p style={{fontSize:12,color:"#68707b",lineHeight:1.5}}>Pricing basis: {apiDays} days and {apiServices.length} selected service(s). API request quotas and backend usage controls must be activated before selling access.</p>
+       <button type="button" disabled style={{width:"100%",padding:14,border:0,borderRadius:10,background:"#d8dadd",color:"#737982",fontWeight:750,cursor:"not-allowed"}}>Payment provider setup pending</button>
       </section>
      </div>
     </div>
