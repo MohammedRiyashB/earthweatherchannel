@@ -455,7 +455,7 @@ async def customer_api_keys(authorization: str | None = Header(default=None)) ->
             continue
         if expires_at.tzinfo is None:
             expires_at = expires_at.replace(tzinfo=timezone.utc)
-        status = "active" if record.get("status") == "active" and expires_at > datetime.now(timezone.utc) else "expired"
+        status = "revoked" if record.get("status") == "revoked" else ("active" if record.get("status") == "active" and expires_at > datetime.now(timezone.utc) else "expired")
         try:
             raw_key = _fernet().decrypt(record["api_key_encrypted"].encode()).decode()
         except (KeyError, InvalidToken, UnicodeDecodeError):
