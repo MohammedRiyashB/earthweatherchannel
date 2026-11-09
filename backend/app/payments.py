@@ -475,6 +475,67 @@ async def nowpayments_ipn(request: Request, x_nowpayments_sig: str | None = Head
     return {"received": "true"}
 
 
+
+
+@router.post("/payment")
+async def create_embedded_payment(payload: CheckoutRequest, authorization: str | None = Header(default=None)) -> dict[str, Any]:
+    """Create a direct crypto payment so the customer can pay inside our own checkout UI."""
+    user = _verified_user(authorization)
+    if not _paid_api_access_ready():
+        raise HTTPException(status_code=503, detail="Paid API checkout is not ready")
+    catalogue = _services()
+    unknown = [service_id for service_id in payload.service_ids if service_id not in catalogue]
+    if unknown:
+        raise HTTPException(status_code=422, detail={"message": "Unknown API service", "service_ids": unknown})
+    total = calculate_checkout_amount(catalogue, payload.service_ids, payload.duration_days)
+    selected = [{"id": service_id, **catalogue[service_id]} for service_id in payload.service_ids]
+    pay_currency = payload.pay_currency.lower()
+    order_id = f"ew_{uuid.uuid4().hex}"
+    public_url = os.getenv("PUBLIC_BACKEND_URL", "").rstrip("/")
+    if not public_url.startswith("https://"):
+        raise HTTPException(status_code=503, detail="Public HTTPS backend URL is not configured")
+    service_names = ", ".join(item["name"] for item in selected)
+    request_body = {
+        "price_amount": total, "price_currency": "usd", "pay_currency": pay_currency,
+        "ipn_callback_url": f"{public_url}/api/payments/nowpayments/ipn",
+        "order_id": order_id,
+        "order_description": f"EARTH WEATHER API: {service_names} ({payload.duration_days} days)"[:255],
+    }
+    async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
+        response = await client.post(
+            f"{NOWPAYMENTS_BASE}/payment",
+            headers={"x-api-key": _provider_key(), "Content-Type": "application/json"},
+            json=request_body,
+        )
+    if response.is_error:
+        logger.warning("NOWPayments direct payment creation failed: %s", response.status_code)
+        raise HTTPException(status_code=502, detail="Could not create crypto payment")
+    result = response.json()
+    payment_id = result.get("payment_id")
+    pay_address = result.get("pay_address")
+    pay_amount = result.get("pay_amount")
+    actual_currency = str(result.get("pay_currency") or pay_currency).lower()
+    if not payment_id or not pay_address or not pay_amount:
+        raise HTTPException(status_code=502, detail="NOWPayments returned incomplete payment details")
+    _db().collection("earthWeatherCryptoPayments").document(order_id).set({
+        "order_id": order_id, "invoice_id": None, "provider_payment_id": str(payment_id),
+        "customer_uid": user["uid"], "customer_email": user.get("email"),
+        "service_ids": payload.service_ids, "services": selected,
+        "duration_days": payload.duration_days, "price_amount": total,
+        "price_currency": "usd", "pay_currency": actual_currency,
+        "pay_amount": str(pay_amount), "pay_address": str(pay_address),
+        "pay_network": result.get("network"), "payment_id": str(payment_id),
+        "status": str(result.get("payment_status") or "waiting").lower(),
+        "created_at": datetime.now(timezone.utc), "provider": "nowpayments",
+    })
+    return {
+        "order_id": order_id, "payment_id": str(payment_id),
+        "pay_address": str(pay_address), "pay_amount": str(pay_amount),
+        "pay_currency": actual_currency, "network": result.get("network"),
+        "price_amount": total, "price_currency": "usd",
+        "payment_status": str(result.get("payment_status") or "waiting").lower(),
+    }
+
 @router.get("/keys")
 async def customer_api_keys(authorization: str | None = Header(default=None)) -> dict[str, Any]:
     user = _verified_user(authorization)
