@@ -5,6 +5,7 @@ import hashlib
 import hmac
 import json
 import logging
+import math
 import os
 import re
 import secrets
@@ -44,7 +45,7 @@ def _services() -> dict[str, dict[str, Any]]:
             rate = round(float(value.get("price_per_day")), 4)
         except (TypeError, ValueError):
             continue
-        if rate <= 0 or rate > 10000:
+        if not math.isfinite(rate) or rate <= 0 or rate > 10000:
             continue
         try:
             quota = int(value.get("requests_per_day", 1000))
