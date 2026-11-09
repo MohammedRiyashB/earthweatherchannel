@@ -23,6 +23,17 @@ jobs:
         with:
           node-version: 22
 
+      - name: Show the service account that needs Firebase Rules permissions
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_EARTHWEATHERCHANNEL }}
+        run: |
+          python - <<'PY'
+          import json, os
+          account = json.loads(os.environ["FIREBASE_SERVICE_ACCOUNT"])
+          print("Grant these project IAM roles to:", account.get("client_email", "(email missing)"))
+          print("Required: roles/firebaserules.admin and roles/firebasedatabase.admin")
+          PY
+
       - name: Deploy the named Firestore and Realtime Database rules
         env:
           CLOUDSDK_CORE_PROJECT: earthweatherchannel
