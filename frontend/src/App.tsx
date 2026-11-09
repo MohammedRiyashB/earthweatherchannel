@@ -354,7 +354,7 @@ export default function App(){
  const [locationSelectionPending,setLocationSelectionPending]=useState("");
  const [locationSearchError,setLocationSearchError]=useState("");
  const locationSearchVersion=useRef(0);
-const [section,setSection]=useState("Weather Report");const page:"home"|SitePageId=resolveSitePage(window.location.pathname)??"home";const [isSearchLocation,setIsSearchLocation]=useState<boolean>(()=>readCache<Place|null>("local",null)?.source==="search");
+const [section,setSection]=useState("Weather Report");const page:"home"|SitePageId=resolveSitePage(window.location.pathname)??"home";const isApiDashboard=window.location.pathname.replace(/\/+$/, "").toLowerCase()==="/api/dashboard";const [isSearchLocation,setIsSearchLocation]=useState<boolean>(()=>readCache<Place|null>("local",null)?.source==="search");
  const [user,setUser]=useState<User|null>(null);const [notice,setNotice]=useState("");
  const [notificationsEnabled,setNotificationsEnabled]=useState(()=>{
   try{return typeof window!=="undefined"&&"Notification" in window&&Notification.permission==="granted"&&localStorage.getItem("earth-weather-notifications")==="on";}catch{return false;}
@@ -703,7 +703,25 @@ const [section,setSection]=useState("Weather Report");const page:"home"|SitePage
  const stateTab=visitorLocation?.state||"State";
  const localTab=visitorLocation?.name?(visitorLocation?.district?`${visitorLocation.name} · ${visitorLocation.district}`:visitorLocation.name):(visitorLocation?.district||"Local");
  const newsTabs=[{key:"World",label:"World"},{key:"Country",label:countryTab},{key:"State",label:stateTab},{key:"Local",label:localTab}];
- return <div className="weathercom-site earth-weather-site">
+ return isApiDashboard ? <main style={{minHeight:"100vh",padding:"clamp(24px,6vw,72px)",background:"#f7f8fa",color:"#17191d",fontFamily:"inherit"}}>
+  <div style={{maxWidth:960,margin:"0 auto"}}>
+   <a href="/" style={{color:"inherit",textDecoration:"none",fontWeight:800,letterSpacing:".02em"}}>EARTH WEATHER</a>
+   <p style={{marginTop:56,fontSize:12,fontWeight:800,letterSpacing:".16em",color:"#b42323"}}>DEVELOPER PLATFORM</p>
+   <h1 style={{fontSize:"clamp(34px,6vw,58px)",lineHeight:1.05,margin:"12px 0"}}>EARTH WEATHER API</h1>
+   <p style={{fontSize:18,color:"#626873",maxWidth:620,lineHeight:1.6}}>Build with weather data from EARTH WEATHER. Sign in to access your developer workspace.</p>
+   {!user ? <section style={{marginTop:32,padding:28,border:"1px solid #e1e4e8",borderRadius:18,background:"#fff",maxWidth:520}}>
+    <h2 style={{marginTop:0}}>Sign in to continue</h2><p style={{color:"#626873"}}>Use your Google account to access API products, credentials and documentation.</p>
+    <button type="button" onClick={()=>void signIn()} disabled={!firebaseReady} style={{padding:"13px 20px",border:0,borderRadius:10,background:"#17191d",color:"#fff",fontWeight:700,cursor:"pointer"}}>Continue with Google</button>
+    {!firebaseReady&&<p style={{color:"#b42323",fontSize:13}}>Google sign-in is not configured for this deployment.</p>}{notice&&<p role="status" style={{color:"#b42323"}}>{notice}</p>}
+   </section> : <section style={{marginTop:32,display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))",gap:16}}>
+    <article style={{padding:24,border:"1px solid #e1e4e8",borderRadius:18,background:"#fff"}}><h2>API keys</h2><p style={{color:"#626873"}}>Your API credentials will appear here after an API plan is activated.</p><strong>No API keys yet</strong></article>
+    <article style={{padding:24,border:"1px solid #e1e4e8",borderRadius:18,background:"#fff"}}><h2>API documentation</h2><p style={{color:"#626873"}}>Integration guides and endpoint reference.</p><span>Documentation is being prepared.</span></article>
+    <article style={{padding:24,border:"1px solid #e1e4e8",borderRadius:18,background:"#fff"}}><h2>Plans & access</h2><p style={{color:"#626873"}}>Trial duration, service selection and billing.</p><span>Plan activation is coming soon.</span></article>
+    <article style={{padding:24,border:"1px solid #e1e4e8",borderRadius:18,background:"#fff"}}><h2>Signed in</h2><p style={{color:"#626873"}}>{user.displayName||user.email}</p><button type="button" onClick={()=>void signOut(auth!)} style={{padding:"10px 14px",border:"1px solid #d5d9df",borderRadius:9,background:"#fff",cursor:"pointer"}}>Sign out</button></article>
+   </section>}
+   <p style={{marginTop:48}}><a href="/" style={{color:"#555",textDecoration:"underline"}}>← Back to Earth Weather</a></p>
+  </div>
+ </main> : <div className="weathercom-site earth-weather-site">
   {locationPickerOpen&&<div className="location-picker-overlay" role="dialog" aria-modal="false" aria-label="Search weather locations" onMouseDown={event=>{if(event.target===event.currentTarget){setLocationPickerOpen(false);setQuery("");setLocationSearchResults([]);setLocationSearchError("");}}}>
    <div className="location-picker-shell">
     <form className="location-picker-search" onSubmit={async event=>{event.preventDefault();const matches=await search();if(matches[0])void chooseLocation(matches[0]);}}>
@@ -757,6 +775,7 @@ const [section,setSection]=useState("Weather Report");const page:"home"|SitePage
     {FOOTER_GROUPS.map(group=><section className="footer-group" key={group.title}>
      <h3>{group.title}</h3>
      {group.links.map(link=><a href={SITE_PATHS[link.page]} key={link.page}>{link.label}</a>)}
+     {group.title === "Resources" && <a href="/api/dashboard" key="apply-api-key">Apply for an API Key</a>}
     </section>)}
    </nav>
    <div className="footer-copyright">© {new Date().getFullYear()} Earth Weather Channel. All rights reserved. <strong>BMR INC.</strong></div>
