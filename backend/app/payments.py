@@ -7,7 +7,9 @@ import json
 import logging
 import os
 import re
+import secrets
 import uuid
+from cryptography.fernet import Fernet, InvalidToken
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -44,7 +46,13 @@ def _services() -> dict[str, dict[str, Any]]:
             continue
         if rate <= 0 or rate > 10000:
             continue
-        result[key] = {"name": str(value.get("name") or key)[:100], "price_per_day": rate}
+        try:
+            quota = int(value.get("requests_per_day", 1000))
+        except (TypeError, ValueError):
+            quota = 1000
+        if quota < 1 or quota > 1_000_000:
+            quota = 1000
+        result[key] = {"name": str(value.get("name") or key)[:100], "price_per_day": rate, "requests_per_day": quota}
     return result
 
 
@@ -187,7 +195,8 @@ async def create_checkout(payload: CheckoutRequest, authorization: str | None = 
     if unknown:
         raise HTTPException(status_code=422, detail={"message": "Unknown API service", "service_ids": unknown})
     selected = [{"id": service_id, **catalogue[service_id]} for service_id in payload.service_ids]
-    total = round(sum(item["price_per_day"] for item in selected) * payload.duration_days, 2)
+    subtotal = sum(item["price_per_day"] for item in selected) * payload.duration_days
+    total = round(subtotal * (0.85 if payload.duration_days >= 28 else 1.0), 2)
     if total <= 0:
         raise HTTPException(status_code=422, detail="Calculated checkout amount must be positive")
     pay_currency = payload.pay_currency.lower()
@@ -206,8 +215,8 @@ async def create_checkout(payload: CheckoutRequest, authorization: str | None = 
         "order_id": order_id,
         "order_description": f"EARTH WEATHER API: {service_names} ({payload.duration_days} days)"[:255],
         "ipn_callback_url": f"{public_url}/api/payments/nowpayments/ipn",
-        "success_url": f"{frontend_origin}/api/payment/success?order_id={order_id}",
-        "cancel_url": f"{frontend_origin}/api/payment/cancel?order_id={order_id}",
+        "success_url": f"{frontend_origin}/api/dashboard?payment=success&order_id={order_id}",
+        "cancel_url": f"{frontend_origin}/api/dashboard?payment=cancelled&order_id={order_id}",
     }
     async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
         response = await client.post(
@@ -285,28 +294,57 @@ async def nowpayments_ipn(request: Request, x_nowpayments_sig: str | None = Head
         "paid_currency": payload.get("pay_currency", payment.get("pay_currency")),
         "updated_at": now,
     }
-    if payment_status == "finished" and payment.get("status") != "finished":
+    if payment_status == "finished":
         service_ids = payment.get("service_ids") or []
         if not service_ids or not payment.get("duration_days"):
             raise HTTPException(status_code=503, detail="Payment entitlement data is incomplete")
         expiry = now + timedelta(days=int(payment["duration_days"]))
         subscription_id = f"crypto_{order_id}"
+        _issue_or_get_api_key(db, order_id, payment, now, expiry)
         update.update({"status": "finished", "subscription_id": subscription_id, "paid_at": now})
         db.collection("earthWeatherSubscriptions").document(subscription_id).set({
             "subscription_id": subscription_id, "customer_uid": payment["customer_uid"],
             "service_ids": service_ids, "services": payment.get("services", []),
             "duration_days": int(payment["duration_days"]), "status": "active",
             "started_at": now, "expires_at": expiry, "source_order_id": order_id,
-            "payment_provider": "nowpayments",
-        })
+            "payment_provider": "nowpayments", "api_key_order_id": order_id,
+        }, merge=True)
         for service_id in service_ids:
             db.collection("earthWeatherServiceEntitlements").document(f"{payment['customer_uid']}_{service_id}").set({
                 "customer_uid": payment["customer_uid"], "service_id": service_id,
                 "status": "active", "expires_at": expiry, "source_order_id": order_id,
-                "updated_at": now,
+                "api_key_order_id": order_id, "updated_at": now,
             }, merge=True)
     ref.update(update)
     return {"received": "true"}
+
+
+@router.get("/keys")
+async def customer_api_keys(authorization: str | None = Header(default=None)) -> dict[str, Any]:
+    user = _verified_user(authorization)
+    items = _db().collection("earthWeatherApiKeys").where("customer_uid", "==", user["uid"]).stream()
+    keys: list[dict[str, Any]] = []
+    for item in items:
+        record = item.to_dict() or {}
+        expires_at = record.get("expires_at")
+        if not isinstance(expires_at, datetime):
+            continue
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=timezone.utc)
+        status = "active" if record.get("status") == "active" and expires_at > datetime.now(timezone.utc) else "expired"
+        try:
+            raw_key = _fernet().decrypt(record["api_key_encrypted"].encode()).decode()
+        except (KeyError, InvalidToken, UnicodeDecodeError):
+            logger.exception("API key decryption failed for %s", item.id)
+            continue
+        keys.append({
+            "id": item.id, "api_key": raw_key, "key_prefix": record.get("key_prefix"),
+            "service_ids": record.get("service_ids", []), "quotas_per_day": record.get("quotas_per_day", {}),
+            "status": status, "created_at": record.get("created_at").isoformat() if record.get("created_at") else None,
+            "expires_at": expires_at.isoformat(), "duration_days": record.get("duration_days"),
+        })
+    keys.sort(key=lambda item: item.get("created_at") or "", reverse=True)
+    return {"keys": keys}
 
 
 @router.get("/status/{order_id}")
