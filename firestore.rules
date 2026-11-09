@@ -6,6 +6,7 @@ service cloud.firestore {
     // FastAPI backend through Firebase Admin SDK. The Admin SDK uses IAM
     // credentials and bypasses client Security Rules.
     //
+    // Deployment verified for the named `earthweather` database.
     // Payment records, subscriptions, API-key hashes/encrypted secrets,
     // entitlements and quota counters are server-owned data.
     //
