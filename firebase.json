@@ -96,9 +96,12 @@
       }
     ]
   },
-  "firestore": {
-    "rules": "firestore.rules"
-  },
+  "firestore": [
+    {
+      "database": "earthweather",
+      "rules": "firestore.rules"
+    }
+  ],
   "database": {
     "rules": "database.rules.json"
   }
