@@ -9,9 +9,24 @@ on:
 permissions:
   contents: read
 jobs:
+  source-check:
+    runs-on: ubuntu-latest
+    outputs:
+      has_archive: ${{ steps.archive.outputs.present }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: archive
+        shell: bash
+        run: |
+          if [[ -f Uifprweather.zip ]]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Skipping Android APK build: Uifprweather.zip is not committed to this repository."
+          fi
   build-full-oppo-ui:
-    # Do not run this APK build unless the required original UI source archive is committed.
-    if: hashFiles('Uifprweather.zip') != ''
+    needs: source-check
+    if: needs.source-check.outputs.has_archive == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
