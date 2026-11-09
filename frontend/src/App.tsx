@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { auth, firebaseReady, googleProvider } from "./firebase";
 import { onAuthStateChanged, signInWithPopup, signOut, type User } from "firebase/auth";
-import { getCryptoCheckoutConfig, getCryptoCurrencies, type CryptoCheckoutConfig } from "./lib/cryptoPayments";
+import { createCryptoCheckout, getCryptoCheckoutConfig, getCryptoCurrencies, getCryptoPaymentStatus, getCustomerApiKeys, type CryptoCheckoutConfig, type CustomerApiKey } from "./lib/cryptoPayments";
 import { FOOTER_GROUPS, resolveSitePage, SITE_PATHS, SitePageView, type SitePageId } from "./sitePages";
 import "./intelligence.css";
 import { WeatherChannelLayout, WeatherChannelPage, type WeatherChannelMode } from "./WeatherChannelReference";
@@ -358,87 +358,162 @@ export default function App(){
 const [section,setSection]=useState("Weather Report");const page:"home"|SitePageId=resolveSitePage(window.location.pathname)??"home";const isApiDashboard=window.location.pathname.replace(/\/+$/, "").toLowerCase()==="/api/dashboard";const [isSearchLocation,setIsSearchLocation]=useState<boolean>(()=>readCache<Place|null>("local",null)?.source==="search");
  const [user,setUser]=useState<User|null>(null);const [notice,setNotice]=useState("");
  const [apiDays,setApiDays]=useState(7);
- const [apiServices,setApiServices]=useState<string[]>(["Current Weather","7-Day Forecast"]);
- const [apiCurrency,setApiCurrency]=useState("USD");
- const [apiCountry,setApiCountry]=useState("US");
- const [apiFxRate,setApiFxRate]=useState(1);
- const [apiCurrencyLoading,setApiCurrencyLoading]=useState(true);
- const [paymentProviderConfig,setPaymentProviderConfig]=useState<CryptoCheckoutConfig|null>(null);
- const [paymentProviderLoading,setPaymentProviderLoading]=useState(false);
- const [paymentProviderError,setPaymentProviderError]=useState("");
- const [providerApiKeyVerified,setProviderApiKeyVerified]=useState(false);
- const [providerCurrencyCount,setProviderCurrencyCount]=useState(0);
- useEffect(()=>{
-  let active=true;
-  const loadMarket=async()=>{
+  const [apiServices,setApiServices]=useState<string[]>(["Current Weather","7-Day Forecast"]);
+  const [apiCurrency,setApiCurrency]=useState("USD");
+  const [apiCountry,setApiCountry]=useState("US");
+  const [apiFxRate,setApiFxRate]=useState(1);
+  const [apiCurrencyLoading,setApiCurrencyLoading]=useState(true);
+  const [paymentProviderConfig,setPaymentProviderConfig]=useState<CryptoCheckoutConfig|null>(null);
+  const [paymentProviderLoading,setPaymentProviderLoading]=useState(false);
+  const [paymentProviderError,setPaymentProviderError]=useState("");
+  const [providerApiKeyVerified,setProviderApiKeyVerified]=useState(false);
+  const [providerCurrencyCount,setProviderCurrencyCount]=useState(0);
+  const [supportedCurrencies,setSupportedCurrencies]=useState<string[]>([]);
+  const [selectedPayCurrency,setSelectedPayCurrency]=useState("usdttrc20");
+  const [checkoutBusy,setCheckoutBusy]=useState(false);
+  const [checkoutError,setCheckoutError]=useState("");
+  const [paymentFeedback,setPaymentFeedback]=useState("");
+  const [customerApiKeys,setCustomerApiKeys]=useState<CustomerApiKey[]>([]);
+  const [apiKeysLoading,setApiKeysLoading]=useState(false);
+  const apiServiceOptions=[
+   {id:"current-weather",name:"Current Weather",detail:"Live conditions and temperature"},
+   {id:"hourly-forecast",name:"Hourly Forecast",detail:"Hour-by-hour weather outlook"},
+   {id:"daily-forecast",name:"7-Day Forecast",detail:"Daily forecast and conditions"},
+   {id:"weather-alerts",name:"Weather Alerts",detail:"Severe weather notifications"},
+   {id:"rainfall",name:"Rainfall Data",detail:"Precipitation and rain probability"},
+   {id:"wind-data",name:"Wind & Temperature",detail:"Wind speed, direction and feels-like data"},
+   {id:"weather-maps",name:"Weather Maps",detail:"Map and radar data access"}
+  ];
+  const selectedServiceIds=apiServiceOptions.filter(service=>apiServices.includes(service.name)).map(service=>service.id);
+  const configuredServices=paymentProviderConfig?.services??[];
+  const serviceRates=new Map(configuredServices.map(service=>[service.id,service.price_per_day]));
+  const hasCompletePricing=selectedServiceIds.length>0&&selectedServiceIds.every(id=>serviceRates.has(id));
+  const apiUsdPrice=hasCompletePricing
+   ? Number((selectedServiceIds.reduce((sum,id)=>sum+(serviceRates.get(id)||0),0)*apiDays*(apiDays>=28?0.85:1)).toFixed(2))
+   : 0;
+  const apiLocalPrice=apiUsdPrice*apiFxRate;
+  const apiPriceLabel=useMemo(()=>{
    try{
-    const geo=await fetch("https://ipapi.co/json/");
-    if(geo.ok){
-     const g=await geo.json();
-     const country=String(g.country_code||"US").toUpperCase();
-     const currency=String(g.currency||"USD").toUpperCase();
-     if(active){setApiCountry(country);setApiCurrency(currency);}
-     const fx=await fetch("https://open.er-api.com/v6/latest/USD");
-     if(fx.ok){const rates=await fx.json();const rate=Number(rates?.rates?.[currency]);if(active&&Number.isFinite(rate)&&rate>0)setApiFxRate(rate);}
-    }
-   }catch{/* Keep the safe USD fallback if geo or FX services are unavailable. */}
-   finally{if(active)setApiCurrencyLoading(false);}
-  };
-  void loadMarket();
-  return()=>{active=false;};
- },[]);
- useEffect(()=>{
-  if(!isApiDashboard)return;
-  let active=true;
-  setPaymentProviderLoading(true);
-  setPaymentProviderError("");
-  void (async()=>{
+    const locale=apiCurrency==="INR"?"en-IN":apiCurrency==="SAR"?"ar-SA":apiCurrency==="AUD"?"en-AU":apiCurrency==="EUR"?"en-IE":apiCurrency==="GBP"?"en-GB":apiCurrency==="JPY"?"ja-JP":"en";
+    return new Intl.NumberFormat(locale,{style:"currency",currency:apiCurrency,maximumFractionDigits:["JPY","KRW"].includes(apiCurrency)?0:2}).format(apiLocalPrice);
+   }catch{return apiLocalPrice.toFixed(2)+" "+apiCurrency;}
+  },[apiCurrency,apiLocalPrice]);
+  const toggleApiService=(name:string)=>setApiServices(current=>current.includes(name)?current.filter(item=>item!==name):[...current,name]);
+  const refreshCustomerApiKeys=async(activeUser:User)=>{
+   setApiKeysLoading(true);
    try{
-    const config=await getCryptoCheckoutConfig();
-    if(!active)return;
-    setPaymentProviderConfig(config);
-    if(config.provider_configured){
-     try{
-      const currencyResult=await getCryptoCurrencies();
-      const currencies=Array.isArray(currencyResult.currencies)
-       ? currencyResult.currencies.map(item=>typeof item==="string"?item:(item.currency||item.code||"")).filter(Boolean)
-       : [];
-      if(active){setProviderApiKeyVerified(currencies.length>0);setProviderCurrencyCount(currencies.length);}
-      if(!currencies.length&&active)setPaymentProviderError("NOWPayments did not return a supported-currency list. Check the API key and merchant account.");
-     }catch(error){
-      if(active){setProviderApiKeyVerified(false);setPaymentProviderError(error instanceof Error?error.message:"NOWPayments API key verification failed.");}
-     }
-    }
+    const token=await activeUser.getIdToken();
+    const result=await getCustomerApiKeys(token);
+    setCustomerApiKeys(result.keys||[]);
    }catch(error){
-    if(active)setPaymentProviderError(error instanceof Error?error.message:"Could not reach the EARTH WEATHER payment configuration endpoint.");
-   }finally{
-    if(active)setPaymentProviderLoading(false);
+    setPaymentFeedback(error instanceof Error?error.message:"Could not load your API keys.");
+   }finally{setApiKeysLoading(false);}
+  };
+  const startCryptoCheckout=async()=>{
+   if(!user){setCheckoutError("Sign in with Google before checkout.");return;}
+   if(!paymentProviderConfig?.enabled||!providerApiKeyVerified){setCheckoutError("Payment and API access are not ready yet. Check the readiness messages above.");return;}
+   if(!hasCompletePricing){setCheckoutError("The selected API services do not match the server pricing catalogue.");return;}
+   if(!selectedPayCurrency){setCheckoutError("Choose a supported crypto currency.");return;}
+   setCheckoutBusy(true);setCheckoutError("");
+   try{
+    const token=await user.getIdToken();
+    const invoice=await createCryptoCheckout({service_ids:selectedServiceIds,duration_days:apiDays,pay_currency:selectedPayCurrency},token);
+    window.location.assign(invoice.checkout_url);
+   }catch(error){
+    setCheckoutError(error instanceof Error?error.message:"Could not create the NOWPayments invoice.");
+    setCheckoutBusy(false);
    }
-  })();
-  return()=>{active=false;};
- },[isApiDashboard]);
- const apiUsdPrice=Math.max(0.99,(2.99+Math.max(0,apiServices.length-1)*0.99)*(apiDays/7)*(apiDays>=28?0.85:1));
- const apiMarketFactor=apiCountry==="IN"?0.35:1;
- const apiLocalPrice=apiUsdPrice*apiFxRate*apiMarketFactor;
- const apiPriceLabel=useMemo(()=>{
-  try{
-   const locale=apiCurrency==="INR"?"en-IN":apiCurrency==="SAR"?"ar-SA":apiCurrency==="AUD"?"en-AU":apiCurrency==="EUR"?"en-IE":apiCurrency==="GBP"?"en-GB":apiCurrency==="JPY"?"ja-JP":"en";
-   return new Intl.NumberFormat(locale,{style:"currency",currency:apiCurrency,maximumFractionDigits:["JPY","KRW"].includes(apiCurrency)?0:2}).format(apiLocalPrice);
-  }catch{return apiLocalPrice.toFixed(2)+" "+apiCurrency;}
- },[apiCurrency,apiLocalPrice]);
-
- const apiServiceOptions=[
-  {name:"Current Weather",detail:"Live conditions and temperature"},
-  {name:"Hourly Forecast",detail:"Hour-by-hour weather outlook"},
-  {name:"7-Day Forecast",detail:"Daily forecast and conditions"},
-  {name:"Weather Alerts",detail:"Severe weather notifications"},
-  {name:"Rainfall Data",detail:"Precipitation and rain probability"},
-  {name:"Wind & Temperature",detail:"Wind speed, direction and feels-like data"},
-  {name:"Weather Maps",detail:"Map and radar data access"}
- ];
- const toggleApiService=(name:string)=>setApiServices(current=>current.includes(name)?current.filter(item=>item!==name):[...current,name]);
-
- const [notificationsEnabled,setNotificationsEnabled]=useState(()=>{
+  };
+  useEffect(()=>{
+   let active=true;
+   const loadMarket=async()=>{
+    try{
+     const geo=await fetch("https://ipapi.co/json/");
+     if(geo.ok){
+      const g=await geo.json();
+      const country=String(g.country_code||"US").toUpperCase();
+      const currency=String(g.currency||"USD").toUpperCase();
+      if(active){setApiCountry(country);setApiCurrency(currency);}
+      const fx=await fetch("https://open.er-api.com/v6/latest/USD");
+      if(fx.ok){const rates=await fx.json();const rate=Number(rates?.rates?.[currency]);if(active&&Number.isFinite(rate)&&rate>0)setApiFxRate(rate);}
+     }
+    }catch{/* Keep the safe USD fallback if geo or FX services are unavailable. */}
+    finally{if(active)setApiCurrencyLoading(false);}
+   };
+   void loadMarket();
+   return()=>{active=false;};
+  },[]);
+  useEffect(()=>{
+   if(!isApiDashboard)return;
+   let active=true;
+   setPaymentProviderLoading(true);
+   setPaymentProviderError("");
+   void (async()=>{
+    try{
+     const config=await getCryptoCheckoutConfig();
+     if(!active)return;
+     setPaymentProviderConfig(config);
+     if(config.provider_configured){
+      try{
+       const currencyResult=await getCryptoCurrencies();
+       const currencies=Array.isArray(currencyResult.currencies)
+        ? currencyResult.currencies.map(item=>(typeof item==="string"?item:(item.currency||item.code||"")).toLowerCase()).filter(Boolean)
+        : [];
+       if(active){
+        setSupportedCurrencies(currencies);
+        setProviderApiKeyVerified(currencies.length>0);
+        setProviderCurrencyCount(currencies.length);
+        if(currencies.length)setSelectedPayCurrency(currencies.includes("usdttrc20")?"usdttrc20":currencies[0]);
+       }
+       if(!currencies.length&&active)setPaymentProviderError("NOWPayments did not return a supported-currency list. Check the API key and merchant account.");
+      }catch(error){
+       if(active){setProviderApiKeyVerified(false);setPaymentProviderError(error instanceof Error?error.message:"NOWPayments API key verification failed.");}
+      }
+     }
+    }catch(error){
+     if(active)setPaymentProviderError(error instanceof Error?error.message:"Could not reach the EARTH WEATHER payment configuration endpoint.");
+    }finally{
+     if(active)setPaymentProviderLoading(false);
+    }
+   })();
+   return()=>{active=false;};
+  },[isApiDashboard]);
+  useEffect(()=>{
+   if(!isApiDashboard||!user)return;
+   let active=true;
+   void refreshCustomerApiKeys(user);
+   const params=new URLSearchParams(window.location.search);
+   const orderId=params.get("order_id");
+   const paymentFlag=params.get("payment");
+   if(paymentFlag==="cancelled"){setPaymentFeedback("Checkout was cancelled. No payment was recorded.");return()=>{active=false;};}
+   if(orderId){
+    setPaymentFeedback("Checking your NOWPayments transaction…");
+    void (async()=>{
+     try{
+      const token=await user.getIdToken();
+      for(let attempt=0;attempt<24&&active;attempt++){
+       const payment=await getCryptoPaymentStatus(orderId,token);
+       if(payment.status==="finished"){
+        setPaymentFeedback("Payment confirmed. Your API key has been activated below.");
+        await refreshCustomerApiKeys(user);
+        return;
+       }
+       if(["failed","refunded","expired"].includes(payment.status)){
+        setPaymentFeedback(`Payment status: ${payment.status}. No active API key was issued.`);
+        return;
+       }
+       setPaymentFeedback(`Payment status: ${payment.status}. Waiting for NOWPayments confirmation…`);
+       await new Promise(resolve=>window.setTimeout(resolve,5000));
+      }
+      if(active)setPaymentFeedback("Payment is still processing. Refresh this page to check again.");
+     }catch(error){
+      if(active)setPaymentFeedback(error instanceof Error?error.message:"Could not verify payment status.");
+     }
+    })();
+   }
+   return()=>{active=false;};
+  },[isApiDashboard,user]);
+  const [notificationsEnabled,setNotificationsEnabled]=useState(()=>{
   try{return typeof window!=="undefined"&&"Notification" in window&&Notification.permission==="granted"&&localStorage.getItem("earth-weather-notifications")==="on";}catch{return false;}
  });
  const notificationRegistration=useRef<ServiceWorkerRegistration|null>(null);
